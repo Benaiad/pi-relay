@@ -184,7 +184,7 @@ export default function (pi: ExtensionAPI): void {
 				if (!force && now - lastEmitAt < 100) return;
 				lastEmitAt = now;
 				const state = scheduler.getState();
-				const report = buildRunReport(state);
+				const report = buildRunReport(state, scheduler.getAudit());
 				onUpdate({
 					content: [{ type: "text", text: renderRunReportText(report) }],
 					details: { kind: "state", state },

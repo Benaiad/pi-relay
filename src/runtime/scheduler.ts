@@ -166,7 +166,7 @@ export class Scheduler {
 			const step = this.program.steps.get(nextId);
 			if (!step) {
 				this.finishWith("failed", `scheduler picked unknown step '${unwrap(nextId)}'`);
-				return buildRunReport(this.state);
+				return buildRunReport(this.state, this.audit);
 			}
 
 			// Per-step run cap. The primary guard against non-converging loops
@@ -195,7 +195,7 @@ export class Scheduler {
 			this.finishWith("incomplete", `ready queue drained without reaching a terminal step`);
 		}
 
-		return buildRunReport(this.state);
+		return buildRunReport(this.state, this.audit);
 	}
 
 	// ==========================================================================

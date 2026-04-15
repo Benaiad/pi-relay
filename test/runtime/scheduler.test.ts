@@ -374,6 +374,78 @@ describe("Scheduler — terminal routes", () => {
 		expect(report.summary).toContain("decided to fail");
 	});
 
+	it("exposes per-attempt history in the run report for re-entered steps", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Simple review loop with one iteration.",
+			artifacts: [
+				{ id: "notes", description: "impl", shape: { kind: "untyped_json" }, multiWriter: true },
+				{ id: "verdict", description: "r", shape: { kind: "untyped_json" }, multiWriter: true },
+			],
+			steps: [
+				{
+					kind: "action",
+					id: "create",
+					actor: "worker",
+					instruction: "create",
+					reads: [],
+					writes: ["notes"],
+					routes: [{ route: "done", to: "review" }],
+				},
+				{
+					kind: "action",
+					id: "review",
+					actor: "checker",
+					instruction: "review",
+					reads: ["notes"],
+					writes: ["verdict"],
+					routes: [
+						{ route: "accepted", to: "done" },
+						{ route: "changes_requested", to: "fix" },
+					],
+				},
+				{
+					kind: "action",
+					id: "fix",
+					actor: "worker",
+					instruction: "fix",
+					reads: ["verdict"],
+					writes: ["notes"],
+					routes: [{ route: "done", to: "review" }],
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "accepted" },
+			],
+			entryStep: "create",
+		};
+		const engine = new ScriptedActorEngine(
+			new Map([
+				["create", [completed("done", { notes: { v: 1 } })]],
+				[
+					"review",
+					[
+						completed("changes_requested", { verdict: { ok: false } }),
+						completed("accepted", { verdict: { ok: true } }),
+					],
+				],
+				["fix", [completed("done", { notes: { v: 2 } })]],
+			]),
+		);
+		const { scheduler } = buildScheduler(plan, engine);
+		const report = await scheduler.run();
+
+		// The review step should have two attempt records, each with its route.
+		const reviewSummary = report.steps.find((s) => unwrap(s.stepId) === "review")!;
+		expect(reviewSummary.attemptCount).toBe(2);
+		expect(reviewSummary.attempts.length).toBe(2);
+		expect(reviewSummary.attempts[0]!.outcome).toBe("completed");
+		expect(unwrap(reviewSummary.attempts[0]!.route!)).toBe("changes_requested");
+		expect(reviewSummary.attempts[1]!.outcome).toBe("completed");
+		expect(unwrap(reviewSummary.attempts[1]!.route!)).toBe("accepted");
+
+		// Total activations includes the re-entry. Terminals don't emit
+		// step_started so they don't count: create(1) + review(2) + fix(1) = 4.
+		expect(report.totalActivations).toBe(4);
+	});
+
 	it("executes a review/fix loop via back-edges and multi-writer artifacts", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Review-fix loop.",
