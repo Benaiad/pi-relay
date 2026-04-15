@@ -3,12 +3,22 @@ import {
 	formatCost,
 	formatDuration,
 	formatTokens,
+	formatToolCall,
 	joinNonEmpty,
 	pluralize,
 	truncate,
 } from "../../src/render/format.js";
 import { iconFor, runIcon } from "../../src/render/icons.js";
 import { formatUsageStats } from "../../src/render/usage.js";
+
+// Fake theme that returns just the text, ignoring colors, so we can string-match.
+const bareTheme = {
+	fg: (_color: string, text: string) => text,
+	bg: (_color: string, text: string) => text,
+	bold: (text: string) => text,
+	italic: (text: string) => text,
+	underline: (text: string) => text,
+} as unknown as import("@mariozechner/pi-coding-agent").Theme;
 
 describe("formatTokens", () => {
 	it.each([
@@ -113,6 +123,57 @@ describe("formatUsageStats", () => {
 		expect(
 			formatUsageStats({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 }),
 		).toBe("");
+	});
+});
+
+describe("formatToolCall", () => {
+	it("formats bash as $ command", () => {
+		expect(formatToolCall("bash", { command: "npm test" }, bareTheme)).toBe("$ npm test");
+	});
+
+	it("truncates long bash commands", () => {
+		const long = "x".repeat(100);
+		const out = formatToolCall("bash", { command: long }, bareTheme);
+		expect(out.length).toBeLessThan(long.length);
+		expect(out).toContain("…");
+	});
+
+	it("formats read with path and offset/limit", () => {
+		expect(formatToolCall("read", { path: "/tmp/foo.ts", offset: 10, limit: 5 }, bareTheme)).toBe(
+			"read /tmp/foo.ts:10-14",
+		);
+	});
+
+	it("formats read with file_path alias", () => {
+		expect(formatToolCall("read", { file_path: "/tmp/foo.ts" }, bareTheme)).toBe("read /tmp/foo.ts");
+	});
+
+	it("formats write with line count", () => {
+		expect(formatToolCall("write", { path: "/tmp/a.md", content: "a\nb\nc" }, bareTheme)).toBe(
+			"write /tmp/a.md (3 lines)",
+		);
+	});
+
+	it("formats edit as edit path", () => {
+		expect(formatToolCall("edit", { file_path: "/tmp/foo.ts" }, bareTheme)).toBe("edit /tmp/foo.ts");
+	});
+
+	it("formats grep as grep /pattern/ in path", () => {
+		expect(formatToolCall("grep", { pattern: "foo", path: "src" }, bareTheme)).toBe("grep /foo/ in src");
+	});
+
+	it("formats find as find pattern in path", () => {
+		expect(formatToolCall("find", { pattern: "*.ts", path: "src" }, bareTheme)).toBe("find *.ts in src");
+	});
+
+	it("formats ls with path", () => {
+		expect(formatToolCall("ls", { path: "src" }, bareTheme)).toBe("ls src");
+	});
+
+	it("formats unknown tool with name and truncated JSON preview", () => {
+		const out = formatToolCall("mystery", { a: 1, b: "two" }, bareTheme);
+		expect(out).toContain("mystery");
+		expect(out).toContain('{"a":1,"b":"two"}');
 	});
 });
 

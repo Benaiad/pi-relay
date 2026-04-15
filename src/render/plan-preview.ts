@@ -1,15 +1,12 @@
 /**
  * Render the PlanDraft as a tool call header — pi `renderCall` hook.
  *
- * Matches pi's built-in tool call layout (see bash.ts, read.ts, grep.ts in
- * the pi-mono tree): a single `Text` component reused across updates via
- * `context.lastComponent`, producing a one-line header followed by optional
- * metadata lines below. Collapsed shows the task and step count on one line;
- * expanded shows a table of steps with their actor/check kind and routing.
+ * Collapsed: two lines. Header with the task, plus a single summary row
+ * with the step/actor/artifact counts. No step table, no wall of text.
  *
- * No Container/Spacer composition — the whole output is a single string
- * with embedded `\n` and theme colors, which is how every first-party pi
- * tool renders.
+ * Expanded: same header plus a column-aligned step table with action/check/
+ * terminal rows, reads/writes, and routing. The table is only shown when
+ * the user explicitly asks for it via `Ctrl+O`.
  */
 
 import type { Theme } from "@mariozechner/pi-coding-agent";
@@ -29,17 +26,17 @@ export const renderPlanPreview = (
 };
 
 // ============================================================================
-// Collapsed
+// Collapsed — two lines only
 // ============================================================================
 
 const formatCollapsed = (plan: PlanDraftDoc, theme: Theme): string => {
 	const header = buildHeader(plan, theme);
-	const summary = buildCountSummary(plan, theme);
+	const summary = theme.fg("muted", buildCountSummary(plan));
 	return `${header}\n  ${summary}`;
 };
 
 // ============================================================================
-// Expanded
+// Expanded — header + count line + step table
 // ============================================================================
 
 const formatExpanded = (plan: PlanDraftDoc, theme: Theme): string => {
@@ -48,7 +45,7 @@ const formatExpanded = (plan: PlanDraftDoc, theme: Theme): string => {
 	if (plan.successCriteria) {
 		lines.push(`  ${theme.fg("muted", `success: ${truncate(plan.successCriteria, 200)}`)}`);
 	}
-	lines.push(`  ${buildCountSummary(plan, theme)}`);
+	lines.push(`  ${theme.fg("muted", buildCountSummary(plan))}`);
 	lines.push("");
 
 	const rows = plan.steps.map((step) => buildStepRow(step, theme));
@@ -64,7 +61,7 @@ const formatExpanded = (plan: PlanDraftDoc, theme: Theme): string => {
 };
 
 // ============================================================================
-// Shared header + counts
+// Shared building blocks
 // ============================================================================
 
 const buildHeader = (plan: PlanDraftDoc, theme: Theme): string => {
@@ -75,19 +72,19 @@ const buildHeader = (plan: PlanDraftDoc, theme: Theme): string => {
 			: rawTask
 				? theme.fg("accent", oneLine(rawTask, 70))
 				: theme.fg("toolOutput", "...");
-	return `${theme.fg("toolTitle", theme.bold("relay"))} ${taskDisplay}`;
+	return `${theme.fg("accent", "▸")} ${theme.fg("toolTitle", theme.bold("relay"))} ${taskDisplay}`;
 };
 
-const buildCountSummary = (plan: PlanDraftDoc, theme: Theme): string => {
-	const actorCount = new Set<string>();
+const buildCountSummary = (plan: PlanDraftDoc): string => {
 	let action = 0;
 	let check = 0;
 	let terminal = 0;
+	const actors = new Set<string>();
 	for (const step of plan.steps) {
 		switch (step.kind) {
 			case "action":
 				action += 1;
-				actorCount.add(step.actor);
+				actors.add(step.actor);
 				break;
 			case "check":
 				check += 1;
@@ -97,15 +94,8 @@ const buildCountSummary = (plan: PlanDraftDoc, theme: Theme): string => {
 				break;
 		}
 	}
-	return theme.fg(
-		"muted",
-		`${plan.steps.length} steps (${action} action · ${check} check · ${terminal} terminal) · ${actorCount.size} actors · ${plan.artifacts.length} artifacts · entry: ${plan.entryStep}`,
-	);
+	return `${plan.steps.length} steps (${action} action · ${check} check · ${terminal} terminal) · ${actors.size} actors · ${plan.artifacts.length} artifacts`;
 };
-
-// ============================================================================
-// Step rows
-// ============================================================================
 
 interface StepRow {
 	readonly marker: string;
@@ -127,14 +117,13 @@ const buildStepRow = (step: PlanDraftDoc["steps"][number], theme: Theme): StepRo
 				trailing: theme.fg("dim", `${rw}${rw ? "  " : ""}→ ${routes}${retry}`),
 			};
 		}
-		case "check": {
+		case "check":
 			return {
 				marker: theme.fg("warning", "?"),
 				idPlain: step.id,
 				kindPlain: `check(${step.check.kind})`,
 				trailing: theme.fg("dim", `pass→${step.onPass}  fail→${step.onFail}`),
 			};
-		}
 		case "terminal": {
 			const color = step.outcome === "success" ? "success" : "error";
 			return {

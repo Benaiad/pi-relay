@@ -1,37 +1,40 @@
 /**
  * Render the `RelayRunState` as a tool result body — pi `renderResult` hook.
  *
- * Single `Text` component reused via `context.lastComponent`. The whole
- * output is a string with embedded `\n` and theme colors, matching pi's
- * built-in tools (bash, read, grep, edit). No Container/Spacer composition.
+ * Two layouts, one per `expanded` state:
  *
- * Layout:
+ * Collapsed (3 rows max):
+ *   1. Header:    <run icon> relay <task> — <phase label>
+ *   2. Progress:  <glyph strip>  N/M done · <active step or final summary>
+ *   3. Footer:    [elapsed/took · usage stats]
  *
- *   Collapsed:
- *     <run icon> relay <task> — <phase label>
- *       <status line in muted>
+ *   The glyph strip is one char per step, not a full table. The progress
+ *   row also shows what the active step is currently doing via the same
+ *   `formatToolCall` preview pi's built-in tools use. No per-step table.
  *
- *       <aligned step rows>
+ * Expanded (Container with mixed children):
+ *   Header + status + per-step blocks. Each step block has a divider, the
+ *   actor instruction, the tool calls rendered via `formatToolCall`, the
+ *   final assistant text rendered as actual markdown (so code blocks and
+ *   headings survive), the route taken, and per-step usage in [brackets].
  *
- *       [<aggregate usage>]
- *
- *   Expanded:
- *     Same header + status + rows, plus per-step detail blocks below
- *     with instruction snippet, transcript tool calls, route taken, error
- *     reason if failed, and per-step usage.
+ * The expanded view deliberately returns a `Container` with `Text` and
+ * `Markdown` children — the only place in relay where we compose a tree,
+ * because Markdown rendering genuinely wants its own component.
  */
 
-import { keyHint, type Theme } from "@mariozechner/pi-coding-agent";
-import { type Component, Text } from "@mariozechner/pi-tui";
+import { getMarkdownTheme, keyHint, type Theme } from "@mariozechner/pi-coding-agent";
+import { type Component, Container, Markdown, Spacer, Text } from "@mariozechner/pi-tui";
+import type { TranscriptItem } from "../actors/types.js";
 import type { StepId } from "../plan/ids.js";
 import { unwrap } from "../plan/ids.js";
 import type { Step } from "../plan/types.js";
 import type { RelayRunState, StepRuntimeState } from "../runtime/events.js";
-import { formatDuration, joinNonEmpty, maxWidth, oneLine, padRight, truncate } from "./format.js";
+import { formatDuration, formatToolCall, joinNonEmpty, oneLine, truncate } from "./format.js";
 import { iconFor, phaseLabel, runIcon } from "./icons.js";
 import { formatUsageStats } from "./usage.js";
 
-const INLINE_TRANSCRIPT_LIMIT = 3;
+const EXPANDED_TRANSCRIPT_LIMIT = 15;
 
 export const renderRunResult = (
 	state: RelayRunState,
@@ -39,232 +42,251 @@ export const renderRunResult = (
 	expanded: boolean,
 	lastComponent: Component | undefined,
 ): Component => {
+	if (expanded) return renderExpanded(state, theme);
 	const text = (lastComponent as Text | undefined) ?? new Text("", 0, 0);
-	text.setText(expanded ? formatExpanded(state, theme) : formatCollapsed(state, theme));
+	text.setText(formatCollapsed(state, theme));
 	return text;
 };
 
 // ============================================================================
-// Collapsed
+// Collapsed — 3 rows max
 // ============================================================================
 
 const formatCollapsed = (state: RelayRunState, theme: Theme): string => {
 	const lines: string[] = [];
 	lines.push(buildHeader(state, theme));
-	lines.push(`  ${theme.fg("muted", buildStatusLine(state))}`);
-	lines.push("");
+	lines.push(`  ${buildProgressLine(state, theme)}`);
 
-	const rows = state.program.stepOrder
-		.map((id) => buildStepRow(id, state, theme))
-		.filter((r): r is RenderedStepRow => r !== null);
-	const idWidth = maxWidth(rows.map((r) => r.idPlain));
-	const kindWidth = maxWidth(rows.map((r) => r.kindPlain));
+	const footer = buildFooter(state, theme);
+	if (footer.length > 0) lines.push(`  ${footer}`);
 
-	for (const row of rows) {
-		const idPadded = padRight(row.idPlain, idWidth);
-		const kindPadded = padRight(row.kindPlain, kindWidth);
-		const name = row.nameColor ? theme.fg(row.nameColor, idPadded) : theme.fg("accent", idPadded);
-		lines.push(`  ${row.marker} ${name}  ${theme.fg("muted", kindPadded)}  ${row.trailing}`);
-	}
-
-	const footer = buildFooter(state);
-	if (footer.length > 0) {
-		lines.push("");
-		lines.push(`  ${theme.fg("muted", `[${footer}]`)}`);
-	}
-
-	if (state.phase !== "running" && state.phase !== "pending") {
-		lines.push(`  ${theme.fg("muted", `(${keyHint("app.tools.expand", "to expand")})`)}`);
+	if (state.phase !== "running" && state.phase !== "pending" && hasExpandedDetail(state)) {
+		const last = lines[lines.length - 1] ?? "";
+		lines[lines.length - 1] = `${last}  ${theme.fg("muted", `(${keyHint("app.tools.expand", "to expand")})`)}`;
 	}
 
 	return lines.join("\n");
 };
 
+const buildHeader = (state: RelayRunState, theme: Theme): string => {
+	const phase = runIcon(state.phase);
+	const label = phaseLabel(state.phase);
+	const task = oneLine(state.program.task, 60);
+	return (
+		`${theme.fg(phase.color, phase.glyph)} ${theme.fg("toolTitle", theme.bold("relay"))} ` +
+		`${theme.fg("accent", task)}  ${theme.fg("muted", "—")} ${theme.fg(phase.color, label)}`
+	);
+};
+
+const buildProgressLine = (state: RelayRunState, theme: Theme): string => {
+	const strip = buildGlyphStrip(state, theme);
+	const detail = buildProgressDetail(state, theme);
+	return `${strip}  ${detail}`;
+};
+
+const buildGlyphStrip = (state: RelayRunState, theme: Theme): string => {
+	const glyphs: string[] = [];
+	for (const stepId of state.program.stepOrder) {
+		const runtime = state.steps.get(stepId);
+		if (!runtime) continue;
+		const icon = iconFor(runtime.status);
+		glyphs.push(theme.fg(icon.color, icon.glyph));
+	}
+	return glyphs.join("");
+};
+
+const buildProgressDetail = (state: RelayRunState, theme: Theme): string => {
+	const total = state.program.stepOrder.length;
+	const done = countStatus(state, ["succeeded"]);
+
+	switch (state.phase) {
+		case "pending":
+			return theme.fg("muted", `${total} steps pending`);
+
+		case "running": {
+			const active = findActiveStep(state);
+			const prefix = theme.fg("muted", `${done}/${total} done`);
+			if (!active) return prefix;
+			const activeName = theme.fg("accent", unwrap(active.stepId));
+			const activity = describeActiveStep(active.step, active.runtime, theme);
+			const activityText = activity ? ` · ${activity}` : "";
+			return `${prefix} · ${activeName}${activityText}`;
+		}
+
+		case "succeeded": {
+			const summary = state.finalSummary ? theme.fg("toolOutput", truncate(state.finalSummary, 70)) : "";
+			return `${theme.fg("muted", `all ${total} steps`)}${summary ? ` · ${summary}` : ""}`;
+		}
+
+		case "failed": {
+			const failedStep = findFailedStep(state);
+			const where = failedStep
+				? theme.fg("error", `failed at ${unwrap(failedStep.stepId)}`)
+				: theme.fg("error", "failed");
+			const reason = failedStep?.runtime.lastReason
+				? theme.fg("error", truncate(failedStep.runtime.lastReason, 80))
+				: state.finalSummary
+					? theme.fg("muted", truncate(state.finalSummary, 80))
+					: "";
+			return reason ? `${where} · ${reason}` : where;
+		}
+
+		case "aborted":
+			return theme.fg("warning", `aborted after ${done}/${total}`);
+
+		case "incomplete":
+			return theme.fg("warning", `incomplete · ran ${done}/${total} steps without reaching a terminal`);
+	}
+};
+
+const buildFooter = (state: RelayRunState, theme: Theme): string => {
+	const bits: (string | null)[] = [];
+	if (state.startedAt && state.finishedAt) {
+		bits.push(`took ${formatDuration(state.finishedAt - state.startedAt)}`);
+	} else if (state.startedAt && state.phase === "running") {
+		bits.push(`elapsed ${formatDuration(Date.now() - state.startedAt)}`);
+	}
+	const usage = formatUsageStats(state.totalUsage);
+	if (usage.length > 0) bits.push(usage);
+	const joined = joinNonEmpty(bits, " · ");
+	return joined.length > 0 ? theme.fg("muted", `[${joined}]`) : "";
+};
+
 // ============================================================================
-// Expanded
+// Expanded — Container with Text + Markdown per step
 // ============================================================================
 
-const formatExpanded = (state: RelayRunState, theme: Theme): string => {
-	const lines: string[] = [];
-	lines.push(buildHeader(state, theme));
-	lines.push(`  ${theme.fg("muted", buildStatusLine(state))}`);
-	const footer = buildFooter(state);
-	if (footer.length > 0) lines.push(`  ${theme.fg("muted", `[${footer}]`)}`);
+const renderExpanded = (state: RelayRunState, theme: Theme): Component => {
+	const container = new Container();
+	const mdTheme = getMarkdownTheme();
+
+	container.addChild(new Text(buildHeader(state, theme), 0, 0));
+	container.addChild(new Text(`  ${buildProgressLine(state, theme)}`, 0, 0));
+	const footer = buildFooter(state, theme);
+	if (footer.length > 0) container.addChild(new Text(`  ${footer}`, 0, 0));
 
 	for (const stepId of state.program.stepOrder) {
 		const runtime = state.steps.get(stepId);
 		const step = state.program.steps.get(stepId);
 		if (!runtime || !step) continue;
-		lines.push("");
-		lines.push(...renderExpandedStepBlock(stepId, step, runtime, theme));
+		// Skip pending / ready steps in the expanded view — they have nothing to show.
+		if (runtime.status === "pending" || runtime.status === "ready") continue;
+		container.addChild(new Spacer(1));
+		appendExpandedStepBlock(container, stepId, step, runtime, theme, mdTheme);
 	}
-	return lines.join("\n");
+
+	return container;
 };
 
-const renderExpandedStepBlock = (stepId: StepId, step: Step, runtime: StepRuntimeState, theme: Theme): string[] => {
-	const lines: string[] = [];
+const appendExpandedStepBlock = (
+	container: Container,
+	stepId: StepId,
+	step: Step,
+	runtime: StepRuntimeState,
+	theme: Theme,
+	mdTheme: ReturnType<typeof getMarkdownTheme>,
+): void => {
 	const icon = iconFor(runtime.status);
 	const id = unwrap(stepId);
 	const kindLabel = describeStepKind(step);
-	const headerLine =
-		`  ${theme.fg("muted", "───")} ${theme.fg(icon.color, icon.glyph)} ` +
-		`${theme.fg("accent", id)}  ${theme.fg("muted", kindLabel)}`;
-	lines.push(headerLine);
+	container.addChild(
+		new Text(
+			`${theme.fg("muted", "───")} ${theme.fg(icon.color, icon.glyph)} ${theme.fg("accent", id)}  ${theme.fg("muted", kindLabel)}`,
+			0,
+			0,
+		),
+	);
 
 	if (step.kind === "action") {
-		lines.push(`    ${theme.fg("dim", truncate(step.instruction, 200))}`);
-		const transcriptLines = buildTranscriptLines(runtime, theme, Number.POSITIVE_INFINITY);
-		for (const line of transcriptLines) lines.push(`    ${line}`);
+		container.addChild(new Text(`  ${theme.fg("dim", truncate(step.instruction, 400))}`, 0, 0));
+
+		const toolCallItems = runtime.transcript.filter(
+			(item): item is Extract<TranscriptItem, { kind: "tool_call" }> => item.kind === "tool_call",
+		);
+		const shownToolCalls = toolCallItems.slice(-EXPANDED_TRANSCRIPT_LIMIT);
+		const skippedToolCalls = toolCallItems.length - shownToolCalls.length;
+		if (skippedToolCalls > 0) {
+			container.addChild(new Text(`  ${theme.fg("muted", `... ${skippedToolCalls} earlier tool calls`)}`, 0, 0));
+		}
+		for (const tc of shownToolCalls) {
+			container.addChild(
+				new Text(`  ${theme.fg("muted", "→ ")}${formatToolCall(tc.toolName, tc.args, theme)}`, 0, 0),
+			);
+		}
+
+		const finalText = extractFinalText(runtime.transcript);
+		if (finalText.length > 0) {
+			container.addChild(new Spacer(1));
+			container.addChild(new Markdown(finalText, 0, 0, mdTheme));
+		}
 	} else if (step.kind === "check") {
-		lines.push(`    ${theme.fg("dim", describeCheck(step))}`);
+		container.addChild(new Text(`  ${theme.fg("dim", describeCheck(step))}`, 0, 0));
 	} else {
-		lines.push(`    ${theme.fg("dim", `[${step.outcome}] ${truncate(step.summary, 160)}`)}`);
+		container.addChild(new Text(`  ${theme.fg("dim", `[${step.outcome}] ${truncate(step.summary, 200)}`)}`, 0, 0));
 	}
 
 	if (runtime.lastRoute) {
-		lines.push(`    ${theme.fg("muted", `route: ${unwrap(runtime.lastRoute)}`)}`);
+		container.addChild(new Text(`  ${theme.fg("muted", `route: ${unwrap(runtime.lastRoute)}`)}`, 0, 0));
 	}
 	if (runtime.lastReason && (runtime.status === "failed" || runtime.status === "retrying")) {
-		lines.push(`    ${theme.fg("error", `[error: ${truncate(runtime.lastReason, 200)}]`)}`);
+		container.addChild(new Text(`  ${theme.fg("error", `[error: ${truncate(runtime.lastReason, 200)}]`)}`, 0, 0));
 	}
 	if (runtime.attempts > 1) {
-		lines.push(`    ${theme.fg("dim", `attempts: ${runtime.attempts}`)}`);
+		container.addChild(new Text(`  ${theme.fg("dim", `attempts: ${runtime.attempts}`)}`, 0, 0));
 	}
 	const stepUsage = formatUsageStats(runtime.usage);
-	if (stepUsage.length > 0) lines.push(`    ${theme.fg("dim", `[${stepUsage}]`)}`);
-
-	return lines;
+	if (stepUsage.length > 0) {
+		container.addChild(new Text(`  ${theme.fg("dim", `[${stepUsage}]`)}`, 0, 0));
+	}
 };
 
 // ============================================================================
-// Shared building blocks
+// Helpers
 // ============================================================================
 
-const buildHeader = (state: RelayRunState, theme: Theme): string => {
-	const phase = runIcon(state.phase);
-	const label = phaseLabel(state.phase);
-	const labelColor = phase.color;
-	const task = oneLine(state.program.task, 60);
-	return (
-		`${theme.fg(phase.color, phase.glyph)} ${theme.fg("toolTitle", theme.bold("relay"))} ` +
-		`${theme.fg("accent", task)}  ${theme.fg("muted", "—")} ${theme.fg(labelColor, label)}`
-	);
-};
-
-const buildStatusLine = (state: RelayRunState): string => {
-	const total = state.program.stepOrder.length;
-	const done = countStatus(state, ["succeeded"]);
-	const failed = countStatus(state, ["failed"]);
-	const running = countStatus(state, ["running"]);
-	const retrying = countStatus(state, ["retrying"]);
-
-	switch (state.phase) {
-		case "pending":
-			return `pending · ${total} steps`;
-		case "running": {
-			const pieces: string[] = [`${done}/${total} done`];
-			if (running > 0) pieces.push(`${running} running`);
-			if (retrying > 0) pieces.push(`${retrying} retrying`);
-			return pieces.join(" · ");
+const findActiveStep = (state: RelayRunState): { stepId: StepId; step: Step; runtime: StepRuntimeState } | null => {
+	for (const stepId of state.program.stepOrder) {
+		const runtime = state.steps.get(stepId);
+		const step = state.program.steps.get(stepId);
+		if (!runtime || !step) continue;
+		if (runtime.status === "running" || runtime.status === "retrying") {
+			return { stepId, step, runtime };
 		}
-		case "succeeded":
-			return `${done}/${total} steps succeeded`;
-		case "failed":
-			return `${failed} failed · ${done}/${total} steps finished`;
-		case "aborted":
-			return `aborted after ${done}/${total} steps`;
-		case "incomplete":
-			return `incomplete · ${done}/${total} steps ran without reaching a terminal`;
 	}
+	return null;
 };
 
-const buildFooter = (state: RelayRunState): string =>
-	joinNonEmpty(
-		[
-			state.startedAt && state.finishedAt
-				? `Took ${formatDuration(state.finishedAt - state.startedAt)}`
-				: state.startedAt && state.phase === "running"
-					? `Elapsed ${formatDuration(Date.now() - state.startedAt)}`
-					: null,
-			formatUsageStats(state.totalUsage),
-		],
-		" · ",
-	);
-
-// ============================================================================
-// Step rows (collapsed)
-// ============================================================================
-
-interface RenderedStepRow {
-	readonly marker: string;
-	readonly idPlain: string;
-	readonly kindPlain: string;
-	readonly trailing: string;
-	readonly nameColor?: "accent" | "error" | "muted" | "success";
-}
-
-const buildStepRow = (stepId: StepId, state: RelayRunState, theme: Theme): RenderedStepRow | null => {
-	const step = state.program.steps.get(stepId);
-	const runtime = state.steps.get(stepId);
-	if (!step || !runtime) return null;
-
-	const icon = iconFor(runtime.status);
-	const marker = theme.fg(icon.color, icon.glyph);
-	const kindLabel = describeStepKind(step);
-	const nameColor: RenderedStepRow["nameColor"] =
-		runtime.status === "failed"
-			? "error"
-			: runtime.status === "succeeded"
-				? "success"
-				: runtime.status === "pending" || runtime.status === "ready"
-					? "muted"
-					: "accent";
-
-	const trailing = buildStepRowTrailing(step, runtime, theme);
-
-	return {
-		marker,
-		idPlain: unwrap(stepId),
-		kindPlain: kindLabel,
-		trailing,
-		nameColor,
-	};
+const findFailedStep = (state: RelayRunState): { stepId: StepId; runtime: StepRuntimeState } | null => {
+	for (const stepId of state.program.stepOrder) {
+		const runtime = state.steps.get(stepId);
+		if (!runtime) continue;
+		if (runtime.status === "failed") return { stepId, runtime };
+	}
+	return null;
 };
 
-const buildStepRowTrailing = (step: Step, runtime: StepRuntimeState, theme: Theme): string => {
-	if (runtime.status === "failed" && runtime.lastReason) {
-		return theme.fg("error", truncate(runtime.lastReason, 80));
-	}
-	if (runtime.status === "retrying" && runtime.lastReason) {
-		return theme.fg("warning", `retrying: ${truncate(runtime.lastReason, 60)}`);
-	}
-	if (runtime.status === "running" && step.kind === "action") {
-		const transcript = buildTranscriptLines(runtime, theme, INLINE_TRANSCRIPT_LIMIT);
-		return transcript.length > 0 ? theme.fg("dim", "running · ") + transcript[0] : theme.fg("dim", "running");
-	}
-	if (runtime.status === "succeeded") {
-		const route = runtime.lastRoute ? unwrap(runtime.lastRoute) : null;
-		const usage = formatUsageStats(runtime.usage);
-		return theme.fg("dim", joinNonEmpty([route ? `route: ${route}` : null, usage], " · "));
+const describeActiveStep = (step: Step, runtime: StepRuntimeState, theme: Theme): string => {
+	if (step.kind === "check") return theme.fg("dim", describeCheck(step));
+	if (step.kind === "terminal") return theme.fg("dim", `[${step.outcome}]`);
+	const lastCall = [...runtime.transcript]
+		.reverse()
+		.find((item): item is Extract<TranscriptItem, { kind: "tool_call" }> => item.kind === "tool_call");
+	if (lastCall) return formatToolCall(lastCall.toolName, lastCall.args, theme);
+	const lastText = [...runtime.transcript]
+		.reverse()
+		.find((item): item is Extract<TranscriptItem, { kind: "text" }> => item.kind === "text");
+	if (lastText && lastText.text.trim().length > 0) {
+		return theme.fg("dim", truncate(lastText.text.trim().replace(/\s+/g, " "), 80));
 	}
 	return "";
 };
 
-const buildTranscriptLines = (runtime: StepRuntimeState, theme: Theme, limit: number): string[] => {
-	const lines: string[] = [];
-	let count = 0;
-	for (let i = runtime.transcript.length - 1; i >= 0 && count < limit; i -= 1) {
-		const item = runtime.transcript[i];
-		if (!item) continue;
-		if (item.kind === "tool_call") {
-			lines.unshift(theme.fg("muted", `→ ${item.toolName}`));
-			count += 1;
-		} else if (item.kind === "text" && item.text.trim().length > 0) {
-			lines.unshift(theme.fg("toolOutput", truncate(item.text.trim().replace(/\s+/g, " "), 160)));
-			count += 1;
-		}
+const extractFinalText = (transcript: readonly TranscriptItem[]): string => {
+	const parts: string[] = [];
+	for (const item of transcript) {
+		if (item.kind === "text" && item.text.trim().length > 0) parts.push(item.text);
 	}
-	return lines;
+	return parts.join("\n").trim();
 };
 
 const countStatus = (state: RelayRunState, statuses: readonly StepRuntimeState["status"][]): number => {
@@ -273,6 +295,14 @@ const countStatus = (state: RelayRunState, statuses: readonly StepRuntimeState["
 		if (statuses.includes(runtime.status)) n += 1;
 	}
 	return n;
+};
+
+const hasExpandedDetail = (state: RelayRunState): boolean => {
+	for (const runtime of state.steps.values()) {
+		if (runtime.transcript.length > 0) return true;
+		if (runtime.status === "failed" || runtime.status === "succeeded") return true;
+	}
+	return false;
 };
 
 const describeStepKind = (step: Step): string => {

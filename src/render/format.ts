@@ -81,3 +81,74 @@ export const maxWidth = (items: readonly string[]): number => {
 	for (const item of items) if (item.length > max) max = item.length;
 	return max;
 };
+
+/**
+ * One-line preview of a tool call, formatted to visually match how pi's
+ * own built-in tools render the same invocation.
+ *
+ * Ported from subagent's `formatToolCall` (packages/coding-agent/examples/
+ * extensions/subagent/index.ts L64–130) so a relay actor's transcript looks
+ * identical to tool calls produced by the outer pi agent.
+ *
+ * Unknown tool names fall back to `<name> <JSON preview>` truncated to 50
+ * chars. This keeps extension-registered tools visible without special
+ * cases for every possible name.
+ */
+export const formatToolCall = (toolName: string, args: Record<string, unknown>, theme: Theme): string => {
+	const fg = theme.fg.bind(theme);
+	switch (toolName) {
+		case "bash": {
+			const command = typeof args.command === "string" ? args.command : "...";
+			const preview = command.length > 60 ? `${command.slice(0, 60)}…` : command;
+			return fg("muted", "$ ") + fg("toolOutput", preview);
+		}
+		case "read": {
+			const rawPath =
+				typeof args.file_path === "string" ? args.file_path : typeof args.path === "string" ? args.path : "...";
+			const filePath = shortenPath(rawPath);
+			const offset = typeof args.offset === "number" ? args.offset : undefined;
+			const limit = typeof args.limit === "number" ? args.limit : undefined;
+			let text = fg("accent", filePath);
+			if (offset !== undefined || limit !== undefined) {
+				const startLine = offset ?? 1;
+				const endLine = limit !== undefined ? startLine + limit - 1 : "";
+				text += fg("warning", `:${startLine}${endLine ? `-${endLine}` : ""}`);
+			}
+			return fg("muted", "read ") + text;
+		}
+		case "write": {
+			const rawPath =
+				typeof args.file_path === "string" ? args.file_path : typeof args.path === "string" ? args.path : "...";
+			const filePath = shortenPath(rawPath);
+			const content = typeof args.content === "string" ? args.content : "";
+			const lines = content.split("\n").length;
+			let text = fg("muted", "write ") + fg("accent", filePath);
+			if (lines > 1) text += fg("dim", ` (${lines} lines)`);
+			return text;
+		}
+		case "edit": {
+			const rawPath =
+				typeof args.file_path === "string" ? args.file_path : typeof args.path === "string" ? args.path : "...";
+			return fg("muted", "edit ") + fg("accent", shortenPath(rawPath));
+		}
+		case "ls": {
+			const rawPath = typeof args.path === "string" ? args.path : ".";
+			return fg("muted", "ls ") + fg("accent", shortenPath(rawPath));
+		}
+		case "find": {
+			const pattern = typeof args.pattern === "string" ? args.pattern : "*";
+			const rawPath = typeof args.path === "string" ? args.path : ".";
+			return fg("muted", "find ") + fg("accent", pattern) + fg("dim", ` in ${shortenPath(rawPath)}`);
+		}
+		case "grep": {
+			const pattern = typeof args.pattern === "string" ? args.pattern : "";
+			const rawPath = typeof args.path === "string" ? args.path : ".";
+			return fg("muted", "grep ") + fg("accent", `/${pattern}/`) + fg("dim", ` in ${shortenPath(rawPath)}`);
+		}
+		default: {
+			const argsStr = JSON.stringify(args);
+			const preview = argsStr.length > 50 ? `${argsStr.slice(0, 50)}…` : argsStr;
+			return fg("accent", toolName) + fg("dim", ` ${preview}`);
+		}
+	}
+};
