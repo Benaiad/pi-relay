@@ -36,10 +36,10 @@ git clone https://github.com/badlogic/pi-relay.git ~/repos/pi-relay
 cd ~/repos/pi-relay
 npm install
 
-# Symlink the whole src tree so jiti can follow relative imports
-mkdir -p ~/.pi/agent/extensions/relay
-ln -sf "$(pwd)/src/index.ts" ~/.pi/agent/extensions/relay/index.ts
-ln -sf "$(pwd)/src" ~/.pi/agent/extensions/relay/src
+# Symlink the whole src/ directory as the extension. jiti follows the symlink
+# and resolves relative imports against the real src/ tree, so this single
+# symlink is enough — do NOT also symlink individual files inside it.
+ln -sfn "$(pwd)/src" ~/.pi/agent/extensions/relay
 
 # Drop the sample actor files into pi's actor directory
 mkdir -p ~/.pi/agent/relay-actors
