@@ -36,11 +36,12 @@ import { Scheduler } from "./runtime/scheduler.js";
 /**
  * The `details` payload carried by `onUpdate` and the final tool result.
  *
- * Two shapes because compile failures and runtime states are very different
- * things to render: one is a static error message, the other is a live DAG.
+ * Three shapes because compile failures, runtime states, and user cancels are
+ * very different things to render.
  */
 export type RelayDetails =
 	| { readonly kind: "compile_failed"; readonly message: string }
+	| { readonly kind: "cancelled"; readonly reason: string }
 	| { readonly kind: "state"; readonly state: RelayRunState };
 
 export default function (pi: ExtensionAPI): void {
@@ -86,6 +87,30 @@ export default function (pi: ExtensionAPI): void {
 			}
 
 			const program = compileResult.value;
+
+			// Interactive plan review. Pi's built-in bash/edit/write confirmations
+			// don't fire for custom extension tools, and the subprocess actors run
+			// with `pi -p --no-session` which auto-accepts everything. The outer
+			// confirmation is therefore the ONLY gate on a relay plan — it has to
+			// exist, and it has to carry enough information for an informed decision.
+			if (ctx.hasUI) {
+				const impact = summarizePlanImpact(plan, actorsByName);
+				const title = "Run this Relay plan?";
+				const body = buildConfirmationBody(plan, impact);
+				const approved = await ctx.ui.confirm(title, body);
+				if (!approved) {
+					return {
+						content: [
+							{
+								type: "text",
+								text: `Relay plan cancelled by user. The plan was not executed. Task: ${plan.task}`,
+							},
+						],
+						details: { kind: "cancelled", reason: "user declined plan review" },
+					};
+				}
+			}
+
 			const clock = () => Date.now();
 			const audit = new AuditLog();
 			const artifactStore = new ArtifactStore(program, clock);
@@ -141,6 +166,125 @@ export default function (pi: ExtensionAPI): void {
 		},
 	});
 }
+
+// ============================================================================
+// Plan review (confirmation dialog) helpers
+// ============================================================================
+
+/**
+ * Structural impact of a plan — used to build the confirmation body.
+ *
+ * The model and tool set each actor brings determine whether the plan will
+ * touch the filesystem, run shell commands, or only read. This summary lets
+ * the user see at a glance what the plan is authorized to do, without
+ * scrolling through every step.
+ */
+export interface PlanImpact {
+	readonly actionStepCount: number;
+	readonly checkStepCount: number;
+	readonly terminalStepCount: number;
+	readonly artifactCount: number;
+	readonly uniqueActors: readonly string[];
+	readonly mayEdit: boolean;
+	readonly mayRunCommands: boolean;
+	readonly unknownActors: readonly string[];
+	readonly commandChecks: readonly string[];
+}
+
+const EDIT_TOOLS = new Set(["edit", "write"]);
+const COMMAND_TOOLS = new Set(["bash"]);
+
+export const summarizePlanImpact = (
+	plan: import("./plan/draft.js").PlanDraftDoc,
+	actorsByName: ReadonlyMap<ReturnType<typeof ActorId>, ActorConfig>,
+): PlanImpact => {
+	let actionStepCount = 0;
+	let checkStepCount = 0;
+	let terminalStepCount = 0;
+	const uniqueActors = new Set<string>();
+	const unknownActors = new Set<string>();
+	const commandChecks: string[] = [];
+	let mayEdit = false;
+	let mayRunCommands = false;
+
+	for (const step of plan.steps) {
+		if (step.kind === "action") {
+			actionStepCount += 1;
+			uniqueActors.add(step.actor);
+			const actor = actorsByName.get(ActorId(step.actor));
+			if (!actor) {
+				unknownActors.add(step.actor);
+				continue;
+			}
+			const toolSet = new Set(actor.tools ?? []);
+			for (const tool of toolSet) {
+				if (EDIT_TOOLS.has(tool)) mayEdit = true;
+				if (COMMAND_TOOLS.has(tool)) mayRunCommands = true;
+			}
+		} else if (step.kind === "check") {
+			checkStepCount += 1;
+			if (step.check.kind === "command_exits_zero") {
+				const cmd = [step.check.command, ...step.check.args].join(" ");
+				commandChecks.push(cmd.length > 80 ? `${cmd.slice(0, 80)}…` : cmd);
+				mayRunCommands = true;
+			}
+		} else {
+			terminalStepCount += 1;
+		}
+	}
+
+	return {
+		actionStepCount,
+		checkStepCount,
+		terminalStepCount,
+		artifactCount: plan.artifacts.length,
+		uniqueActors: Array.from(uniqueActors),
+		mayEdit,
+		mayRunCommands,
+		unknownActors: Array.from(unknownActors),
+		commandChecks,
+	};
+};
+
+export const buildConfirmationBody = (plan: import("./plan/draft.js").PlanDraftDoc, impact: PlanImpact): string => {
+	const lines: string[] = [];
+	lines.push(`Task: ${truncateForConfirm(plan.task, 200)}`);
+	if (plan.successCriteria) {
+		lines.push(`Success: ${truncateForConfirm(plan.successCriteria, 200)}`);
+	}
+	lines.push("");
+	lines.push(
+		`Steps: ${plan.steps.length} (${impact.actionStepCount} action, ${impact.checkStepCount} check, ${impact.terminalStepCount} terminal)`,
+	);
+	lines.push(`Actors: ${impact.uniqueActors.length === 0 ? "(none)" : impact.uniqueActors.join(", ")}`);
+	if (impact.unknownActors.length > 0) {
+		lines.push(`WARNING — unknown actors referenced: ${impact.unknownActors.join(", ")}`);
+	}
+	lines.push(`Artifacts: ${impact.artifactCount}`);
+	lines.push("");
+
+	const impactBullets: string[] = [];
+	if (impact.mayEdit) impactBullets.push("may create, edit, or write files");
+	if (impact.mayRunCommands) impactBullets.push("may run shell commands");
+	if (impact.commandChecks.length > 0) {
+		impactBullets.push(`check steps will run: ${impact.commandChecks.map((c) => `'${c}'`).join(", ")}`);
+	}
+	if (impactBullets.length === 0) {
+		lines.push("Impact: read-only (no filesystem writes or shell commands).");
+	} else {
+		lines.push("Impact:");
+		for (const bullet of impactBullets) lines.push(`  - ${bullet}`);
+	}
+	lines.push("");
+	lines.push("Subprocess actors run non-interactively and do not prompt for");
+	lines.push("per-step confirmations. Approving this dialog authorizes every");
+	lines.push("action the plan describes.");
+
+	return lines.join("\n");
+};
+
+const truncateForConfirm = (text: string, limit: number): string =>
+	text.length <= limit ? text : `${text.slice(0, limit)}…`;
 
 /**
  * Build the tool description shown to the model in the system prompt's tools
