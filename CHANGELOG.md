@@ -48,10 +48,14 @@
   - Single-source status icon palette in `render/icons.ts`.
 - Extension entry in `src/index.ts` registering the `relay` tool with
   parameter schema, execute choreographer, `renderCall`, and `renderResult`.
-- Three sample actor files (`worker`, `planner`, `reviewer`) shipped with
-  the repo.
-- Test suite: 112 tests covering ids, result type, TypeBox schema
-  validation, compiler (14 variants), artifact store, check engine,
+- Two sample actor files (`worker`, `reviewer`) shipped with the repo.
+  Deliberately no `planner`: the outer pi assistant is already the
+  planner, and a separate planner actor inside the plan is just a second
+  round of planning with no upside. See the README's "The assistant is
+  the planner; actors execute" section.
+- Test suite: 155 tests covering ids, result type, TypeBox schema
+  validation, compiler (16 variants), artifact store, check engine,
   actor discovery, completion protocol, scheduler (sequential flows,
-  retries, abort, audit replay, contract violations, terminal routing),
-  render formatters and icons, and extension registration smoke test.
+  retries, abort, audit replay, contract violations, terminal routing,
+  multi-writer loops, re-entry caps), render formatters and icons, and
+  extension registration smoke test.

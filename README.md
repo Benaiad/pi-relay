@@ -19,8 +19,8 @@ workflows that need:
 
 - **Deterministic verification gates.** Tests must pass before commit, and
   the runtime — not the model's interpretation of test output — decides.
-- **Typed artifacts between steps.** A planner's output reaches the
-  implementer in a known shape, not a paraphrased transcript.
+- **Typed artifacts between steps.** One step's output reaches the next in
+  a known shape, not a paraphrased transcript.
 - **Replay and audit.** A run is a structured event log keyed by step,
   route, artifact, and retry attempt.
 
@@ -28,6 +28,25 @@ Relay is a specialist tool. Most pi sessions will not invoke it. The model
 should call `relay` only for tasks with at least one of: multiple actors,
 verification gates, parallel work that needs joining, or workflows where
 partial success is unacceptable.
+
+## The assistant is the planner; actors execute
+
+The outer pi assistant is already a planner. When it calls `relay`, the
+`PlanDraft` it produces IS the plan — step ids, instructions, routing,
+artifact contracts. Do not add a "planner" actor inside the plan to do
+more planning; that is a second planning round the assistant should have
+done before writing the plan.
+
+Actors exist to execute concrete work that doesn't fit inside the
+assistant's loop: writing files and running commands in an isolated
+subprocess (`worker`), reviewing another actor's output against success
+criteria (`reviewer`), and any other role you curate. They are the
+"hands" of the plan, not the "brain" — the brain already finished its
+job when the `relay` tool call fired.
+
+This project ships two sample actors (`worker`, `reviewer`) and no
+planner. Roll your own roles freely, but resist the urge to put a
+planner inside the plan.
 
 ## Install (development)
 
@@ -105,28 +124,18 @@ hand-written plan looks like this:
 
 ```json
 {
-  "task": "Plan, implement, and verify a new feature flag.",
+  "task": "Add a feature flag to the user service and make sure tests pass.",
   "successCriteria": "Tests pass and the flag is wired to the canonical registry.",
   "artifacts": [
-    { "id": "requirements", "description": "Parsed requirements", "shape": { "kind": "untyped_json" } },
     { "id": "notes", "description": "Implementer notes", "shape": { "kind": "untyped_json" } }
   ],
   "steps": [
     {
       "kind": "action",
-      "id": "plan",
-      "actor": "planner",
-      "instruction": "Identify the files that need to change and record them in requirements.",
-      "reads": [],
-      "writes": ["requirements"],
-      "routes": [{ "route": "next", "to": "implement" }]
-    },
-    {
-      "kind": "action",
       "id": "implement",
       "actor": "worker",
-      "instruction": "Apply the changes described in requirements.",
-      "reads": ["requirements"],
+      "instruction": "Add a boolean feature flag 'rollout_v2' to src/users/flags.ts, wire it to the canonical feature registry in src/features/registry.ts, and update src/users/service.ts to read it. Record your changes in notes.",
+      "reads": [],
       "writes": ["notes"],
       "routes": [{ "route": "done", "to": "verify" }],
       "retry": { "maxAttempts": 2 }
@@ -141,9 +150,16 @@ hand-written plan looks like this:
     { "kind": "terminal", "id": "done", "outcome": "success", "summary": "Feature flag shipped and tests are green." },
     { "kind": "terminal", "id": "failed", "outcome": "failure", "summary": "Tests failed after implementation." }
   ],
-  "entryStep": "plan"
+  "entryStep": "implement"
 }
 ```
+
+Note that the plan's `implement` step carries a concrete instruction with
+actual file paths — the assistant scouted the codebase BEFORE writing the
+plan and baked the targets into the instruction. The plan's job is to
+execute, not to re-discover what to do. If the assistant needs to scout,
+it scouts with its own read/grep/find tools in the same turn and writes a
+plan that knows exactly what to change.
 
 Rules enforced by the compiler (every violation returns a structured error
 to the model, which may resubmit a corrected plan in the same turn):

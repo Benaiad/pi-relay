@@ -32,8 +32,8 @@ Relay addresses three pains that no current extension cleanly solves:
    evaluate its exit code, route to `pass` or `fail`. The runtime decides, not
    the model.
 2. **Typed artifacts between steps.** Today, multi-step workflows pass strings
-   through transcripts. The implementer paraphrases what the planner said. Relay's
-   artifacts have schemas, single-writer ownership, and compile-time
+   through transcripts — each step paraphrases what the previous one said. Relay's
+   artifacts have schemas, single-writer ownership by default, and compile-time
    producer/consumer enforcement. The plan does not run if a step reads an
    artifact no step writes.
 3. **Audit and replay.** Pi sessions log transcripts. Relay records a structured

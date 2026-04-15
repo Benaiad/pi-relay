@@ -1,26 +1,20 @@
 {
-	"task": "Plan, implement, and verify a new feature flag for the user service.",
-	"successCriteria": "Tests pass and the flag is wired to the canonical feature registry.",
+	"task": "Add a feature flag 'rollout_v2' to the user service and verify the tests still pass.",
+	"successCriteria": "src/users/flags.ts exports the flag, the canonical feature registry in src/features/registry.ts wires it, and `npm test` exits 0.",
 	"artifacts": [
-		{ "id": "requirements", "description": "Parsed requirements", "shape": { "kind": "untyped_json" } },
-		{ "id": "implementation-notes", "description": "Notes from the implementer", "shape": { "kind": "untyped_json" } }
+		{
+			"id": "implementation-notes",
+			"description": "What the worker changed, as JSON: files touched and a one-line summary per file.",
+			"shape": { "kind": "untyped_json" }
+		}
 	],
 	"steps": [
 		{
 			"kind": "action",
-			"id": "plan-changes",
-			"actor": "planner",
-			"instruction": "Identify the files that need to change to add a feature flag called 'rollout-v2' to the user service. Record the list as a JSON object with fields { files: string[], risks: string[], test_commands: string[] }.",
-			"reads": [],
-			"writes": ["requirements"],
-			"routes": [{ "route": "next", "to": "implement" }]
-		},
-		{
-			"kind": "action",
 			"id": "implement",
 			"actor": "worker",
-			"instruction": "Apply the changes described in the requirements artifact. Touch only the files the planner listed. Record what you changed as JSON in implementation-notes.",
-			"reads": ["requirements"],
+			"instruction": "Add a boolean feature flag called 'rollout_v2' to src/users/flags.ts (default false). Wire it into the canonical feature registry in src/features/registry.ts. Update src/users/service.ts to read the flag and branch on it for the new rollout path. Record what you changed in implementation-notes as { files: [{ path, change }] }.",
+			"reads": [],
 			"writes": ["implementation-notes"],
 			"routes": [
 				{ "route": "done", "to": "run-tests" },
@@ -53,5 +47,5 @@
 			"summary": "Feature flag implementation failed or tests did not pass."
 		}
 	],
-	"entryStep": "plan-changes"
+	"entryStep": "implement"
 }

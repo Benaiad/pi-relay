@@ -309,8 +309,11 @@ Files:
   Limitations section: web-ui rendering, MVP scope.
 - `CHANGELOG.md` — `[Unreleased]` section under v0.1.0 with the feature
   list.
-- `actors/scout.md`, `actors/planner.md`, `actors/reviewer.md` — additional
-  sample actors paralleling subagent's set.
+- `actors/reviewer.md` — second sample actor alongside `worker.md`. The
+  assistant is already the planner, so we deliberately do not ship a
+  `planner` actor — planning happens in the assistant's loop when it
+  authors the plan, and a separate planner actor inside the plan is a
+  second round of planning with no upside.
 - `examples/sample-plan.json` — a hand-written PlanDraft for documentation
   purposes, illustrating the schema the model is expected to fill in.
 
