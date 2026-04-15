@@ -36,6 +36,7 @@ import { iconFor, phaseLabel, runIcon } from "./icons.js";
 import { formatUsageStats } from "./usage.js";
 
 const EXPANDED_TRANSCRIPT_LIMIT = 15;
+const ERROR_REASON_TRUNCATE = 800;
 
 export const renderRunResult = (
 	state: RelayRunState,
@@ -47,6 +48,77 @@ export const renderRunResult = (
 	const text = (lastComponent as Text | undefined) ?? new Text("", 0, 0);
 	text.setText(formatCollapsed(state, theme));
 	return text;
+};
+
+/**
+ * Render a compile failure as its own result component.
+ *
+ * The plan is already visible above the result via `renderCall`, so we
+ * don't repeat it — the failure component only carries the outcome label
+ * and the compiler's formatted error, which names the offending step,
+ * artifact, or actor and lists candidates where applicable.
+ */
+export const renderCompileFailure = (
+	message: string,
+	theme: Theme,
+	lastComponent: Component | undefined,
+): Component => {
+	const text = (lastComponent as Text | undefined) ?? new Text("", 0, 0);
+	const lines = [
+		`${theme.fg("error", "✗")} ${theme.fg("toolTitle", theme.bold("relay"))}  ${theme.fg("error", "compile failed")}`,
+		"",
+		...wrapReason(message, theme, "error"),
+	];
+	text.setText(lines.join("\n"));
+	return text;
+};
+
+/**
+ * Render a user-cancelled review as its own result component.
+ *
+ * Same rationale as `renderCompileFailure`: the plan is already visible
+ * above, so we only show the outcome label and the cancel reason.
+ */
+export const renderCancelled = (reason: string, theme: Theme, lastComponent: Component | undefined): Component => {
+	const text = (lastComponent as Text | undefined) ?? new Text("", 0, 0);
+	const lines = [
+		`${theme.fg("warning", "⊘")} ${theme.fg("toolTitle", theme.bold("relay"))}  ${theme.fg("warning", "cancelled")}`,
+		"",
+		...wrapReason(reason, theme, "muted"),
+	];
+	text.setText(lines.join("\n"));
+	return text;
+};
+
+/**
+ * Render a user refinement request.
+ *
+ * The model is expected to resubmit a revised plan on its next turn.
+ * The renderer shows the feedback so the user can read what they asked
+ * for while the model is thinking.
+ */
+export const renderRefined = (feedback: string, theme: Theme, lastComponent: Component | undefined): Component => {
+	const text = (lastComponent as Text | undefined) ?? new Text("", 0, 0);
+	const lines = [
+		`${theme.fg("warning", "↻")} ${theme.fg("toolTitle", theme.bold("relay"))}  ${theme.fg("warning", "refinement requested")}`,
+		"",
+		`${theme.fg("muted", "Your feedback to the model:")}`,
+		...wrapReason(feedback, theme, "toolOutput").map((line) => `  ${line}`),
+		"",
+		theme.fg("dim", "Waiting for the model to submit a revised plan."),
+	];
+	text.setText(lines.join("\n"));
+	return text;
+};
+
+const wrapReason = (
+	text: string,
+	theme: Theme,
+	color: "error" | "warning" | "muted" | "toolOutput" | "dim",
+): string[] => {
+	const limited = text.length > ERROR_REASON_TRUNCATE ? `${text.slice(0, ERROR_REASON_TRUNCATE)}…` : text;
+	const paragraphs = limited.split("\n");
+	return paragraphs.map((para) => `  ${theme.fg(color, para)}`);
 };
 
 // ============================================================================

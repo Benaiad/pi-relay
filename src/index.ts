@@ -26,7 +26,7 @@ import { formatCompileError } from "./plan/compile-error-format.js";
 import { PlanDraftSchema } from "./plan/draft.js";
 import { ActorId } from "./plan/ids.js";
 import { renderPlanPreview } from "./render/plan-preview.js";
-import { renderRunResult } from "./render/run-result.js";
+import { renderCancelled, renderCompileFailure, renderRefined, renderRunResult } from "./render/run-result.js";
 import { ArtifactStore } from "./runtime/artifacts.js";
 import { AuditLog } from "./runtime/audit.js";
 import type { RelayRunState } from "./runtime/events.js";
@@ -214,6 +214,19 @@ export default function (pi: ExtensionAPI): void {
 			if (details?.kind === "state") {
 				return renderRunResult(details.state, theme, options.expanded, context.lastComponent);
 			}
+			if (details?.kind === "compile_failed") {
+				return renderCompileFailure(details.message, theme, context.lastComponent);
+			}
+			if (details?.kind === "cancelled") {
+				return renderCancelled(details.reason, theme, context.lastComponent);
+			}
+			if (details?.kind === "refined") {
+				return renderRefined(details.feedback, theme, context.lastComponent);
+			}
+			// Unknown or missing details — fall back to the plan itself. This is the
+			// path that fires when pi's agent-loop caught an exception in execute()
+			// and synthesized an error tool result without our details payload, so
+			// we at least show something coherent.
 			return renderPlanPreview(context.args, theme, options.expanded, context.lastComponent);
 		},
 	});
