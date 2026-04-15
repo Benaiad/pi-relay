@@ -93,21 +93,28 @@ export default function (pi: ExtensionAPI): void {
 			// with `pi -p --no-session` which auto-accepts everything. The outer
 			// confirmation is therefore the ONLY gate on a relay plan — it has to
 			// exist, and it has to carry enough information for an informed decision.
+			//
+			// Read-only plans (no edit/write/bash actors, no command_exits_zero
+			// checks, no unknown actors) skip the dialog — nothing destructive can
+			// happen, and prompting for Q&A / exploration plans is pure friction.
 			if (ctx.hasUI) {
 				const impact = summarizePlanImpact(plan, actorsByName);
-				const title = "Run this Relay plan?";
-				const body = buildConfirmationBody(plan, impact);
-				const approved = await ctx.ui.confirm(title, body);
-				if (!approved) {
-					return {
-						content: [
-							{
-								type: "text",
-								text: `Relay plan cancelled by user. The plan was not executed. Task: ${plan.task}`,
-							},
-						],
-						details: { kind: "cancelled", reason: "user declined plan review" },
-					};
+				const needsConfirm = impact.mayEdit || impact.mayRunCommands || impact.unknownActors.length > 0;
+				if (needsConfirm) {
+					const title = "Run this Relay plan?";
+					const body = buildConfirmationBody(plan, impact);
+					const approved = await ctx.ui.confirm(title, body);
+					if (!approved) {
+						return {
+							content: [
+								{
+									type: "text",
+									text: `Relay plan cancelled by user. The plan was not executed. Task: ${plan.task}`,
+								},
+							],
+							details: { kind: "cancelled", reason: "user declined plan review" },
+						};
+					}
 				}
 			}
 
@@ -154,15 +161,15 @@ export default function (pi: ExtensionAPI): void {
 		},
 
 		renderCall(plan, theme, context) {
-			return renderPlanPreview(plan, theme, context.expanded);
+			return renderPlanPreview(plan, theme, context.expanded, context.lastComponent);
 		},
 
 		renderResult(result, options, theme, context) {
 			const details = result.details;
 			if (details?.kind === "state") {
-				return renderRunResult(details.state, theme, options.expanded);
+				return renderRunResult(details.state, theme, options.expanded, context.lastComponent);
 			}
-			return renderPlanPreview(context.args, theme, options.expanded);
+			return renderPlanPreview(context.args, theme, options.expanded, context.lastComponent);
 		},
 	});
 }

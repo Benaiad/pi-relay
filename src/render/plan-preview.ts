@@ -1,109 +1,155 @@
 /**
- * Render the PlanDraft for the `renderCall` hook.
+ * Render the PlanDraft as a tool call header — pi `renderCall` hook.
  *
- * The plan preview fires BEFORE execution starts — pi calls `renderCall` with
- * the model's tool arguments, which for `relay` is a `PlanDraftDoc`. The user
- * sees this as an inline tool call in the chat and can abort if the plan
- * looks wrong.
+ * Matches pi's built-in tool call layout (see bash.ts, read.ts, grep.ts in
+ * the pi-mono tree): a single `Text` component reused across updates via
+ * `context.lastComponent`, producing a one-line header followed by optional
+ * metadata lines below. Collapsed shows the task and step count on one line;
+ * expanded shows a table of steps with their actor/check kind and routing.
  *
- * Collapsed view (default): one-line task + metadata + step-kind strip.
- * Expanded view (Ctrl+O): per-step lines showing actor/check spec, routes,
- * and artifact reads/writes.
+ * No Container/Spacer composition — the whole output is a single string
+ * with embedded `\n` and theme colors, which is how every first-party pi
+ * tool renders.
  */
 
 import type { Theme } from "@mariozechner/pi-coding-agent";
-import { type Component, Container, Spacer, Text } from "@mariozechner/pi-tui";
+import { type Component, Text } from "@mariozechner/pi-tui";
 import type { PlanDraftDoc } from "../plan/draft.js";
-import { truncate } from "./format.js";
+import { invalidArg, maxWidth, oneLine, padRight, str, truncate } from "./format.js";
 
-export const renderPlanPreview = (plan: PlanDraftDoc, theme: Theme, expanded: boolean): Component => {
-	if (!expanded) return renderCollapsed(plan, theme);
-	return renderExpanded(plan, theme);
+export const renderPlanPreview = (
+	plan: PlanDraftDoc,
+	theme: Theme,
+	expanded: boolean,
+	lastComponent: Component | undefined,
+): Component => {
+	const text = (lastComponent as Text | undefined) ?? new Text("", 0, 0);
+	text.setText(expanded ? formatExpanded(plan, theme) : formatCollapsed(plan, theme));
+	return text;
 };
 
-const renderCollapsed = (plan: PlanDraftDoc, theme: Theme): Component => {
-	const task = truncate(plan.task.trim().replace(/\s+/g, " "), 70);
-	const actorCount = countUniqueActors(plan);
-	const stepCount = plan.steps.length;
-	const artifactCount = plan.artifacts.length;
-	const stepStrip = plan.steps.map((s) => glyphForKind(s.kind, theme)).join("");
+// ============================================================================
+// Collapsed
+// ============================================================================
 
-	const header = `${theme.fg("toolTitle", theme.bold("relay "))}${theme.fg("accent", task)}`;
-	const meta = theme.fg("muted", `${stepCount} steps · ${actorCount} actors · ${artifactCount} artifacts`);
-	return new Text(`${header}\n  ${meta}\n  ${stepStrip}`, 0, 0);
+const formatCollapsed = (plan: PlanDraftDoc, theme: Theme): string => {
+	const header = buildHeader(plan, theme);
+	const summary = buildCountSummary(plan, theme);
+	return `${header}\n  ${summary}`;
 };
 
-const renderExpanded = (plan: PlanDraftDoc, theme: Theme): Component => {
-	const container = new Container();
-	const task = plan.task.trim();
-	container.addChild(new Text(`${theme.fg("toolTitle", theme.bold("relay "))}${theme.fg("accent", task)}`, 0, 0));
+// ============================================================================
+// Expanded
+// ============================================================================
+
+const formatExpanded = (plan: PlanDraftDoc, theme: Theme): string => {
+	const lines: string[] = [];
+	lines.push(buildHeader(plan, theme));
 	if (plan.successCriteria) {
-		container.addChild(new Text(theme.fg("muted", `success: ${plan.successCriteria}`), 0, 0));
+		lines.push(`  ${theme.fg("muted", `success: ${truncate(plan.successCriteria, 200)}`)}`);
 	}
-	const actorCount = countUniqueActors(plan);
-	container.addChild(
-		new Text(
-			theme.fg(
-				"muted",
-				`${plan.steps.length} steps · ${actorCount} actors · ${plan.artifacts.length} artifacts · entry: ${plan.entryStep}`,
-			),
-			0,
-			0,
-		),
-	);
-	container.addChild(new Spacer(1));
+	lines.push(`  ${buildCountSummary(plan, theme)}`);
+	lines.push("");
 
+	const rows = plan.steps.map((step) => buildStepRow(step, theme));
+	const idWidth = maxWidth(rows.map((r) => r.idPlain));
+	const kindWidth = maxWidth(rows.map((r) => r.kindPlain));
+
+	for (const row of rows) {
+		const idPadded = padRight(row.idPlain, idWidth);
+		const kindPadded = padRight(row.kindPlain, kindWidth);
+		lines.push(`  ${row.marker} ${theme.fg("accent", idPadded)}  ${theme.fg("muted", kindPadded)}  ${row.trailing}`);
+	}
+	return lines.join("\n");
+};
+
+// ============================================================================
+// Shared header + counts
+// ============================================================================
+
+const buildHeader = (plan: PlanDraftDoc, theme: Theme): string => {
+	const rawTask = str(plan.task);
+	const taskDisplay =
+		rawTask === null
+			? invalidArg(theme)
+			: rawTask
+				? theme.fg("accent", oneLine(rawTask, 70))
+				: theme.fg("toolOutput", "...");
+	return `${theme.fg("toolTitle", theme.bold("relay"))} ${taskDisplay}`;
+};
+
+const buildCountSummary = (plan: PlanDraftDoc, theme: Theme): string => {
+	const actorCount = new Set<string>();
+	let action = 0;
+	let check = 0;
+	let terminal = 0;
 	for (const step of plan.steps) {
-		container.addChild(new Text(renderStepLine(step, theme), 0, 0));
+		switch (step.kind) {
+			case "action":
+				action += 1;
+				actorCount.add(step.actor);
+				break;
+			case "check":
+				check += 1;
+				break;
+			case "terminal":
+				terminal += 1;
+				break;
+		}
 	}
-	return container;
+	return theme.fg(
+		"muted",
+		`${plan.steps.length} steps (${action} action · ${check} check · ${terminal} terminal) · ${actorCount.size} actors · ${plan.artifacts.length} artifacts · entry: ${plan.entryStep}`,
+	);
 };
 
-const glyphForKind = (kind: PlanDraftDoc["steps"][number]["kind"], theme: Theme): string => {
-	switch (kind) {
-		case "action":
-			return theme.fg("accent", "◆");
-		case "check":
-			return theme.fg("warning", "?");
-		case "terminal":
-			return theme.fg("success", "■");
-	}
-};
+// ============================================================================
+// Step rows
+// ============================================================================
 
-const renderStepLine = (step: PlanDraftDoc["steps"][number], theme: Theme): string => {
+interface StepRow {
+	readonly marker: string;
+	readonly idPlain: string;
+	readonly kindPlain: string;
+	readonly trailing: string;
+}
+
+const buildStepRow = (step: PlanDraftDoc["steps"][number], theme: Theme): StepRow => {
 	switch (step.kind) {
 		case "action": {
-			const header =
-				`${theme.fg("accent", "◆")} ${theme.fg("toolTitle", step.id)} ` + `${theme.fg("muted", `[${step.actor}]`)}`;
-			const rw = formatReadsWrites(step, theme);
-			const routes = theme.fg("dim", `→ ${step.routes.map((r) => `${r.route}:${r.to}`).join(", ")}`);
-			const retry = step.retry ? theme.fg("dim", ` (retry ${step.retry.maxAttempts}x)`) : "";
-			return `  ${header}  ${rw}  ${routes}${retry}`;
+			const routes = step.routes.map((r) => `${r.route}→${r.to}`).join(" ");
+			const rw = buildReadsWrites(step);
+			const retry = step.retry ? ` retry×${step.retry.maxAttempts}` : "";
+			return {
+				marker: theme.fg("accent", "▸"),
+				idPlain: step.id,
+				kindPlain: `action(${step.actor})`,
+				trailing: theme.fg("dim", `${rw}${rw ? "  " : ""}→ ${routes}${retry}`),
+			};
 		}
 		case "check": {
-			const header = `${theme.fg("warning", "?")} ${theme.fg("toolTitle", step.id)} ${theme.fg("muted", `[${step.check.kind}]`)}`;
-			const routes = theme.fg("dim", `→ pass:${step.onPass}  fail:${step.onFail}`);
-			return `  ${header}  ${routes}`;
+			return {
+				marker: theme.fg("warning", "?"),
+				idPlain: step.id,
+				kindPlain: `check(${step.check.kind})`,
+				trailing: theme.fg("dim", `pass→${step.onPass}  fail→${step.onFail}`),
+			};
 		}
 		case "terminal": {
-			const glyph = step.outcome === "success" ? theme.fg("success", "■") : theme.fg("error", "■");
-			const body = theme.fg("muted", `[${step.outcome}] ${truncate(step.summary, 60)}`);
-			return `  ${glyph} ${theme.fg("toolTitle", step.id)} ${body}`;
+			const color = step.outcome === "success" ? "success" : "error";
+			return {
+				marker: theme.fg(color, "■"),
+				idPlain: step.id,
+				kindPlain: `terminal(${step.outcome})`,
+				trailing: theme.fg("muted", truncate(step.summary, 60)),
+			};
 		}
 	}
 };
 
-const formatReadsWrites = (step: Extract<PlanDraftDoc["steps"][number], { kind: "action" }>, theme: Theme): string => {
+const buildReadsWrites = (step: Extract<PlanDraftDoc["steps"][number], { kind: "action" }>): string => {
 	const parts: string[] = [];
-	if (step.reads.length > 0) parts.push(theme.fg("dim", `reads ${step.reads.join(",")}`));
-	if (step.writes.length > 0) parts.push(theme.fg("dim", `writes ${step.writes.join(",")}`));
-	return parts.join("  ");
-};
-
-const countUniqueActors = (plan: PlanDraftDoc): number => {
-	const set = new Set<string>();
-	for (const step of plan.steps) {
-		if (step.kind === "action") set.add(step.actor);
-	}
-	return set.size;
+	if (step.reads.length > 0) parts.push(`reads:[${step.reads.join(",")}]`);
+	if (step.writes.length > 0) parts.push(`writes:[${step.writes.join(",")}]`);
+	return parts.join(" ");
 };
