@@ -330,28 +330,24 @@ const appendAttemptBlock = (
 		// line, matching how bash tool renders itself.
 		container.addChild(new Text(`  ${theme.fg("toolOutput", describeCheckInline(step))}`, 0, 0));
 	} else if (step.kind === "terminal") {
-		// Terminal body: just the summary prose, nothing else. The icon
-		// already conveys success vs failure.
-		container.addChild(new Text(`  ${theme.fg("toolOutput", truncate(step.summary, 240))}`, 0, 0));
+		// Terminal body: the full summary prose. The icon already conveys
+		// success vs failure; no need for a kind label or truncation.
+		container.addChild(new Text(`  ${theme.fg("toolOutput", step.summary)}`, 0, 0));
 	}
 
 	// Outcome line. For completed actions we surface the route name only
 	// when it's non-generic — "done" / "next" / "continue" are pure flow
 	// glue and carry no meaning to a user. Action failures and check
-	// failures show their reason in error color.
+	// failures show their reason in error color — full reason, no truncation.
 	if (attempt.outcome === "completed" && attempt.route) {
 		const routeName = unwrap(attempt.route);
 		if (!GENERIC_ROUTE_NAMES.has(routeName.toLowerCase())) {
 			container.addChild(new Text(`  ${theme.fg("success", `→ ${routeName}`)}`, 0, 0));
 		}
 	} else if (attempt.outcome === "no_completion" || attempt.outcome === "engine_error") {
-		container.addChild(
-			new Text(`  ${theme.fg("error", `Failed: ${truncate(attempt.reason ?? "no reason", 240)}`)}`, 0, 0),
-		);
+		container.addChild(new Text(`  ${theme.fg("error", `Failed: ${attempt.reason ?? "no reason"}`)}`, 0, 0));
 	} else if (attempt.outcome === "check_fail") {
-		container.addChild(
-			new Text(`  ${theme.fg("error", `Failed: ${truncate(attempt.reason ?? "no reason", 240)}`)}`, 0, 0),
-		);
+		container.addChild(new Text(`  ${theme.fg("error", `Failed: ${attempt.reason ?? "no reason"}`)}`, 0, 0));
 	}
 };
 
@@ -435,10 +431,13 @@ const renderActionTranscript = (
 			continue;
 		}
 
+		// Emit text lines unwrapped — the TUI Text component handles
+		// width-aware wrapping, and artificial truncation here only cuts
+		// mid-sentence and loses information.
 		for (const rawLine of cleaned.split("\n")) {
 			const line = rawLine.trim();
 			if (line.length === 0) continue;
-			container.addChild(new Text(`  ${theme.fg("toolOutput", truncate(line, 200))}`, 0, 0));
+			container.addChild(new Text(`  ${theme.fg("toolOutput", line)}`, 0, 0));
 		}
 	}
 };

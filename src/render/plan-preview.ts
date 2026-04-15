@@ -16,7 +16,7 @@
 import type { Theme } from "@mariozechner/pi-coding-agent";
 import { type Component, Text } from "@mariozechner/pi-tui";
 import type { PlanDraftDoc } from "../plan/draft.js";
-import { invalidArg, str, truncate } from "./format.js";
+import { invalidArg, str } from "./format.js";
 
 export const renderPlanPreview = (
 	plan: PlanDraftDoc,
@@ -174,7 +174,7 @@ const describeCheckForReview = (step: Extract<PlanDraftDoc["steps"][number], { k
 			const cmd = [step.check.command, ...step.check.args].join(" ");
 			const cwdSuffix = step.check.cwd ? `  (cwd: ${step.check.cwd})` : "";
 			const timeoutSuffix = step.check.timeoutMs ? `  (timeout ${Math.round(step.check.timeoutMs / 1000)}s)` : "";
-			return `$ ${truncate(cmd, 120)}${cwdSuffix}${timeoutSuffix}`;
+			return `$ ${cmd}${cwdSuffix}${timeoutSuffix}`;
 		}
 	}
 };

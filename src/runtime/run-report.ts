@@ -421,9 +421,12 @@ export const buildAttemptHistories = (events: readonly RelayEvent[]): Map<StepId
  */
 export const renderRunReportText = (report: RunReport): string => {
 	const lines: string[] = [];
+	// Task on the header line is collapsed to a single line and capped —
+	// the header is a one-row status strip. The summary below can be long;
+	// no cap.
 	lines.push(`Relay run: ${outcomeLabel(report.outcome)} — ${oneLine(report.task, 120)}`);
 	if (report.summary && report.summary !== report.task) {
-		lines.push(oneLine(report.summary, 240));
+		lines.push(oneLine(report.summary));
 	}
 	lines.push("");
 
@@ -494,17 +497,19 @@ const formatTimelineEntry = (step: StepSummary, attempt: AttemptSummary): string
 			lines.push(`  → ${formatToolCall(tc.toolName, tc.args, plainTheme)}`);
 		}
 
-		// Final narration, in quotes, one-lined and capped.
+		// Final narration, quoted, whitespace collapsed, no length cap —
+		// the model reads this and long narrations are informative, not a
+		// formatting problem.
 		const finalText = extractAttemptFinalText(attempt);
 		if (finalText.length > 0) {
-			lines.push(`  "${oneLine(finalText, 220)}"`);
+			lines.push(`  "${oneLine(finalText)}"`);
 		}
 	} else if (step.kind === "check") {
 		// Checks are shown as their own command/file line — same idiom as
 		// how pi's bash tool shows its own `$ command` header.
 		if (step.checkDescription) lines.push(`  ${step.checkDescription}`);
 	} else if (step.kind === "terminal") {
-		if (step.terminalSummary) lines.push(`  ${oneLine(step.terminalSummary, 240)}`);
+		if (step.terminalSummary) lines.push(`  ${oneLine(step.terminalSummary)}`);
 	}
 
 	// Outcome line — only when meaningful. Generic route names like "done",
@@ -515,9 +520,9 @@ const formatTimelineEntry = (step: StepSummary, attempt: AttemptSummary): string
 			lines.push(`  → ${routeName}`);
 		}
 	} else if (attempt.outcome === "no_completion" || attempt.outcome === "engine_error") {
-		lines.push(`  Failed: ${attempt.reason ? oneLine(attempt.reason, 240) : "no reason"}`);
+		lines.push(`  Failed: ${attempt.reason ? oneLine(attempt.reason) : "no reason"}`);
 	} else if (attempt.outcome === "check_fail") {
-		lines.push(`  Failed: ${attempt.reason ? oneLine(attempt.reason, 240) : "no reason"}`);
+		lines.push(`  Failed: ${attempt.reason ? oneLine(attempt.reason) : "no reason"}`);
 	}
 
 	return lines;
@@ -572,9 +577,17 @@ const outcomeLabel = (outcome: RunOutcome): string => {
 	}
 };
 
-const oneLine = (text: string, limit: number): string => {
+/**
+ * Collapse whitespace and (optionally) truncate to `limit` characters.
+ *
+ * Call without a limit to just normalize whitespace without cutting —
+ * the default for anywhere the caller wants a single logical line but
+ * doesn't have a fixed column budget (quoted narrations, reasons,
+ * terminal summaries).
+ */
+const oneLine = (text: string, limit?: number): string => {
 	const collapsed = text.replace(/\s+/g, " ").trim();
-	if (collapsed.length <= limit) return collapsed;
+	if (limit === undefined || collapsed.length <= limit) return collapsed;
 	return `${collapsed.slice(0, limit)}…`;
 };
 
