@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCompletionInstruction, parseCompletion } from "../../src/actors/complete-step.js";
+import { buildCompletionInstruction, parseCompletion, stripCompletionTag } from "../../src/actors/complete-step.js";
 import { ArtifactId, RouteId } from "../../src/plan/ids.js";
 import { isErr, isOk } from "../../src/plan/result.js";
 import type { ArtifactContract } from "../../src/plan/types.js";
@@ -133,5 +133,49 @@ describe("parseCompletion", () => {
 </relay-complete>`;
 		const result = parseCompletion(text);
 		expect(isOk(result)).toBe(true);
+	});
+});
+
+describe("stripCompletionTag", () => {
+	it("removes a completion tag from the middle of text", () => {
+		const text = `Here is my plan:
+
+<relay-complete>{"route":"done","writes":{}}</relay-complete>
+
+Done.`;
+		expect(stripCompletionTag(text)).toBe("Here is my plan:\n\nDone.");
+	});
+
+	it("removes a tag at the end of text", () => {
+		const text = `Prose before the tag.
+<relay-complete>{"route":"done","writes":{}}</relay-complete>`;
+		expect(stripCompletionTag(text)).toBe("Prose before the tag.");
+	});
+
+	it("removes a multi-line JSON payload inside the tag", () => {
+		const text = `Summary:
+
+<relay-complete>
+{
+  "route": "success",
+  "writes": { "spec": { "ok": true } }
+}
+</relay-complete>
+`;
+		expect(stripCompletionTag(text)).toBe("Summary:");
+	});
+
+	it("leaves text without a completion tag unchanged (modulo whitespace trim)", () => {
+		expect(stripCompletionTag("Just prose.")).toBe("Just prose.");
+		expect(stripCompletionTag("  padded  ")).toBe("padded");
+	});
+
+	it("returns an empty string when the text is only a completion tag", () => {
+		expect(stripCompletionTag('<relay-complete>{"route":"x","writes":{}}</relay-complete>')).toBe("");
+	});
+
+	it("collapses multiple blank lines that would remain after removal", () => {
+		const text = 'para one\n\n\n<relay-complete>{"route":"x","writes":{}}</relay-complete>\n\n\npara two';
+		expect(stripCompletionTag(text)).toBe("para one\n\npara two");
 	});
 });

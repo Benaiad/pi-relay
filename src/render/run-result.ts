@@ -25,6 +25,7 @@
 
 import { getMarkdownTheme, keyHint, type Theme } from "@mariozechner/pi-coding-agent";
 import { type Component, Container, Markdown, Spacer, Text } from "@mariozechner/pi-tui";
+import { stripCompletionTag } from "../actors/complete-step.js";
 import type { TranscriptItem } from "../actors/types.js";
 import type { StepId } from "../plan/ids.js";
 import { unwrap } from "../plan/ids.js";
@@ -275,8 +276,9 @@ const describeActiveStep = (step: Step, runtime: StepRuntimeState, theme: Theme)
 	const lastText = [...runtime.transcript]
 		.reverse()
 		.find((item): item is Extract<TranscriptItem, { kind: "text" }> => item.kind === "text");
-	if (lastText && lastText.text.trim().length > 0) {
-		return theme.fg("dim", truncate(lastText.text.trim().replace(/\s+/g, " "), 80));
+	if (lastText) {
+		const cleaned = stripCompletionTag(lastText.text).replace(/\s+/g, " ");
+		if (cleaned.length > 0) return theme.fg("dim", truncate(cleaned, 80));
 	}
 	return "";
 };
@@ -286,7 +288,7 @@ const extractFinalText = (transcript: readonly TranscriptItem[]): string => {
 	for (const item of transcript) {
 		if (item.kind === "text" && item.text.trim().length > 0) parts.push(item.text);
 	}
-	return parts.join("\n").trim();
+	return stripCompletionTag(parts.join("\n"));
 };
 
 const countStatus = (state: RelayRunState, statuses: readonly StepRuntimeState["status"][]): number => {

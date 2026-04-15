@@ -153,3 +153,23 @@ const stripCodeFence = (payload: string): string => {
 	if (!FENCE_OPEN.test(payload)) return payload;
 	return payload.replace(FENCE_OPEN, "").replace(FENCE_CLOSE, "").trim();
 };
+
+/**
+ * Remove the `<relay-complete>...</relay-complete>` block from an actor's
+ * text reply for display.
+ *
+ * The tag is protocol machinery — we parse it to extract `route` and
+ * `writes`, but users should never see it in the UI. The renderer calls
+ * this before handing the actor's final text to the Markdown component or
+ * the inline progress preview.
+ *
+ * Whitespace around the removed tag is normalized so the prose doesn't
+ * end up with awkward blank lines where the tag used to live.
+ */
+export const stripCompletionTag = (text: string): string => {
+	if (!COMPLETE_RE.test(text)) return text.trim();
+	return text
+		.replace(COMPLETE_RE, "")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+};
