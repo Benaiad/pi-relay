@@ -206,14 +206,31 @@ interface OpenAttempt {
  * run is aborted mid-step, leave the open attempt as `outcome: "open"` so
  * the renderer can show it.
  */
-export const buildAttemptHistories = (events: readonly RelayEvent[]): Map<StepId, AttemptSummary[]> => {
-	const histories = new Map<StepId, AttemptSummary[]>();
+/**
+ * One attempt in chronological execution order.
+ *
+ * The expanded TUI view walks the timeline and emits one block per entry,
+ * so a review/fix loop renders as interleaved `review attempt 1`,
+ * `fix attempt 1`, `review attempt 2` blocks in the order they actually
+ * happened — which makes the loop legible instead of compressing back
+ * into a single review block that overwrites its own history.
+ */
+export interface AttemptTimelineEntry {
+	readonly stepId: StepId;
+	readonly attempt: AttemptSummary;
+}
+
+/**
+ * Walk the audit log once and produce the chronologically ordered list of
+ * attempt entries. This is the primitive that `buildAttemptHistories`
+ * groups by step for the per-step run-report view.
+ */
+export const buildAttemptTimeline = (events: readonly RelayEvent[]): AttemptTimelineEntry[] => {
+	const timeline: AttemptTimelineEntry[] = [];
 	const open = new Map<StepId, OpenAttempt>();
 
-	const append = (stepId: StepId, attempt: AttemptSummary) => {
-		const list = histories.get(stepId) ?? [];
-		list.push(attempt);
-		histories.set(stepId, list);
+	const close = (stepId: StepId, attempt: AttemptSummary) => {
+		timeline.push({ stepId, attempt });
 	};
 
 	for (const event of events) {
@@ -238,7 +255,7 @@ export const buildAttemptHistories = (events: readonly RelayEvent[]): Map<StepId
 			case "action_completed": {
 				const entry = open.get(event.stepId);
 				if (!entry) break;
-				append(event.stepId, {
+				close(event.stepId, {
 					attemptNumber: entry.attemptNumber,
 					outcome: "completed",
 					route: event.route,
@@ -255,7 +272,7 @@ export const buildAttemptHistories = (events: readonly RelayEvent[]): Map<StepId
 			case "action_engine_error": {
 				const entry = open.get(event.stepId);
 				if (!entry) break;
-				append(event.stepId, {
+				close(event.stepId, {
 					attemptNumber: entry.attemptNumber,
 					outcome: event.kind === "action_no_completion" ? "no_completion" : "engine_error",
 					reason: event.reason,
@@ -271,7 +288,7 @@ export const buildAttemptHistories = (events: readonly RelayEvent[]): Map<StepId
 			case "check_passed": {
 				const entry = open.get(event.stepId);
 				if (!entry) break;
-				append(event.stepId, {
+				close(event.stepId, {
 					attemptNumber: entry.attemptNumber,
 					outcome: "check_pass",
 					transcript: [],
@@ -286,7 +303,7 @@ export const buildAttemptHistories = (events: readonly RelayEvent[]): Map<StepId
 			case "check_failed": {
 				const entry = open.get(event.stepId);
 				if (!entry) break;
-				append(event.stepId, {
+				close(event.stepId, {
 					attemptNumber: entry.attemptNumber,
 					outcome: "check_fail",
 					reason: event.reason,
@@ -301,8 +318,22 @@ export const buildAttemptHistories = (events: readonly RelayEvent[]): Map<StepId
 
 			case "terminal_reached": {
 				const entry = open.get(event.stepId);
-				if (!entry) break;
-				append(event.stepId, {
+				if (!entry) {
+					// Terminals don't emit step_started in the current scheduler,
+					// so we synthesize an attempt entry on the fly. Keeps terminals
+					// visible in the timeline even though they don't "run" in the
+					// actor/check sense.
+					close(event.stepId, {
+						attemptNumber: 1,
+						outcome: "terminal",
+						transcript: [],
+						usage: emptyUsage(),
+						startedAt: event.at,
+						finishedAt: event.at,
+					});
+					break;
+				}
+				close(event.stepId, {
 					attemptNumber: entry.attemptNumber,
 					outcome: "terminal",
 					transcript: [],
@@ -319,10 +350,10 @@ export const buildAttemptHistories = (events: readonly RelayEvent[]): Map<StepId
 		}
 	}
 
-	// Any still-open attempts (aborted mid-flight) get recorded as "open" so
-	// the render can surface them rather than dropping them silently.
+	// Any attempts still open at end-of-audit are aborted mid-flight. Record
+	// them as `open` so they don't disappear from the timeline silently.
 	for (const [stepId, entry] of open) {
-		append(stepId, {
+		close(stepId, {
 			attemptNumber: entry.attemptNumber,
 			outcome: "open",
 			transcript: entry.transcript,
@@ -331,7 +362,18 @@ export const buildAttemptHistories = (events: readonly RelayEvent[]): Map<StepId
 		});
 	}
 
-	return histories;
+	return timeline;
+};
+
+export const buildAttemptHistories = (events: readonly RelayEvent[]): Map<StepId, AttemptSummary[]> => {
+	const timeline = buildAttemptTimeline(events);
+	const map = new Map<StepId, AttemptSummary[]>();
+	for (const { stepId, attempt } of timeline) {
+		const list = map.get(stepId) ?? [];
+		list.push(attempt);
+		map.set(stepId, list);
+	}
+	return map;
 };
 
 // ============================================================================

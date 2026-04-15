@@ -30,7 +30,12 @@ import { renderCancelled, renderCompileFailure, renderRefined, renderRunResult }
 import { ArtifactStore } from "./runtime/artifacts.js";
 import { AuditLog } from "./runtime/audit.js";
 import type { RelayRunState } from "./runtime/events.js";
-import { buildRunReport, renderRunReportText } from "./runtime/run-report.js";
+import {
+	type AttemptTimelineEntry,
+	buildAttemptTimeline,
+	buildRunReport,
+	renderRunReportText,
+} from "./runtime/run-report.js";
 import { Scheduler } from "./runtime/scheduler.js";
 
 /**
@@ -43,7 +48,11 @@ export type RelayDetails =
 	| { readonly kind: "compile_failed"; readonly message: string }
 	| { readonly kind: "cancelled"; readonly reason: string }
 	| { readonly kind: "refined"; readonly feedback: string }
-	| { readonly kind: "state"; readonly state: RelayRunState };
+	| {
+			readonly kind: "state";
+			readonly state: RelayRunState;
+			readonly attemptTimeline: readonly AttemptTimelineEntry[];
+	  };
 
 const CHOICE_RUN = "Run the plan";
 const CHOICE_REFINE = "Refine (tell the model what to change)";
@@ -184,10 +193,12 @@ export default function (pi: ExtensionAPI): void {
 				if (!force && now - lastEmitAt < 100) return;
 				lastEmitAt = now;
 				const state = scheduler.getState();
-				const report = buildRunReport(state, scheduler.getAudit());
+				const audit = scheduler.getAudit();
+				const attemptTimeline = buildAttemptTimeline(audit.entries());
+				const report = buildRunReport(state, audit);
 				onUpdate({
 					content: [{ type: "text", text: renderRunReportText(report) }],
-					details: { kind: "state", state },
+					details: { kind: "state", state, attemptTimeline },
 				});
 			};
 
@@ -196,9 +207,10 @@ export default function (pi: ExtensionAPI): void {
 				const report = await scheduler.run();
 				emitUpdate(true);
 				const finalState = scheduler.getState();
+				const finalTimeline = buildAttemptTimeline(scheduler.getAudit().entries());
 				return {
 					content: [{ type: "text", text: renderRunReportText(report) }],
-					details: { kind: "state", state: finalState },
+					details: { kind: "state", state: finalState, attemptTimeline: finalTimeline },
 				};
 			} finally {
 				subscription.unsubscribe();
@@ -212,7 +224,13 @@ export default function (pi: ExtensionAPI): void {
 		renderResult(result, options, theme, context) {
 			const details = result.details;
 			if (details?.kind === "state") {
-				return renderRunResult(details.state, theme, options.expanded, context.lastComponent);
+				return renderRunResult(
+					details.state,
+					details.attemptTimeline,
+					theme,
+					options.expanded,
+					context.lastComponent,
+				);
 			}
 			if (details?.kind === "compile_failed") {
 				return renderCompileFailure(details.message, theme, context.lastComponent);

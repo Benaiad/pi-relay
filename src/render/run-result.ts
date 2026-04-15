@@ -29,10 +29,11 @@ import { stripCompletionTag } from "../actors/complete-step.js";
 import type { TranscriptItem } from "../actors/types.js";
 import type { StepId } from "../plan/ids.js";
 import { unwrap } from "../plan/ids.js";
-import type { Step } from "../plan/types.js";
+import type { Step, TerminalOutcome } from "../plan/types.js";
 import type { RelayRunState, StepRuntimeState } from "../runtime/events.js";
+import type { AttemptOutcome, AttemptSummary, AttemptTimelineEntry } from "../runtime/run-report.js";
 import { formatDuration, formatToolCall, joinNonEmpty, oneLine, truncate } from "./format.js";
-import { iconFor, phaseLabel, runIcon } from "./icons.js";
+import { iconFor, phaseLabel, runIcon, type StatusIcon } from "./icons.js";
 import { formatUsageStats } from "./usage.js";
 
 const EXPANDED_TRANSCRIPT_LIMIT = 15;
@@ -40,11 +41,12 @@ const ERROR_REASON_TRUNCATE = 800;
 
 export const renderRunResult = (
 	state: RelayRunState,
+	timeline: readonly AttemptTimelineEntry[],
 	theme: Theme,
 	expanded: boolean,
 	lastComponent: Component | undefined,
 ): Component => {
-	if (expanded) return renderExpanded(state, theme);
+	if (expanded) return renderExpanded(state, timeline, theme);
 	const text = (lastComponent as Text | undefined) ?? new Text("", 0, 0);
 	text.setText(formatCollapsed(state, theme));
 	return text;
@@ -253,10 +255,10 @@ const buildFooter = (state: RelayRunState, theme: Theme): string => {
 };
 
 // ============================================================================
-// Expanded — Container with Text + Markdown per step
+// Expanded — chronological Container with one block per attempt
 // ============================================================================
 
-const renderExpanded = (state: RelayRunState, theme: Theme): Component => {
+const renderExpanded = (state: RelayRunState, timeline: readonly AttemptTimelineEntry[], theme: Theme): Component => {
 	const container = new Container();
 	const mdTheme = getMarkdownTheme();
 
@@ -265,23 +267,25 @@ const renderExpanded = (state: RelayRunState, theme: Theme): Component => {
 	const footer = buildFooter(state, theme);
 	if (footer.length > 0) container.addChild(new Text(`  ${footer}`, 0, 0));
 
+	// Walk the timeline in chronological order and emit one block per
+	// attempt. For a review/fix loop this renders as:
+	//   create → review (attempt 1) → fix → review (attempt 2) → done
+	// so the user sees the loop iterations in the order they actually ran.
+	for (const entry of timeline) {
+		const step = state.program.steps.get(entry.stepId);
+		if (!step) continue;
+		container.addChild(new Spacer(1));
+		appendAttemptBlock(container, entry.stepId, step, entry.attempt, theme, mdTheme);
+	}
+
+	// Skipped steps are not in the timeline (they never ran). Surface them
+	// as a footer tally so the user knows the DAG had branches that weren't
+	// taken.
 	const skippedIds: string[] = [];
 	for (const stepId of state.program.stepOrder) {
 		const runtime = state.steps.get(stepId);
-		const step = state.program.steps.get(stepId);
-		if (!runtime || !step) continue;
-		// Elide steps with nothing to show: pending/ready during an in-progress
-		// run, or skipped (not reached) after the run finished. Skipped steps get
-		// a footer tally so the user knows why the final run didn't run everything.
-		if (runtime.status === "pending" || runtime.status === "ready") continue;
-		if (runtime.status === "skipped") {
-			skippedIds.push(unwrap(stepId));
-			continue;
-		}
-		container.addChild(new Spacer(1));
-		appendExpandedStepBlock(container, stepId, step, runtime, theme, mdTheme);
+		if (runtime?.status === "skipped") skippedIds.push(unwrap(stepId));
 	}
-
 	if (skippedIds.length > 0) {
 		container.addChild(new Spacer(1));
 		const preview = skippedIds.slice(0, 6).join(", ");
@@ -298,20 +302,25 @@ const renderExpanded = (state: RelayRunState, theme: Theme): Component => {
 	return container;
 };
 
-const appendExpandedStepBlock = (
+const appendAttemptBlock = (
 	container: Container,
 	stepId: StepId,
 	step: Step,
-	runtime: StepRuntimeState,
+	attempt: AttemptSummary,
 	theme: Theme,
 	mdTheme: ReturnType<typeof getMarkdownTheme>,
 ): void => {
-	const icon = iconFor(runtime.status);
+	const icon = iconForAttemptOutcome(attempt.outcome, step);
 	const id = unwrap(stepId);
 	const kindLabel = describeStepKind(step);
+	// Only show "attempt N" for action steps that ran more than once in total
+	// — surfaces re-entries without cluttering single-attempt rows. Checks and
+	// terminals don't have meaningful attempt numbers.
+	const attemptSuffix =
+		step.kind === "action" && attempt.attemptNumber > 1 ? ` · attempt ${attempt.attemptNumber}` : "";
 	container.addChild(
 		new Text(
-			`${theme.fg("muted", "───")} ${theme.fg(icon.color, icon.glyph)} ${theme.fg("accent", id)}  ${theme.fg("muted", kindLabel)}`,
+			`${theme.fg("muted", "───")} ${theme.fg(icon.color, icon.glyph)} ${theme.fg("accent", id)}  ${theme.fg("muted", `${kindLabel}${attemptSuffix}`)}`,
 			0,
 			0,
 		),
@@ -320,7 +329,7 @@ const appendExpandedStepBlock = (
 	if (step.kind === "action") {
 		container.addChild(new Text(`  ${theme.fg("dim", truncate(step.instruction, 400))}`, 0, 0));
 
-		const toolCallItems = runtime.transcript.filter(
+		const toolCallItems = attempt.transcript.filter(
 			(item): item is Extract<TranscriptItem, { kind: "tool_call" }> => item.kind === "tool_call",
 		);
 		const shownToolCalls = toolCallItems.slice(-EXPANDED_TRANSCRIPT_LIMIT);
@@ -334,29 +343,59 @@ const appendExpandedStepBlock = (
 			);
 		}
 
-		const finalText = extractFinalText(runtime.transcript);
+		const finalText = extractFinalText(attempt.transcript);
 		if (finalText.length > 0) {
 			container.addChild(new Spacer(1));
 			container.addChild(new Markdown(finalText, 0, 0, mdTheme));
 		}
 	} else if (step.kind === "check") {
 		container.addChild(new Text(`  ${theme.fg("dim", describeCheck(step))}`, 0, 0));
-	} else {
+	} else if (step.kind === "terminal") {
 		container.addChild(new Text(`  ${theme.fg("dim", `[${step.outcome}] ${truncate(step.summary, 200)}`)}`, 0, 0));
 	}
 
-	if (runtime.lastRoute) {
-		container.addChild(new Text(`  ${theme.fg("muted", `route: ${unwrap(runtime.lastRoute)}`)}`, 0, 0));
+	// Per-attempt outcome line. For completed actions show the route. For
+	// failed/no_completion attempts show the reason in error color. Terminals
+	// and check passes don't need extra text (the kind label covers it).
+	if (attempt.outcome === "completed" && attempt.route) {
+		container.addChild(new Text(`  ${theme.fg("muted", `route: ${unwrap(attempt.route)}`)}`, 0, 0));
+	} else if (attempt.outcome === "no_completion" || attempt.outcome === "engine_error") {
+		container.addChild(
+			new Text(
+				`  ${theme.fg("error", `[${attempt.outcome}: ${truncate(attempt.reason ?? "no reason", 200)}]`)}`,
+				0,
+				0,
+			),
+		);
+	} else if (attempt.outcome === "check_fail") {
+		container.addChild(
+			new Text(`  ${theme.fg("error", `[check failed: ${truncate(attempt.reason ?? "no reason", 200)}]`)}`, 0, 0),
+		);
 	}
-	if (runtime.lastReason && (runtime.status === "failed" || runtime.status === "retrying")) {
-		container.addChild(new Text(`  ${theme.fg("error", `[error: ${truncate(runtime.lastReason, 200)}]`)}`, 0, 0));
+
+	const attemptUsage = formatUsageStats(attempt.usage);
+	if (attemptUsage.length > 0) {
+		container.addChild(new Text(`  ${theme.fg("dim", `[${attemptUsage}]`)}`, 0, 0));
 	}
-	if (runtime.attempts > 1) {
-		container.addChild(new Text(`  ${theme.fg("dim", `attempts: ${runtime.attempts}`)}`, 0, 0));
-	}
-	const stepUsage = formatUsageStats(runtime.usage);
-	if (stepUsage.length > 0) {
-		container.addChild(new Text(`  ${theme.fg("dim", `[${stepUsage}]`)}`, 0, 0));
+};
+
+const iconForAttemptOutcome = (outcome: AttemptOutcome, step: Step): StatusIcon => {
+	switch (outcome) {
+		case "completed":
+			return iconFor("succeeded");
+		case "no_completion":
+		case "engine_error":
+			return iconFor("failed");
+		case "check_pass":
+			return iconFor("succeeded");
+		case "check_fail":
+			return iconFor("failed");
+		case "terminal": {
+			const terminalOutcome: TerminalOutcome = step.kind === "terminal" ? step.outcome : "success";
+			return iconFor(terminalOutcome === "success" ? "succeeded" : "failed");
+		}
+		case "open":
+			return iconFor("running");
 	}
 };
 
@@ -409,6 +448,14 @@ const extractFinalText = (transcript: readonly TranscriptItem[]): string => {
 	}
 	return stripCompletionTag(parts.join("\n"));
 };
+
+// Keep these imports referenced so the runtime-state-based helpers still
+// compile even though the expanded renderer no longer uses them. They are
+// used by `buildProgressLine` and friends.
+const _keepRuntimeReferenced = (_s: StepRuntimeState): void => {
+	void _s;
+};
+void _keepRuntimeReferenced;
 
 const countStatus = (state: RelayRunState, statuses: readonly StepRuntimeState["status"][]): number => {
 	let n = 0;

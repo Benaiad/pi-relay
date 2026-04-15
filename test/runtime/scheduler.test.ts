@@ -6,6 +6,7 @@ import type { PlanDraftDoc } from "../../src/plan/draft.js";
 import { ActorId, ArtifactId, RouteId, unwrap } from "../../src/plan/ids.js";
 import { isOk } from "../../src/plan/result.js";
 import { applyEvent, initRunState, type RelayEvent } from "../../src/runtime/events.js";
+import { buildAttemptTimeline } from "../../src/runtime/run-report.js";
 import { Scheduler } from "../../src/runtime/scheduler.js";
 
 // ============================================================================
@@ -376,6 +377,76 @@ describe("Scheduler — terminal routes", () => {
 		expect(report.outcome).toBe("failure");
 		expect(report.terminalOutcome).toBe("failure");
 		expect(report.summary).toContain("decided to fail");
+	});
+
+	it("produces a chronological attempt timeline for a review/fix loop", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Loop with back-edge, timeline check.",
+			artifacts: [
+				{ id: "notes", description: "n", shape: { kind: "untyped_json" }, multiWriter: true },
+				{ id: "verdict", description: "v", shape: { kind: "untyped_json" }, multiWriter: true },
+			],
+			steps: [
+				{
+					kind: "action",
+					id: "create",
+					actor: "worker",
+					instruction: "create",
+					reads: [],
+					writes: ["notes"],
+					routes: [{ route: "done", to: "review" }],
+				},
+				{
+					kind: "action",
+					id: "review",
+					actor: "checker",
+					instruction: "review",
+					reads: ["notes"],
+					writes: ["verdict"],
+					routes: [
+						{ route: "accepted", to: "done" },
+						{ route: "changes_requested", to: "fix" },
+					],
+				},
+				{
+					kind: "action",
+					id: "fix",
+					actor: "worker",
+					instruction: "fix",
+					reads: ["verdict"],
+					writes: ["notes"],
+					routes: [{ route: "done", to: "review" }],
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "accepted" },
+			],
+			entryStep: "create",
+		};
+		const engine = new ScriptedActorEngine(
+			new Map([
+				["create", [completed("done", { notes: { v: 1 } })]],
+				[
+					"review",
+					[
+						completed("changes_requested", { verdict: { ok: false } }),
+						completed("accepted", { verdict: { ok: true } }),
+					],
+				],
+				["fix", [completed("done", { notes: { v: 2 } })]],
+			]),
+		);
+		const { scheduler } = buildScheduler(plan, engine);
+		await scheduler.run();
+		const timeline = buildAttemptTimeline(scheduler.getAudit().entries());
+
+		// Chronological order: create → review#1 → fix → review#2 → done.
+		const order = timeline.map((entry) => `${unwrap(entry.stepId)}#${entry.attempt.attemptNumber}`);
+		expect(order).toEqual(["create#1", "review#1", "fix#1", "review#2", "done#1"]);
+
+		// Each review attempt has its own route.
+		const reviewEntries = timeline.filter((entry) => unwrap(entry.stepId) === "review");
+		expect(reviewEntries.length).toBe(2);
+		expect(unwrap(reviewEntries[0]!.attempt.route!)).toBe("changes_requested");
+		expect(unwrap(reviewEntries[1]!.attempt.route!)).toBe("accepted");
 	});
 
 	it("exposes per-attempt history in the run report for re-entered steps", async () => {
