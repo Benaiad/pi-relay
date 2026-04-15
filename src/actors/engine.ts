@@ -112,7 +112,13 @@ const runAction = async (request: ActionRequest): Promise<ActionOutcome> => {
 		const finalText = extractFinalAssistantText(result.messages);
 		const parsed = parseCompletion(finalText);
 		if (!parsed.ok) {
-			return { kind: "no_completion", reason: parsed.error, usage: result.usage, transcript: result.transcript };
+			const tail = truncate(finalText.trim(), 600) || "(actor produced no text output)";
+			return {
+				kind: "no_completion",
+				reason: `${parsed.error}. Actor's final reply ended with: "${tail}"`,
+				usage: result.usage,
+				transcript: result.transcript,
+			};
 		}
 
 		const routeId = RouteId(parsed.value.route);
@@ -190,6 +196,14 @@ const buildTaskPrompt = (
 			lines.push("## Input artifacts", "", inputs.join("\n\n"));
 		}
 	}
+	// Visible recency reminder. The completion protocol is in the system prompt
+	// but models often forget it when they get absorbed in the task. Restating
+	// the requirement in the user message makes it hard to miss.
+	lines.push(
+		"## Completion reminder",
+		"",
+		'When you are done, your reply MUST end with a single line of the form `<relay-complete>{"route":"<ROUTE>","writes":{...}}</relay-complete>`, using one of the allowed routes from the Relay completion protocol section of your system prompt. Everything before that line is freeform narration; the tag itself is the only thing Relay reads.',
+	);
 	return lines.join("\n\n");
 };
 
@@ -376,13 +390,25 @@ const mutableUsage = (): MutableUsage => ({ ...emptyUsage() });
 
 const snapshotUsage = (u: MutableUsage): ActorUsage => ({ ...u });
 
+/**
+ * Extract the concatenated text of the LAST assistant message.
+ *
+ * Walks backward through the transcript to find the most recent assistant
+ * message, then joins every `text` part in that message in order. We must
+ * concatenate (not take the first part) because the completion protocol
+ * asks for the tag as the FINAL thing in the reply, and an assistant
+ * message may carry narration + tag across multiple text parts interleaved
+ * with thinking blocks.
+ */
 const extractFinalAssistantText = (messages: readonly Message[]): string => {
 	for (let i = messages.length - 1; i >= 0; i -= 1) {
 		const msg = messages[i];
 		if (!msg || msg.role !== "assistant") continue;
+		const parts: string[] = [];
 		for (const part of msg.content) {
-			if (part.type === "text" && part.text.length > 0) return part.text;
+			if (part.type === "text" && part.text.length > 0) parts.push(part.text);
 		}
+		if (parts.length > 0) return parts.join("\n");
 	}
 	return "";
 };

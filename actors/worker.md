@@ -24,7 +24,8 @@ Coding standards:
   additional context.
 
 Communication:
-- Output the completion block exactly once as the last thing in your reply.
-- Set `route` to one of the allowed routes listed in the completion protocol.
 - Keep any preamble short and factual — the user will read it in the
   expanded Relay view.
+- The Relay runtime injects a completion protocol into your system prompt
+  that specifies the exact tag and JSON shape you must emit at the end of
+  your reply. Follow it literally.

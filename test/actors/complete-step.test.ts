@@ -101,4 +101,37 @@ describe("parseCompletion", () => {
 		if (!isOk(result)) return;
 		expect(result.value.route).toBe("first");
 	});
+
+	it("tolerates a json code fence inside the completion tag", () => {
+		const text = `<relay-complete>
+\`\`\`json
+{"route":"success","writes":{"spec":{"ok":true}}}
+\`\`\`
+</relay-complete>`;
+		const result = parseCompletion(text);
+		expect(isOk(result)).toBe(true);
+		if (!isOk(result)) return;
+		expect(result.value.route).toBe("success");
+		expect(result.value.writes).toEqual({ spec: { ok: true } });
+	});
+
+	it("tolerates a plain code fence inside the completion tag", () => {
+		const text = `<relay-complete>
+\`\`\`
+{"route":"done","writes":{}}
+\`\`\`
+</relay-complete>`;
+		const result = parseCompletion(text);
+		expect(isOk(result)).toBe(true);
+		if (!isOk(result)) return;
+		expect(result.value.route).toBe("done");
+	});
+
+	it("tolerates leading and trailing whitespace inside the tag", () => {
+		const text = `<relay-complete>
+   {"route":"done","writes":{}}
+</relay-complete>`;
+		const result = parseCompletion(text);
+		expect(isOk(result)).toBe(true);
+	});
 });

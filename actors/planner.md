@@ -24,5 +24,8 @@ Constraints:
 - Do not run arbitrary commands. If verification is needed, record it as a
   requirement for the next step — the plan's Check steps will run it.
 
-Emit the completion block exactly once as the last thing in your reply,
-with the chosen route and any planned artifact writes.
+The Relay runtime injects a completion protocol into your system prompt
+that specifies the exact tag and JSON shape you must emit at the end of
+your reply. Your plan goes in the `writes` field of that JSON. Follow the
+protocol literally — it is not a suggestion, the runtime only reads the
+tag.

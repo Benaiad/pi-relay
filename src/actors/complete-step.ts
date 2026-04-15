@@ -98,6 +98,10 @@ export const buildCompletionInstruction = (input: CompletionInstructionInput): s
  * Returns `Result`. The caller treats every error as `no_completion` — it is
  * not a shape_mismatch at the artifact level, it is a protocol violation by
  * the actor that the scheduler retries (up to the step's retry policy).
+ *
+ * Defensive against two common model habits:
+ *   - Wrapping the JSON in a ```json ... ``` code fence inside the tag.
+ *   - Leading/trailing whitespace inside the tag.
  */
 export const parseCompletion = (text: string): Result<ParsedCompletion, string> => {
 	const match = COMPLETE_RE.exec(text);
@@ -105,9 +109,11 @@ export const parseCompletion = (text: string): Result<ParsedCompletion, string> 
 		return err("completion block not found in final output");
 	}
 
+	const payload = stripCodeFence(match[1].trim());
+
 	let raw: unknown;
 	try {
-		raw = JSON.parse(match[1]);
+		raw = JSON.parse(payload);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		return err(`completion JSON did not parse: ${message}`);
@@ -133,4 +139,17 @@ export const parseCompletion = (text: string): Result<ParsedCompletion, string> 
 	}
 
 	return ok({ route, writes });
+};
+
+const FENCE_OPEN = /^```(?:json)?\s*\n?/i;
+const FENCE_CLOSE = /\n?```$/;
+
+/**
+ * If the payload is wrapped in a markdown code fence (with optional language
+ * tag), strip the fence. The model frequently does this out of habit when
+ * asked to emit JSON.
+ */
+const stripCodeFence = (payload: string): string => {
+	if (!FENCE_OPEN.test(payload)) return payload;
+	return payload.replace(FENCE_OPEN, "").replace(FENCE_CLOSE, "").trim();
 };

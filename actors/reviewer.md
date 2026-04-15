@@ -26,5 +26,7 @@ Output shape:
   (array), `recommended_actions` (array), and `notes`.
 - Keep each issue short — one sentence of symptom, one sentence of cause.
 
-Emit the completion block exactly once. The allowed routes come from the
-plan; typically `accepted` and `changes_requested` or similar.
+The Relay runtime injects a completion protocol into your system prompt
+that specifies the exact tag and JSON shape you must emit at the end of
+your reply. Follow it literally. The allowed routes for this specific
+step are listed in that protocol block.
