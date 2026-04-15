@@ -64,7 +64,13 @@ const runAction = async (request: ActionRequest): Promise<ActionOutcome> => {
 		artifactContracts,
 	});
 
-	const taskPrompt = buildTaskPrompt(step.instruction, step.reads, artifacts, artifactContracts);
+	const taskPrompt = buildTaskPrompt(
+		step.instruction,
+		step.reads,
+		artifacts,
+		artifactContracts,
+		request.priorAttempts,
+	);
 
 	let tmpDir: string | null = null;
 	let tmpPromptPath: string | null = null;
@@ -181,8 +187,40 @@ const buildTaskPrompt = (
 	reads: readonly ArtifactIdType[],
 	artifacts: ActionRequest["artifacts"],
 	contracts: ReadonlyMap<ArtifactIdType, { description: string }>,
+	priorAttempts: ActionRequest["priorAttempts"],
 ): string => {
 	const lines: string[] = [`Task: ${instruction}`];
+
+	// When this is a re-entry of a back-edge, tell the actor what it did
+	// before. Without this, every attempt looks to the actor like its first
+	// and a review/fix loop can spin producing the same output forever.
+	if (priorAttempts.length > 0) {
+		const history: string[] = [];
+		const capped = priorAttempts.slice(-3);
+		const skipped = priorAttempts.length - capped.length;
+		if (skipped > 0) {
+			history.push(`_(${skipped} earlier attempt${skipped === 1 ? "" : "s"} omitted)_`);
+		}
+		for (const attempt of capped) {
+			const tools =
+				attempt.toolsCalled.length > 0 ? `tools used: ${attempt.toolsCalled.join(", ")}` : "no tools used";
+			const narrationLine = attempt.narration.length > 0 ? `  "${attempt.narration}"` : "  (no narration)";
+			history.push(`### Attempt ${attempt.attemptNumber} → ${attempt.outcomeLabel}`, `  ${tools}`, narrationLine);
+		}
+		lines.push(
+			"## Previous attempts at this step",
+			"",
+			"You have already run this step. Relay routed control back here through a",
+			"back-edge in the plan. Previous attempts:",
+			"",
+			history.join("\n\n"),
+			"",
+			"The input artifacts and the filesystem may have been updated since those",
+			"attempts — re-read anything you need to verify. Do not repeat the same",
+			"work blindly. If a prior attempt failed, understand why before retrying.",
+		);
+	}
+
 	if (reads.length > 0) {
 		const inputs: string[] = [];
 		for (const id of reads) {
@@ -193,9 +231,10 @@ const buildTaskPrompt = (
 			inputs.push(`- ${unwrap(id)}${descSuffix}:\n${fenceJson(value)}`);
 		}
 		if (inputs.length > 0) {
-			lines.push("## Input artifacts", "", inputs.join("\n\n"));
+			lines.push("## Input artifacts (current values)", "", inputs.join("\n\n"));
 		}
 	}
+
 	// Visible recency reminder. The completion protocol is in the system prompt
 	// but models often forget it when they get absorbed in the task. Restating
 	// the requirement in the user message makes it hard to miss.

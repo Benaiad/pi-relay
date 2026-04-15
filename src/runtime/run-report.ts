@@ -206,7 +206,7 @@ interface OpenAttempt {
  * run is aborted mid-step, leave the open attempt as `outcome: "open"` so
  * the renderer can show it.
  */
-const buildAttemptHistories = (events: readonly RelayEvent[]): Map<StepId, AttemptSummary[]> => {
+export const buildAttemptHistories = (events: readonly RelayEvent[]): Map<StepId, AttemptSummary[]> => {
 	const histories = new Map<StepId, AttemptSummary[]>();
 	const open = new Map<StepId, OpenAttempt>();
 

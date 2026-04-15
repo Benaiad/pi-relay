@@ -77,11 +77,37 @@ export interface ActorProgressEvent {
 }
 
 /**
+ * Minimal per-attempt summary handed to the actor on re-entry.
+ *
+ * When an action step is re-entered via a back-edge, the actor's subprocess
+ * is spawned fresh with no memory of the prior run. Without this, the actor
+ * cannot tell it has already executed, what it said, or what outcome it
+ * reached — and a review/fix loop can spin producing identical outputs
+ * forever. The scheduler builds one `PriorAttempt` per past attempt from
+ * the audit log and passes them in the `ActionRequest`; the engine injects
+ * them into the task prompt.
+ *
+ * Deliberately smaller than `AttemptSummary` in `run-report.ts` — the engine
+ * only needs a short outcome label, a short narration, and the list of tool
+ * names used. Full per-event detail stays in the report.
+ */
+export interface PriorAttempt {
+	readonly attemptNumber: number;
+	/** Short human-readable outcome label, e.g. "route: changes_requested" or "no_completion: missing tag". */
+	readonly outcomeLabel: string;
+	/** One-line summary of the actor's final narration, with the completion tag stripped. Empty if none. */
+	readonly narration: string;
+	/** Names of tools the actor called during this attempt, in call order. */
+	readonly toolsCalled: readonly string[];
+}
+
+/**
  * Input handed to the actor engine when an action step becomes ready.
  *
  * The engine reads the step's instruction, the artifact snapshot (scoped to
  * the step's declared reads), and the set of artifact contracts the step is
- * allowed to write. It returns an `ActionOutcome`.
+ * allowed to write. On re-entry it also receives `priorAttempts` so the
+ * actor can see what it did before. Returns an `ActionOutcome`.
  */
 export interface ActionRequest {
 	readonly step: ActionStep;
@@ -91,6 +117,8 @@ export interface ActionRequest {
 	readonly cwd: string;
 	readonly signal?: AbortSignal;
 	readonly onProgress?: (event: ActorProgressEvent) => void;
+	/** Empty on the first activation; populated on re-entries via a back-edge. */
+	readonly priorAttempts: readonly PriorAttempt[];
 }
 
 /**

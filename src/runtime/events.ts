@@ -191,13 +191,19 @@ export const applyEvent = (state: RelayRunState, event: RelayEvent): RelayRunSta
 			};
 
 		case "step_started": {
-			// When a step re-enters (via a back-edge or a retry), clear the
-			// per-step transcript and usage so the display reflects only the
-			// CURRENT attempt. Users see the attempt counter to know there was
-			// history; the audit log still has every event for anyone who
-			// needs replay. Without this reset, transcripts from multiple
-			// attempts merge into an unreadable multi-narration block.
-			const isReentry = state.steps.get(event.stepId)?.attempts ?? 0;
+			// On re-entry, clear the per-step transcript so the display only
+			// reflects the CURRENT attempt — otherwise two attempts' narrations
+			// merge into an unreadable block. Users see the attempt counter to
+			// know there was history; the audit log still has every event and
+			// the run report reconstructs full per-attempt history from it.
+			//
+			// Usage does NOT reset. action_progress overwrites step.usage with
+			// each event's value, so the display shows the current attempt's
+			// usage as soon as the first progress event fires. totalUsage is
+			// accumulated on action_completed / no_completion / engine_error
+			// via direct addition (no diff math), so no reset is required for
+			// correctness either.
+			const priorAttempts = state.steps.get(event.stepId)?.attempts ?? 0;
 			return {
 				...state,
 				steps: updateStep(state.steps, event.stepId, (s) => ({
@@ -205,11 +211,7 @@ export const applyEvent = (state: RelayRunState, event: RelayEvent): RelayRunSta
 					status: "running",
 					attempts: s.attempts + 1,
 					startedAt: s.startedAt ?? event.at,
-					// Preserve transcript/usage on the very first activation so
-					// normal single-attempt runs don't flicker through an empty
-					// state; reset only when re-entering.
-					transcript: isReentry > 0 ? [] : s.transcript,
-					usage: isReentry > 0 ? zeroUsage() : s.usage,
+					transcript: priorAttempts > 0 ? [] : s.transcript,
 				})),
 				currentlyRunning: addUnique(state.currentlyRunning, event.stepId),
 				eventCount: nextEventCount,
@@ -227,14 +229,11 @@ export const applyEvent = (state: RelayRunState, event: RelayEvent): RelayRunSta
 				eventCount: nextEventCount,
 			};
 
-		case "action_completed": {
-			// totalUsage accumulates the delta between this attempt's previous
-			// progress snapshot (step.usage) and the final reported usage. On
-			// the first attempt step.usage starts at zero so the delta equals
-			// the whole attempt's usage. On re-entry, step_started reset
-			// step.usage to zero, so the diff correctly represents only this
-			// attempt's work — prior attempts' usage is already in totalUsage.
-			const attemptDelta = diffUsage(event.usage, getStep(state.steps, event.stepId).usage);
+		case "action_completed":
+			// event.usage is the subprocess's final usage for THIS attempt —
+			// each attempt runs in its own subprocess, so summing event.usage
+			// on every completion gives the correct total across attempts.
+			// No diff math, no reset ceremony: just direct addition.
 			return {
 				...state,
 				steps: updateStep(state.steps, event.stepId, (s) => ({
@@ -245,10 +244,9 @@ export const applyEvent = (state: RelayRunState, event: RelayEvent): RelayRunSta
 					usage: event.usage,
 				})),
 				currentlyRunning: removeOne(state.currentlyRunning, event.stepId),
-				totalUsage: addUsage(state.totalUsage, attemptDelta),
+				totalUsage: addUsage(state.totalUsage, event.usage),
 				eventCount: nextEventCount,
 			};
-		}
 
 		case "action_no_completion":
 		case "action_engine_error":
@@ -261,7 +259,7 @@ export const applyEvent = (state: RelayRunState, event: RelayEvent): RelayRunSta
 					usage: event.usage,
 				})),
 				currentlyRunning: removeOne(state.currentlyRunning, event.stepId),
-				totalUsage: addUsage(state.totalUsage, diffUsage(event.usage, getStep(state.steps, event.stepId).usage)),
+				totalUsage: addUsage(state.totalUsage, event.usage),
 				eventCount: nextEventCount,
 			};
 
@@ -432,16 +430,6 @@ const removeOne = <T>(list: readonly T[], item: T): readonly T[] => {
 	if (idx < 0) return list;
 	return [...list.slice(0, idx), ...list.slice(idx + 1)];
 };
-
-const diffUsage = (after: ActorUsage, before: ActorUsage): ActorUsage => ({
-	input: after.input - before.input,
-	output: after.output - before.output,
-	cacheRead: after.cacheRead - before.cacheRead,
-	cacheWrite: after.cacheWrite - before.cacheWrite,
-	cost: after.cost - before.cost,
-	contextTokens: after.contextTokens,
-	turns: after.turns - before.turns,
-});
 
 const addUsage = (a: ActorUsage, b: ActorUsage): ActorUsage => ({
 	input: a.input + b.input,

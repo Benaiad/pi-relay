@@ -31,7 +31,15 @@
  * never calls `Date.now` directly.
  */
 
-import type { ActionOutcome, ActionRequest, ActorConfig, ActorEngine, ActorUsage } from "../actors/types.js";
+import { stripCompletionTag } from "../actors/complete-step.js";
+import type {
+	ActionOutcome,
+	ActionRequest,
+	ActorConfig,
+	ActorEngine,
+	ActorUsage,
+	PriorAttempt,
+} from "../actors/types.js";
 import { emptyUsage } from "../actors/types.js";
 import type { ActorId, ArtifactId, RouteId, StepId } from "../plan/ids.js";
 import { edgeKey, RouteId as makeRouteId, unwrap } from "../plan/ids.js";
@@ -41,13 +49,65 @@ import { ArtifactStore } from "./artifacts.js";
 import { AuditLog } from "./audit.js";
 import { runCheck } from "./checks.js";
 import { applyEvent, initRunState, type RelayEvent, type RelayRunState, type RunPhase } from "./events.js";
-import { buildRunReport, type RunReport, SYNTHETIC_FAILURE_REASON_PREFIX } from "./run-report.js";
+import {
+	type AttemptSummary,
+	buildAttemptHistories,
+	buildRunReport,
+	type RunReport,
+	SYNTHETIC_FAILURE_REASON_PREFIX,
+} from "./run-report.js";
 
 const DEFAULT_CLOCK = () => Date.now();
 const DEFAULT_RETRY_MAX_ATTEMPTS = 1;
 const DEFAULT_MAX_ACTIVATIONS = 64;
 const DEFAULT_MAX_STEP_RUNS = 10;
+const PRIOR_ATTEMPT_NARRATION_LIMIT = 240;
 const FAILURE_ROUTE_CANDIDATES = ["failure", "error"] as const;
+
+/** Reduce a full AttemptSummary to the compact shape the engine injects into the actor prompt. */
+const summarizePriorAttempt = (attempt: AttemptSummary): PriorAttempt => {
+	const toolsCalled: string[] = [];
+	const narrationParts: string[] = [];
+	for (const item of attempt.transcript) {
+		if (item.kind === "tool_call") toolsCalled.push(item.toolName);
+		else if (item.kind === "text" && item.text.trim().length > 0) narrationParts.push(item.text);
+	}
+	const rawNarration = stripCompletionTag(narrationParts.join("\n"));
+	const narration = oneLineLimit(rawNarration, PRIOR_ATTEMPT_NARRATION_LIMIT);
+
+	let outcomeLabel: string;
+	switch (attempt.outcome) {
+		case "completed":
+			outcomeLabel = `route: ${attempt.route ? unwrap(attempt.route) : "?"}`;
+			break;
+		case "no_completion":
+			outcomeLabel = `no_completion: ${attempt.reason ?? "no reason"}`;
+			break;
+		case "engine_error":
+			outcomeLabel = `engine_error: ${attempt.reason ?? "no reason"}`;
+			break;
+		case "check_pass":
+			outcomeLabel = "check passed";
+			break;
+		case "check_fail":
+			outcomeLabel = `check failed: ${attempt.reason ?? "no reason"}`;
+			break;
+		case "terminal":
+			outcomeLabel = "terminal reached";
+			break;
+		case "open":
+			outcomeLabel = "open (did not complete)";
+			break;
+	}
+
+	return { attemptNumber: attempt.attemptNumber, outcomeLabel, narration, toolsCalled };
+};
+
+const oneLineLimit = (text: string, limit: number): string => {
+	const collapsed = text.replace(/\s+/g, " ").trim();
+	if (collapsed.length <= limit) return collapsed;
+	return `${collapsed.slice(0, limit)}…`;
+};
 
 export interface SchedulerConfig {
 	readonly program: Program;
@@ -254,6 +314,13 @@ export class Scheduler {
 			return;
 		}
 
+		// Build priorAttempts BEFORE emitting step_started, so the history we
+		// pass to the actor contains only completed prior attempts — not the
+		// one we're about to start. The audit log is the source of truth here
+		// because the run state resets transcripts on re-entry.
+		const priorAttemptHistory = buildAttemptHistories(this.audit.entries()).get(step.id) ?? [];
+		const priorAttempts = priorAttemptHistory.map((entry): PriorAttempt => summarizePriorAttempt(entry));
+
 		const attempt = (this.state.steps.get(step.id)?.attempts ?? 0) + 1;
 		this.emit({ kind: "step_started", at: this.clock(), stepId: step.id, attempt });
 
@@ -265,6 +332,7 @@ export class Scheduler {
 			artifactContracts: this.program.artifacts,
 			cwd: this.cwd,
 			signal: this.signal,
+			priorAttempts,
 			onProgress: (progress) => {
 				this.emit({
 					kind: "action_progress",

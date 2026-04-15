@@ -50,14 +50,14 @@ const fakeUsage = (turns = 1, cost = 0.01): ActorUsage => ({
 type ScriptEntry = (request: ActionRequest) => ActionOutcome | Promise<ActionOutcome>;
 
 class ScriptedActorEngine implements ActorEngine {
-	private calls: Array<{ stepId: string; attempt: number }> = [];
+	private calls: Array<{ stepId: string; attempt: number; priorAttemptCount: number }> = [];
 	constructor(private readonly script: Map<string, ScriptEntry[]>) {}
 
 	async runAction(request: ActionRequest): Promise<ActionOutcome> {
 		const stepKey = unwrap(request.step.id);
 		const entries = this.script.get(stepKey) ?? [];
 		const priorCalls = this.calls.filter((c) => c.stepId === stepKey).length;
-		this.calls.push({ stepId: stepKey, attempt: priorCalls + 1 });
+		this.calls.push({ stepId: stepKey, attempt: priorCalls + 1, priorAttemptCount: request.priorAttempts.length });
 		const entry = entries[priorCalls] ?? entries[entries.length - 1];
 		if (!entry) {
 			return { kind: "engine_error", reason: `no script entry for ${stepKey}`, usage: emptyUsage(), transcript: [] };
@@ -69,6 +69,10 @@ class ScriptedActorEngine implements ActorEngine {
 		const counts = new Map<string, number>();
 		for (const c of this.calls) counts.set(c.stepId, (counts.get(c.stepId) ?? 0) + 1);
 		return counts;
+	}
+
+	priorAttemptCountsFor(stepKey: string): readonly number[] {
+		return this.calls.filter((c) => c.stepId === stepKey).map((c) => c.priorAttemptCount);
 	}
 }
 
@@ -444,6 +448,72 @@ describe("Scheduler — terminal routes", () => {
 		// Total activations includes the re-entry. Terminals don't emit
 		// step_started so they don't count: create(1) + review(2) + fix(1) = 4.
 		expect(report.totalActivations).toBe(4);
+	});
+
+	it("passes priorAttempts to the actor engine on re-entry", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Loop once.",
+			artifacts: [
+				{ id: "notes", description: "n", shape: { kind: "untyped_json" }, multiWriter: true },
+				{ id: "verdict", description: "v", shape: { kind: "untyped_json" }, multiWriter: true },
+			],
+			steps: [
+				{
+					kind: "action",
+					id: "create",
+					actor: "worker",
+					instruction: "create",
+					reads: [],
+					writes: ["notes"],
+					routes: [{ route: "done", to: "review" }],
+				},
+				{
+					kind: "action",
+					id: "review",
+					actor: "checker",
+					instruction: "review",
+					reads: ["notes"],
+					writes: ["verdict"],
+					routes: [
+						{ route: "accepted", to: "done" },
+						{ route: "changes_requested", to: "fix" },
+					],
+				},
+				{
+					kind: "action",
+					id: "fix",
+					actor: "worker",
+					instruction: "fix",
+					reads: ["verdict"],
+					writes: ["notes"],
+					routes: [{ route: "done", to: "review" }],
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "accepted" },
+			],
+			entryStep: "create",
+		};
+		const engine = new ScriptedActorEngine(
+			new Map([
+				["create", [completed("done", { notes: { v: 1 } })]],
+				[
+					"review",
+					[
+						completed("changes_requested", { verdict: { ok: false } }),
+						completed("accepted", { verdict: { ok: true } }),
+					],
+				],
+				["fix", [completed("done", { notes: { v: 2 } })]],
+			]),
+		);
+		const { scheduler } = buildScheduler(plan, engine);
+		await scheduler.run();
+
+		// review is called twice; the first call should see 0 prior attempts,
+		// the second call should see 1 prior attempt in its request.
+		expect(engine.priorAttemptCountsFor("review")).toEqual([0, 1]);
+		// Single-attempt steps always see 0 prior attempts.
+		expect(engine.priorAttemptCountsFor("create")).toEqual([0]);
+		expect(engine.priorAttemptCountsFor("fix")).toEqual([0]);
 	});
 
 	it("executes a review/fix loop via back-edges and multi-writer artifacts", async () => {
