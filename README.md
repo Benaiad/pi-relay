@@ -243,26 +243,62 @@ tool result → pi-coding-agent transcript
 ## Writing a review/fix loop
 
 A common pattern is review → fix → re-review until the reviewer accepts.
-Relay's compiler enforces **one writer per artifact**, so if the reviewer
-writes an artifact on the first pass and again after the fix, you cannot
-reuse the same artifact id — the compiler rejects the plan with
-`multiple_artifact_writers`.
+By default relay's compiler enforces **one writer per artifact** so plans
+stay easy to reason about statically. For loops, opt an artifact into
+multi-writer semantics by setting `multiWriter: true` on its contract:
 
-The v0.1 workaround is to duplicate the artifact across iterations:
+```json
+{
+  "artifacts": [
+    { "id": "notes",   "description": "implementation",
+      "shape": { "kind": "untyped_json" }, "multiWriter": true },
+    { "id": "verdict", "description": "review verdict",
+      "shape": { "kind": "untyped_json" }, "multiWriter": true }
+  ],
+  "steps": [
+    { "kind": "action", "id": "create", "actor": "worker",
+      "instruction": "Create the initial implementation.",
+      "reads": [], "writes": ["notes"],
+      "routes": [{ "route": "done", "to": "review" }] },
 
+    { "kind": "action", "id": "review", "actor": "reviewer",
+      "instruction": "Review the implementation in notes.",
+      "reads": ["notes"], "writes": ["verdict"],
+      "routes": [
+        { "route": "accepted",           "to": "done" },
+        { "route": "changes_requested",  "to": "fix" }
+      ] },
+
+    { "kind": "action", "id": "fix", "actor": "worker",
+      "instruction": "Apply the reviewer's feedback.",
+      "reads": ["verdict", "notes"], "writes": ["notes"],
+      "routes": [{ "route": "done", "to": "review" }] },
+
+    { "kind": "terminal", "id": "done", "outcome": "success",
+      "summary": "Review accepted." }
+  ],
+  "entryStep": "create"
+}
 ```
-review         writes: [review_verdict]
-  route changes_requested → fix
-fix            reads: [review_verdict]  writes: [implementation_notes]
-  route done → re_review
-re_review      writes: [re_review_verdict]    ← new id
-  route accepted → done
-```
 
-Each iteration gets its own artifact id and its own writer step. The
-review-loop tests caught this correctly during the early dogfood runs.
-v0.2 will add plan-level loop annotations so the model can express
-"retry this review sub-DAG until accepted" without duplicating step ids.
+Three things worth knowing:
+
+- **Back-edges are how loops are expressed.** `fix` routes back to
+  `review`, and the scheduler's ready queue re-enters `review` as many
+  times as the routing demands. There's no loop keyword — it's just a
+  cycle in the DAG.
+- **Reads are latest-wins.** Every commit is atomic, but readers always
+  see the most recently committed value. `review`'s second pass reads the
+  fresh `notes` that `fix` just wrote.
+- **There's an activation cap.** A runaway loop halts with an
+  `incomplete` outcome after 64 total step activations (configurable via
+  `maxActivations` on the scheduler). `review → fix → review → fix` uses
+  2 activations per iteration, so the default cap allows ~30 fix cycles.
+
+The single-writer default stays for non-loop artifacts because it's what
+makes plans reason about — you can statically verify the producer of any
+value just by looking at the plan. Opting in to multi-writer is explicit
+and visible in the plan, which is the right trade-off.
 
 ## Limitations (v0.1)
 
@@ -270,10 +306,12 @@ v0.2 will add plan-level loop annotations so the model can express
 - **`FreshPerRun` context policy only.** Per-step and per-actor caching
   land in v0.2.
 - **Untyped JSON artifacts only.** Named TypeBox shapes land in v0.2.
-- **Single writer per artifact.** Review/fix loops need separate artifact
-  ids per iteration (see "Writing a review/fix loop" above). Loop
-  ergonomics land in v0.2 — the constraint itself won't be relaxed because
-  it's what makes plans reason about.
+- **Single writer per artifact by default.** Opt into multi-writer
+  semantics with `multiWriter: true` on the artifact contract when you
+  need review/fix loops (see "Writing a review/fix loop" above). The
+  default stays single-writer because it makes plans easy to reason
+  about statically — you can always tell who produced any value by
+  reading the plan.
 - **No step-level timeouts.** The scheduler's overall abort propagates from
   pi's signal, but individual steps cannot declare their own timeout yet.
 - **No per-step approval inside a run.** Approving the review dialog

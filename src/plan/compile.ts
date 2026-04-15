@@ -77,7 +77,7 @@ export const compile = (
 
 	const artifactCheck = buildArtifacts(doc.artifacts, stepsById);
 	if (!artifactCheck.ok) return artifactCheck;
-	const { artifacts, writers, readers } = artifactCheck.value;
+	const { artifacts, writers, allowedWriters, readers } = artifactCheck.value;
 
 	const policyCheck = validateContextPolicies(stepsById);
 	if (!policyCheck.ok) return policyCheck;
@@ -93,6 +93,7 @@ export const compile = (
 		artifacts,
 		edges,
 		writers,
+		allowedWriters,
 		readers,
 		actorsReferenced,
 	};
@@ -241,6 +242,7 @@ const buildEdges = (
 interface ArtifactIndices {
 	artifacts: ReadonlyMap<ArtifactId, ArtifactContract>;
 	writers: ReadonlyMap<ArtifactId, StepId>;
+	allowedWriters: ReadonlyMap<ArtifactId, ReadonlySet<StepId>>;
 	readers: ReadonlyMap<ArtifactId, ReadonlySet<StepId>>;
 }
 
@@ -254,17 +256,29 @@ const buildArtifacts = (
 		if (artifacts.has(id)) {
 			return err({ kind: "duplicate_artifact", artifactId: id });
 		}
-		artifacts.set(id, { id, description: c.description, shape: c.shape });
+		artifacts.set(id, {
+			id,
+			description: c.description,
+			shape: c.shape,
+			multiWriter: c.multiWriter === true,
+		});
 	}
 
+	// `writers` stores the FIRST writer seen for each artifact — used by the
+	// runtime for attribution and display. `allowedWriters` stores the
+	// complete permitted set, which the runtime uses on every commit to
+	// authorize the writing step. For single-writer artifacts both maps
+	// agree. For multi-writer artifacts allowedWriters is a superset.
 	const writers = new Map<ArtifactId, StepId>();
+	const allowedWriters = new Map<ArtifactId, Set<StepId>>();
 	const readers = new Map<ArtifactId, Set<StepId>>();
 
 	for (const step of steps.values()) {
 		if (step.kind !== "action") continue;
 
 		for (const writeId of step.writes) {
-			if (!artifacts.has(writeId)) {
+			const contract = artifacts.get(writeId);
+			if (contract === undefined) {
 				return err({
 					kind: "missing_artifact_contract",
 					artifactId: writeId,
@@ -273,14 +287,17 @@ const buildArtifacts = (
 				});
 			}
 			const prior = writers.get(writeId);
-			if (prior !== undefined) {
+			if (prior !== undefined && prior !== step.id && !contract.multiWriter) {
 				return err({
 					kind: "multiple_artifact_writers",
 					artifactId: writeId,
 					writers: [prior, step.id],
 				});
 			}
-			writers.set(writeId, step.id);
+			if (prior === undefined) writers.set(writeId, step.id);
+			const bucket = allowedWriters.get(writeId) ?? new Set<StepId>();
+			bucket.add(step.id);
+			allowedWriters.set(writeId, bucket);
 		}
 
 		for (const readId of step.reads) {
@@ -304,7 +321,7 @@ const buildArtifacts = (
 		}
 	}
 
-	return ok({ artifacts, writers, readers });
+	return ok({ artifacts, writers, allowedWriters, readers });
 };
 
 const SUPPORTED_CONTEXT_POLICIES: readonly ContextPolicy[] = ["fresh_per_run"];

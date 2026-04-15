@@ -374,6 +374,107 @@ describe("Scheduler — terminal routes", () => {
 		expect(report.summary).toContain("decided to fail");
 	});
 
+	it("executes a review/fix loop via back-edges and multi-writer artifacts", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Review-fix loop.",
+			artifacts: [
+				{ id: "notes", description: "impl", shape: { kind: "untyped_json" }, multiWriter: true },
+				{ id: "verdict", description: "review", shape: { kind: "untyped_json" }, multiWriter: true },
+			],
+			steps: [
+				{
+					kind: "action",
+					id: "create",
+					actor: "worker",
+					instruction: "create",
+					reads: [],
+					writes: ["notes"],
+					routes: [{ route: "done", to: "review" }],
+				},
+				{
+					kind: "action",
+					id: "review",
+					actor: "checker",
+					instruction: "review",
+					reads: ["notes"],
+					writes: ["verdict"],
+					routes: [
+						{ route: "accepted", to: "done" },
+						{ route: "changes_requested", to: "fix" },
+					],
+				},
+				{
+					kind: "action",
+					id: "fix",
+					actor: "worker",
+					instruction: "fix",
+					reads: ["verdict", "notes"],
+					writes: ["notes"],
+					routes: [{ route: "done", to: "review" }],
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "accepted" },
+			],
+			entryStep: "create",
+		};
+
+		// Script: create ok → review rejects → fix → review accepts.
+		const engine = new ScriptedActorEngine(
+			new Map([
+				["create", [completed("done", { notes: { v: 1 } })]],
+				[
+					"review",
+					[
+						completed("changes_requested", { verdict: { ok: false } }),
+						completed("accepted", { verdict: { ok: true } }),
+					],
+				],
+				["fix", [completed("done", { notes: { v: 2 } })]],
+			]),
+		);
+		const { scheduler } = buildScheduler(plan, engine);
+		const report = await scheduler.run();
+		expect(report.outcome).toBe("success");
+		expect(engine.callCounts().get("create")).toBe(1);
+		expect(engine.callCounts().get("review")).toBe(2);
+		expect(engine.callCounts().get("fix")).toBe(1);
+	});
+
+	it("halts with incomplete when a loop exceeds maxActivations", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Infinite loop — should be capped.",
+			artifacts: [{ id: "state", description: "s", shape: { kind: "untyped_json" }, multiWriter: true }],
+			steps: [
+				{
+					kind: "action",
+					id: "spin",
+					actor: "worker",
+					instruction: "spin",
+					reads: [],
+					writes: ["state"],
+					routes: [{ route: "loop", to: "spin" }],
+				},
+				{ kind: "terminal", id: "end", outcome: "success", summary: "never" },
+			],
+			entryStep: "spin",
+		};
+		const engine = new ScriptedActorEngine(new Map([["spin", [completed("loop", { state: 1 })]]]));
+		const compiled = compile(plan, actorRegistry, { generateId: () => "pid" });
+		if (!isOk(compiled)) throw new Error("compile should succeed");
+		const clock = new StubClock();
+		const scheduler = new Scheduler({
+			program: compiled.value,
+			actorEngine: engine,
+			actorsByName: fakeActorsByName,
+			cwd: process.cwd(),
+			clock: () => clock.next(),
+			maxActivations: 5,
+		});
+		const report = await scheduler.run();
+		expect(report.outcome).toBe("incomplete");
+		expect(report.summary).toContain("activation limit reached");
+		expect(engine.callCounts().get("spin")).toBe(5);
+	});
+
 	it("marks unreached branches as skipped after run_finished fires", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Pick the good path, leave the alternate branch unreached.",

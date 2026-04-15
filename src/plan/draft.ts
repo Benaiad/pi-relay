@@ -184,6 +184,15 @@ const ArtifactContractSchema = Type.Object(
 			description: "What this artifact represents, e.g. 'parsed requirements' or 'test output JSON'.",
 		}),
 		shape: ArtifactShapeSchema,
+		multiWriter: Type.Optional(
+			Type.Boolean({
+				description:
+					"Opt-in relaxation of the default single-writer rule. Set to true when a loop re-enters a " +
+					"step via a back-edge and the step needs to update the SAME artifact across iterations. " +
+					"Reads see the latest committed value; commits are still atomic. Leave unset for normal " +
+					"artifacts — single-writer is the default and makes plans easier to reason about.",
+			}),
+		),
 	},
 	{ description: "Compile-time declaration of an artifact's identity, description, and shape." },
 );

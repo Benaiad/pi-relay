@@ -252,6 +252,103 @@ describe("compile", () => {
 		expect(result.error.kind).toBe("missing_route_target");
 	});
 
+	it("allows multiple writers when the artifact is marked multiWriter", () => {
+		const plan: PlanDraftDoc = {
+			task: "Review/fix loop with shared implementation_notes.",
+			artifacts: [
+				{ id: "notes", description: "implementation", shape: { kind: "untyped_json" }, multiWriter: true },
+				{ id: "verdict", description: "review", shape: { kind: "untyped_json" }, multiWriter: true },
+			],
+			steps: [
+				{
+					kind: "action",
+					id: "create",
+					actor: "worker",
+					instruction: "Create the initial notes.",
+					reads: [],
+					writes: ["notes"],
+					routes: [{ route: "done", to: "review" }],
+				},
+				{
+					kind: "action",
+					id: "review",
+					actor: "planner",
+					instruction: "Review the notes.",
+					reads: ["notes"],
+					writes: ["verdict"],
+					routes: [
+						{ route: "accepted", to: "done" },
+						{ route: "changes_requested", to: "fix" },
+					],
+				},
+				{
+					kind: "action",
+					id: "fix",
+					actor: "worker",
+					instruction: "Fix the notes based on the verdict.",
+					reads: ["verdict", "notes"],
+					writes: ["notes"],
+					routes: [{ route: "done", to: "review" }],
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "accepted" },
+			],
+			entryStep: "create",
+		};
+		const result = compile(plan, defaultActors, fixedIdOptions);
+		expect(isOk(result)).toBe(true);
+		if (!isOk(result)) return;
+		const program = result.value;
+		const notesWriters = program.allowedWriters.get(ArtifactId("notes"))!;
+		expect(notesWriters.size).toBe(2);
+		expect(notesWriters.has(StepId("create"))).toBe(true);
+		expect(notesWriters.has(StepId("fix"))).toBe(true);
+	});
+
+	it("still rejects multiple writers when multiWriter is not set", () => {
+		const plan: PlanDraftDoc = {
+			task: "Review/fix loop WITHOUT multi-writer opt-in.",
+			artifacts: [
+				{ id: "notes", description: "implementation", shape: { kind: "untyped_json" } },
+				{ id: "verdict", description: "review", shape: { kind: "untyped_json" } },
+			],
+			steps: [
+				{
+					kind: "action",
+					id: "create",
+					actor: "worker",
+					instruction: "Create.",
+					reads: [],
+					writes: ["notes"],
+					routes: [{ route: "done", to: "review" }],
+				},
+				{
+					kind: "action",
+					id: "review",
+					actor: "planner",
+					instruction: "Review.",
+					reads: ["notes"],
+					writes: ["verdict"],
+					routes: [{ route: "done", to: "fix" }],
+				},
+				{
+					kind: "action",
+					id: "fix",
+					actor: "worker",
+					instruction: "Fix.",
+					reads: ["verdict"],
+					writes: ["notes"],
+					routes: [{ route: "done", to: "end" }],
+				},
+				{ kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+			],
+			entryStep: "create",
+		};
+		const result = compile(plan, defaultActors, fixedIdOptions);
+		expect(isErr(result)).toBe(true);
+		if (!isErr(result)) return;
+		expect(result.error.kind).toBe("multiple_artifact_writers");
+	});
+
 	it("formats compile errors into readable messages", () => {
 		const result = compile({ ...basicPlan, entryStep: "nonexistent" }, defaultActors, fixedIdOptions);
 		if (!isErr(result)) throw new Error("expected error");

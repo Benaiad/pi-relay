@@ -45,6 +45,7 @@ import { buildRunReport, type RunReport, SYNTHETIC_FAILURE_REASON_PREFIX } from 
 
 const DEFAULT_CLOCK = () => Date.now();
 const DEFAULT_RETRY_MAX_ATTEMPTS = 1;
+const DEFAULT_MAX_ACTIVATIONS = 64;
 const FAILURE_ROUTE_CANDIDATES = ["failure", "error"] as const;
 
 export interface SchedulerConfig {
@@ -57,6 +58,16 @@ export interface SchedulerConfig {
 	readonly artifactStore?: ArtifactStore;
 	readonly audit?: AuditLog;
 	readonly maxConcurrency?: number;
+	/**
+	 * Maximum total step activations per run, across all steps.
+	 *
+	 * Bounds loops: a review/fix loop that keeps routing back to the
+	 * reviewer will eventually trip this cap and halt with an
+	 * `incomplete` outcome. Defaults to 64 — enough for review/fix loops
+	 * with several iterations, small enough that a runaway plan can't
+	 * burn through an API budget.
+	 */
+	readonly maxActivations?: number;
 }
 
 export interface SchedulerSubscription {
@@ -79,6 +90,8 @@ export class Scheduler {
 	private readyQueue: StepId[] = [];
 	private handlers: SchedulerEventHandler[] = [];
 	private hasRun = false;
+	private activationCount = 0;
+	private readonly maxActivations: number;
 
 	constructor(config: SchedulerConfig) {
 		this.program = config.program;
@@ -89,6 +102,7 @@ export class Scheduler {
 		this.clock = config.clock ?? DEFAULT_CLOCK;
 		this.audit = config.audit ?? new AuditLog();
 		this.artifactStore = config.artifactStore ?? new ArtifactStore(this.program, this.clock);
+		this.maxActivations = config.maxActivations ?? DEFAULT_MAX_ACTIVATIONS;
 		this.state = initRunState(this.program);
 	}
 
@@ -124,6 +138,14 @@ export class Scheduler {
 				break;
 			}
 
+			if (this.activationCount >= this.maxActivations) {
+				this.finishWith(
+					"incomplete",
+					`activation limit reached (${this.maxActivations}) — the plan is looping without converging on a terminal`,
+				);
+				break;
+			}
+
 			const nextId = this.readyQueue.shift();
 			if (nextId === undefined) break;
 			const step = this.program.steps.get(nextId);
@@ -131,6 +153,7 @@ export class Scheduler {
 				this.finishWith("failed", `scheduler picked unknown step '${unwrap(nextId)}'`);
 				return buildRunReport(this.state);
 			}
+			this.activationCount += 1;
 			await this.executeStep(step);
 
 			if (this.state.phase === "succeeded" || this.state.phase === "failed" || this.state.phase === "aborted") {
