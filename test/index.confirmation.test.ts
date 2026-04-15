@@ -99,33 +99,60 @@ describe("summarizePlanImpact", () => {
 });
 
 describe("buildConfirmationBody", () => {
-	it("includes the task, step counts, and actor list", () => {
+	it("stays short — no task text or step list (rendered above via renderCall)", () => {
 		const impact = summarizePlanImpact(mutatingPlan, registry);
 		const body = buildConfirmationBody(mutatingPlan, impact);
-		expect(body).toContain("Task:");
-		expect(body).toContain("Add a feature flag");
-		expect(body).toContain("Success:");
-		expect(body).toContain("Tests green");
-		expect(body).toContain("Steps: 4");
-		expect(body).toContain("1 action, 1 check, 2 terminal");
-		expect(body).toContain("Actors: worker");
+		expect(body).not.toContain("Add a feature flag");
+		expect(body).not.toContain("Success:");
+		expect(body).not.toContain("Steps:");
+		expect(body).not.toContain("Actors:");
+		// Body is bounded in height so confirm dialogs that don't scroll stay readable.
+		expect(body.split("\n").length).toBeLessThanOrEqual(8);
 	});
 
-	it("calls out filesystem and shell impact when applicable", () => {
+	it("calls out filesystem and shell impact with bullet points", () => {
 		const impact = summarizePlanImpact(mutatingPlan, registry);
 		const body = buildConfirmationBody(mutatingPlan, impact);
-		expect(body).toContain("may create, edit, or write files");
-		expect(body).toContain("may run shell commands");
-		expect(body).toContain("'npm test'");
+		expect(body).toContain("• may create, edit, or write files");
+		expect(body).toContain("• may run shell commands");
+		expect(body).toContain("• check runs: npm test");
 	});
 
-	it("explicitly labels read-only plans", () => {
+	it("shows the first check command plus a count when there are multiple", () => {
+		const planWithMultipleChecks: PlanDraftDoc = {
+			...mutatingPlan,
+			steps: [
+				mutatingPlan.steps[0]!,
+				{
+					kind: "check",
+					id: "verify",
+					check: { kind: "command_exits_zero", command: "npm", args: ["test"] },
+					onPass: "step2",
+					onFail: "bad",
+				},
+				{
+					kind: "check",
+					id: "step2",
+					check: { kind: "command_exits_zero", command: "npm", args: ["run", "lint"] },
+					onPass: "end",
+					onFail: "bad",
+				},
+				{ kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+				{ kind: "terminal", id: "bad", outcome: "failure", summary: "bad" },
+			],
+		};
+		const impact = summarizePlanImpact(planWithMultipleChecks, registry);
+		const body = buildConfirmationBody(planWithMultipleChecks, impact);
+		expect(body).toContain("check runs: npm test (+1 more)");
+	});
+
+	it("labels read-only plans explicitly", () => {
 		const impact = summarizePlanImpact(readOnlyPlan, registry);
 		const body = buildConfirmationBody(readOnlyPlan, impact);
-		expect(body).toContain("Impact: read-only");
+		expect(body).toContain("read-only");
 	});
 
-	it("warns when the plan references unknown actors", () => {
+	it("surfaces unknown actors as a leading warning", () => {
 		const firstStep = readOnlyPlan.steps[0]!;
 		if (firstStep.kind !== "action") throw new Error("expected action");
 		const bad: PlanDraftDoc = {
@@ -134,14 +161,15 @@ describe("buildConfirmationBody", () => {
 		};
 		const impact = summarizePlanImpact(bad, registry);
 		const body = buildConfirmationBody(bad, impact);
-		expect(body).toContain("WARNING");
+		expect(body).toContain("unknown actors");
 		expect(body).toContain("ghost-actor");
 	});
 
-	it("notes that subprocess actors are non-interactive", () => {
+	it("notes that subprocess actors are non-interactive and the plan is shown above", () => {
 		const impact = summarizePlanImpact(readOnlyPlan, registry);
 		const body = buildConfirmationBody(readOnlyPlan, impact);
 		expect(body).toContain("non-interactively");
 		expect(body).toContain("authorizes every");
+		expect(body).toContain("shown above");
 	});
 });

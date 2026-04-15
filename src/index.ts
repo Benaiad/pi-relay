@@ -253,45 +253,47 @@ export const summarizePlanImpact = (
 	};
 };
 
+/**
+ * Compact confirmation body.
+ *
+ * The full plan is already rendered above the dialog via `renderCall` — the
+ * user sees task, step list, actors, and artifacts in the chat scroll as a
+ * normal tool call preview. Duplicating that inside the modal just produces
+ * a truncated body users can't scroll through.
+ *
+ * The dialog therefore carries only the IMPACT summary (what the plan is
+ * authorized to touch) plus the subprocess-actors disclaimer. Three to five
+ * short lines, always visible regardless of the modal's size limits.
+ */
 export const buildConfirmationBody = (plan: import("./plan/draft.js").PlanDraftDoc, impact: PlanImpact): string => {
 	const lines: string[] = [];
-	lines.push(`Task: ${truncateForConfirm(plan.task, 200)}`);
-	if (plan.successCriteria) {
-		lines.push(`Success: ${truncateForConfirm(plan.successCriteria, 200)}`);
-	}
-	lines.push("");
-	lines.push(
-		`Steps: ${plan.steps.length} (${impact.actionStepCount} action, ${impact.checkStepCount} check, ${impact.terminalStepCount} terminal)`,
-	);
-	lines.push(`Actors: ${impact.uniqueActors.length === 0 ? "(none)" : impact.uniqueActors.join(", ")}`);
+
 	if (impact.unknownActors.length > 0) {
-		lines.push(`WARNING — unknown actors referenced: ${impact.unknownActors.join(", ")}`);
+		lines.push(`⚠ unknown actors: ${impact.unknownActors.join(", ")}`);
 	}
-	lines.push(`Artifacts: ${impact.artifactCount}`);
-	lines.push("");
 
-	const impactBullets: string[] = [];
-	if (impact.mayEdit) impactBullets.push("may create, edit, or write files");
-	if (impact.mayRunCommands) impactBullets.push("may run shell commands");
+	const bullets: string[] = [];
+	if (impact.mayEdit) bullets.push("may create, edit, or write files");
+	if (impact.mayRunCommands) bullets.push("may run shell commands");
 	if (impact.commandChecks.length > 0) {
-		impactBullets.push(`check steps will run: ${impact.commandChecks.map((c) => `'${c}'`).join(", ")}`);
+		const first = impact.commandChecks[0];
+		const rest = impact.commandChecks.length - 1;
+		const suffix = rest > 0 ? ` (+${rest} more)` : "";
+		bullets.push(`check runs: ${first}${suffix}`);
 	}
-	if (impactBullets.length === 0) {
-		lines.push("Impact: read-only (no filesystem writes or shell commands).");
-	} else {
-		lines.push("Impact:");
-		for (const bullet of impactBullets) lines.push(`  - ${bullet}`);
-	}
-	lines.push("");
-	lines.push("Subprocess actors run non-interactively and do not prompt for");
-	lines.push("per-step confirmations. Approving this dialog authorizes every");
-	lines.push("action the plan describes.");
+	for (const bullet of bullets) lines.push(`• ${bullet}`);
 
+	if (bullets.length === 0) {
+		lines.push("read-only (no filesystem writes or shell commands)");
+	}
+
+	lines.push("");
+	lines.push("Subprocess actors run non-interactively: approving this");
+	lines.push("authorizes every step in the plan. Full plan is shown above.");
+
+	void plan;
 	return lines.join("\n");
 };
-
-const truncateForConfirm = (text: string, limit: number): string =>
-	text.length <= limit ? text : `${text.slice(0, limit)}…`;
 
 /**
  * Build the tool description shown to the model in the system prompt's tools
