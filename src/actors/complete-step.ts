@@ -30,6 +30,8 @@ const COMPLETE_OPEN = `<${COMPLETE_TAG}>`;
 const COMPLETE_CLOSE = `</${COMPLETE_TAG}>`;
 
 const COMPLETE_RE = /<relay-complete>([\s\S]*?)<\/relay-complete>/;
+/** Global variant for removing EVERY occurrence of the tag when rendering. */
+const COMPLETE_RE_GLOBAL = /<relay-complete>[\s\S]*?<\/relay-complete>/g;
 
 export interface ParsedCompletion {
 	readonly route: string;
@@ -167,9 +169,9 @@ const stripCodeFence = (payload: string): string => {
  * end up with awkward blank lines where the tag used to live.
  */
 export const stripCompletionTag = (text: string): string => {
-	if (!COMPLETE_RE.test(text)) return text.trim();
+	if (!text.includes("<relay-complete>")) return text.trim();
 	return text
-		.replace(COMPLETE_RE, "")
+		.replace(COMPLETE_RE_GLOBAL, "")
 		.replace(/\n{3,}/g, "\n\n")
 		.trim();
 };

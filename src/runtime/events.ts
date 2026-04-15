@@ -190,7 +190,14 @@ export const applyEvent = (state: RelayRunState, event: RelayEvent): RelayRunSta
 				eventCount: nextEventCount,
 			};
 
-		case "step_started":
+		case "step_started": {
+			// When a step re-enters (via a back-edge or a retry), clear the
+			// per-step transcript and usage so the display reflects only the
+			// CURRENT attempt. Users see the attempt counter to know there was
+			// history; the audit log still has every event for anyone who
+			// needs replay. Without this reset, transcripts from multiple
+			// attempts merge into an unreadable multi-narration block.
+			const isReentry = state.steps.get(event.stepId)?.attempts ?? 0;
 			return {
 				...state,
 				steps: updateStep(state.steps, event.stepId, (s) => ({
@@ -198,10 +205,16 @@ export const applyEvent = (state: RelayRunState, event: RelayEvent): RelayRunSta
 					status: "running",
 					attempts: s.attempts + 1,
 					startedAt: s.startedAt ?? event.at,
+					// Preserve transcript/usage on the very first activation so
+					// normal single-attempt runs don't flicker through an empty
+					// state; reset only when re-entering.
+					transcript: isReentry > 0 ? [] : s.transcript,
+					usage: isReentry > 0 ? zeroUsage() : s.usage,
 				})),
 				currentlyRunning: addUnique(state.currentlyRunning, event.stepId),
 				eventCount: nextEventCount,
 			};
+		}
 
 		case "action_progress":
 			return {
@@ -214,7 +227,14 @@ export const applyEvent = (state: RelayRunState, event: RelayEvent): RelayRunSta
 				eventCount: nextEventCount,
 			};
 
-		case "action_completed":
+		case "action_completed": {
+			// totalUsage accumulates the delta between this attempt's previous
+			// progress snapshot (step.usage) and the final reported usage. On
+			// the first attempt step.usage starts at zero so the delta equals
+			// the whole attempt's usage. On re-entry, step_started reset
+			// step.usage to zero, so the diff correctly represents only this
+			// attempt's work — prior attempts' usage is already in totalUsage.
+			const attemptDelta = diffUsage(event.usage, getStep(state.steps, event.stepId).usage);
 			return {
 				...state,
 				steps: updateStep(state.steps, event.stepId, (s) => ({
@@ -225,9 +245,10 @@ export const applyEvent = (state: RelayRunState, event: RelayEvent): RelayRunSta
 					usage: event.usage,
 				})),
 				currentlyRunning: removeOne(state.currentlyRunning, event.stepId),
-				totalUsage: addUsage(state.totalUsage, diffUsage(event.usage, getStep(state.steps, event.stepId).usage)),
+				totalUsage: addUsage(state.totalUsage, attemptDelta),
 				eventCount: nextEventCount,
 			};
+		}
 
 		case "action_no_completion":
 		case "action_engine_error":

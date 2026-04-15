@@ -178,4 +178,16 @@ Done.`;
 		const text = 'para one\n\n\n<relay-complete>{"route":"x","writes":{}}</relay-complete>\n\n\npara two';
 		expect(stripCompletionTag(text)).toBe("para one\n\npara two");
 	});
+
+	it("strips EVERY completion tag, not just the first (re-entered step case)", () => {
+		const text = [
+			"attempt 1 narration — rejecting.",
+			'<relay-complete>{"route":"changes_requested","writes":{}}</relay-complete>',
+			"attempt 2 narration — accepting.",
+			'<relay-complete>{"route":"accepted","writes":{}}</relay-complete>',
+		].join("\n");
+		// Both tags removed; the blank line between narrations is preserved
+		// because the tags were on their own lines.
+		expect(stripCompletionTag(text)).toBe("attempt 1 narration — rejecting.\n\nattempt 2 narration — accepting.");
+	});
 });

@@ -175,6 +175,23 @@ const buildProgressDetail = (state: RelayRunState, theme: Theme): string => {
 	const executed = total - skipped;
 	const skippedSuffix = skipped > 0 ? theme.fg("muted", ` · ${skipped} skipped`) : "";
 
+	// Count steps that ran more than once — this surfaces loop iterations
+	// so the user can tell "4 steps + 1 re-entry" from "4 unique steps."
+	let totalActivations = 0;
+	let stepsReentered = 0;
+	for (const runtime of state.steps.values()) {
+		totalActivations += runtime.attempts;
+		if (runtime.attempts > 1) stepsReentered += 1;
+	}
+	const reentries = totalActivations - executed;
+	const reentrySuffix =
+		reentries > 0
+			? theme.fg(
+					"muted",
+					` · ${reentries} re-entr${reentries === 1 ? "y" : "ies"} across ${stepsReentered} step${stepsReentered === 1 ? "" : "s"}`,
+				)
+			: "";
+
 	switch (state.phase) {
 		case "pending":
 			return theme.fg("muted", `${total} steps pending`);
@@ -192,7 +209,7 @@ const buildProgressDetail = (state: RelayRunState, theme: Theme): string => {
 		case "succeeded": {
 			const summary = state.finalSummary ? theme.fg("toolOutput", truncate(state.finalSummary, 70)) : "";
 			return (
-				`${theme.fg("muted", `${done}/${executed} steps succeeded`)}${skippedSuffix}` +
+				`${theme.fg("muted", `${done}/${executed} steps succeeded`)}${skippedSuffix}${reentrySuffix}` +
 				(summary ? ` · ${summary}` : "")
 			);
 		}
@@ -207,16 +224,17 @@ const buildProgressDetail = (state: RelayRunState, theme: Theme): string => {
 				: state.finalSummary
 					? theme.fg("muted", truncate(state.finalSummary, 80))
 					: "";
-			return (reason ? `${where} · ${reason}` : where) + skippedSuffix;
+			return (reason ? `${where} · ${reason}` : where) + skippedSuffix + reentrySuffix;
 		}
 
 		case "aborted":
-			return theme.fg("warning", `aborted after ${done}/${executed}`) + skippedSuffix;
+			return theme.fg("warning", `aborted after ${done}/${executed}`) + skippedSuffix + reentrySuffix;
 
 		case "incomplete":
 			return (
 				theme.fg("warning", `incomplete · ran ${done}/${executed} steps without reaching a terminal`) +
-				skippedSuffix
+				skippedSuffix +
+				reentrySuffix
 			);
 	}
 };
