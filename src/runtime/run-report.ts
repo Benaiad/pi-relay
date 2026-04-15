@@ -91,6 +91,17 @@ export interface RunReport {
 	readonly summary: string;
 	readonly durationMs: number;
 	readonly steps: readonly StepSummary[];
+	/**
+	 * Chronological attempt timeline reconstructed from the audit log.
+	 *
+	 * `steps` groups attempts by step id (plan order); `timeline` walks
+	 * the audit in execution order and shows each attempt as its own
+	 * entry. For a review/fix loop `steps` has two entries (`review`,
+	 * `fix`) while `timeline` has four (`review#1`, `fix#1`, `review#2`,
+	 * `fix#2`). Text rendering uses the timeline so the model sees the
+	 * loop the way it actually ran.
+	 */
+	readonly timeline: readonly AttemptTimelineEntry[];
 	readonly artifacts: readonly ArtifactSummary[];
 	readonly usage: ActorUsage;
 	readonly totalActivations: number;
@@ -113,7 +124,9 @@ export const phaseToOutcome = (phase: RunPhase): RunOutcome => {
 
 export const buildRunReport = (state: RelayRunState, audit: AuditLog): RunReport => {
 	const { program } = state;
-	const attemptHistories = buildAttemptHistories(audit.entries());
+	const events = audit.entries();
+	const timeline = buildAttemptTimeline(events);
+	const attemptHistories = buildAttemptHistories(events);
 	const steps = program.stepOrder.map((id) => buildStepSummary(id, state, attemptHistories.get(id) ?? []));
 	const artifacts = buildArtifactSummaries(state);
 	const outcome = phaseToOutcome(state.phase);
@@ -128,6 +141,7 @@ export const buildRunReport = (state: RelayRunState, audit: AuditLog): RunReport
 		summary,
 		durationMs,
 		steps,
+		timeline,
 		artifacts,
 		usage: state.totalUsage,
 		totalActivations,
@@ -389,8 +403,10 @@ export const buildAttemptHistories = (events: readonly RelayEvent[]): Map<StepId
  * model can narrate back: "the first review pass rejected, then fix
  * updated the file, then the second pass accepted."
  *
- * The TUI renders its own richer expansion from `details.state` — this
- * text is primarily for the model.
+ * Walks `report.timeline` (the chronological attempt sequence) not
+ * `report.steps` (plan order), so a review/fix loop reads in execution
+ * order:  create → review#1 → fix#1 → review#2 → done.  Matches what the
+ * TUI expanded view shows.
  */
 export const renderRunReportText = (report: RunReport): string => {
 	const lines: string[] = [];
@@ -400,17 +416,32 @@ export const renderRunReportText = (report: RunReport): string => {
 	}
 	lines.push("");
 
-	const reentries = report.totalActivations - report.steps.filter((s) => s.status !== "skipped").length;
 	const executedCount = report.steps.filter((s) => s.status !== "skipped").length;
-	const stepHeader =
+	const reentries = report.totalActivations - executedCount;
+	const timelineHeader =
 		reentries > 0
-			? `Steps (${report.totalActivations} activations across ${executedCount} executed steps, ${reentries} re-entries):`
-			: `Steps (${executedCount} executed):`;
-	lines.push(stepHeader);
+			? `Timeline (${report.totalActivations} activations across ${executedCount} executed steps, ${reentries} re-entries):`
+			: `Timeline (${executedCount} executed):`;
+	lines.push(timelineHeader);
 
-	for (const step of report.steps) {
+	// Index step summaries so each timeline entry can look up its kind
+	// (action/check/terminal) for the block header.
+	const stepById = new Map<string, StepSummary>();
+	for (const step of report.steps) stepById.set(unwrap(step.stepId), step);
+
+	for (const entry of report.timeline) {
+		const step = stepById.get(unwrap(entry.stepId));
+		if (!step) continue;
 		lines.push("");
-		lines.push(formatStepBlock(step));
+		lines.push(formatTimelineEntry(step, entry.attempt));
+	}
+
+	const skippedSteps = report.steps.filter((s) => s.status === "skipped");
+	if (skippedSteps.length > 0) {
+		lines.push("");
+		lines.push(
+			`— ${skippedSteps.length} step${skippedSteps.length === 1 ? "" : "s"} skipped (not reached): ${skippedSteps.map((s) => unwrap(s.stepId)).join(", ")}`,
+		);
 	}
 
 	if (report.artifacts.length > 0) {
@@ -427,29 +458,18 @@ export const renderRunReportText = (report: RunReport): string => {
 	return lines.join("\n");
 };
 
-const formatStepBlock = (step: StepSummary): string => {
-	const icon = statusGlyph(step.status);
+const formatTimelineEntry = (step: StepSummary, attempt: AttemptSummary): string => {
+	const icon = statusGlyphForAttempt(attempt, step);
 	const stepId = unwrap(step.stepId);
-	const header = `${icon} ${stepId} [${describeStepKind(step)}]${formatAttemptsSuffix(step)}`;
-
-	if (step.attempts.length === 0) {
-		// Skipped or never ran; show only the header.
-		return header;
-	}
-
-	if (step.attempts.length === 1) {
-		const attempt = step.attempts[0]!;
-		const inline = formatAttemptInline(attempt);
-		return inline ? `${header}\n  ${inline}` : header;
-	}
-
-	// Multiple attempts — render each on its own indented block so the
-	// model can clearly see the loop history.
-	const lines = [header];
-	for (const attempt of step.attempts) {
-		lines.push(`  attempt ${attempt.attemptNumber} · ${formatAttemptInline(attempt)}`);
-	}
-	return lines.join("\n");
+	const kindLabel = describeStepKind(step);
+	// Only action steps need the attempt suffix — and only when they ran
+	// more than once. Single-attempt actions, checks, and terminals stay
+	// uncluttered.
+	const attemptSuffix =
+		step.kind === "action" && attempt.attemptNumber > 1 ? ` · attempt ${attempt.attemptNumber}` : "";
+	const header = `${icon} ${stepId} [${kindLabel}]${attemptSuffix}`;
+	const inline = formatAttemptInline(attempt);
+	return inline ? `${header}\n  ${inline}` : header;
 };
 
 const formatAttemptInline = (attempt: AttemptSummary): string => {
@@ -461,6 +481,22 @@ const formatAttemptInline = (attempt: AttemptSummary): string => {
 	const finalText = extractAttemptFinalText(attempt);
 	const quote = finalText ? `\n    "${oneLine(finalText, 180)}"` : "";
 	return `${outcomeTag}${toolSuffix}${quote}`;
+};
+
+const statusGlyphForAttempt = (attempt: AttemptSummary, step: StepSummary): string => {
+	switch (attempt.outcome) {
+		case "completed":
+		case "check_pass":
+			return "✓";
+		case "no_completion":
+		case "engine_error":
+		case "check_fail":
+			return "✗";
+		case "terminal":
+			return step.status === "succeeded" ? "✓" : step.status === "failed" ? "✗" : "■";
+		case "open":
+			return "⏳";
+	}
 };
 
 const formatAttemptOutcome = (attempt: AttemptSummary): string => {
@@ -491,11 +527,6 @@ const extractAttemptFinalText = (attempt: AttemptSummary): string => {
 	return stripCompletionTag(texts.join("\n"));
 };
 
-const formatAttemptsSuffix = (step: StepSummary): string => {
-	if (step.attemptCount <= 1) return "";
-	return ` · ${step.attemptCount} attempts`;
-};
-
 const describeStepKind = (step: StepSummary): string => {
 	switch (step.kind) {
 		case "action":
@@ -504,24 +535,6 @@ const describeStepKind = (step: StepSummary): string => {
 			return "check";
 		case "terminal":
 			return "terminal";
-	}
-};
-
-const statusGlyph = (status: StepStatus): string => {
-	switch (status) {
-		case "succeeded":
-			return "✓";
-		case "failed":
-			return "✗";
-		case "skipped":
-			return "—";
-		case "running":
-			return "⏳";
-		case "retrying":
-			return "↻";
-		case "ready":
-		case "pending":
-			return "·";
 	}
 };
 
