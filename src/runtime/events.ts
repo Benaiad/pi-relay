@@ -327,17 +327,47 @@ export const applyEvent = (state: RelayRunState, event: RelayEvent): RelayRunSta
 				eventCount: nextEventCount,
 			};
 
-		case "run_finished":
+		case "run_finished": {
+			// Any step still pending/ready at finish time was never visited — the
+			// path went elsewhere. Mark them skipped so the renderer can show them
+			// distinctly from 'about to run' steps.
+			const finishedSteps = new Map<StepId, StepRuntimeState>();
+			for (const [id, runtime] of state.steps) {
+				if (runtime.status === "pending" || runtime.status === "ready") {
+					finishedSteps.set(id, { ...runtime, status: "skipped" });
+				} else {
+					finishedSteps.set(id, runtime);
+				}
+			}
 			return {
 				...state,
 				phase: event.phase,
 				finishedAt: event.at,
 				finalSummary: state.finalSummary ?? event.summary,
+				steps: finishedSteps,
 				eventCount: nextEventCount,
 			};
+		}
 
-		case "run_aborted":
-			return { ...state, phase: "aborted", finishedAt: event.at, eventCount: nextEventCount };
+		case "run_aborted": {
+			// Same skipped transition as run_finished — any step that was about to
+			// run but didn't get the chance is skipped, not still-pending.
+			const finishedSteps = new Map<StepId, StepRuntimeState>();
+			for (const [id, runtime] of state.steps) {
+				if (runtime.status === "pending" || runtime.status === "ready") {
+					finishedSteps.set(id, { ...runtime, status: "skipped" });
+				} else {
+					finishedSteps.set(id, runtime);
+				}
+			}
+			return {
+				...state,
+				phase: "aborted",
+				finishedAt: event.at,
+				steps: finishedSteps,
+				eventCount: nextEventCount,
+			};
+		}
 	}
 };
 

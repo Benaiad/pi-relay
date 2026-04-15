@@ -373,4 +373,36 @@ describe("Scheduler — terminal routes", () => {
 		expect(report.terminalOutcome).toBe("failure");
 		expect(report.summary).toContain("decided to fail");
 	});
+
+	it("marks unreached branches as skipped after run_finished fires", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Pick the good path, leave the alternate branch unreached.",
+			artifacts: [],
+			steps: [
+				{
+					kind: "action",
+					id: "decide",
+					actor: "worker",
+					instruction: "decide",
+					reads: [],
+					writes: [],
+					routes: [
+						{ route: "good", to: "success_terminal" },
+						{ route: "bad", to: "failure_terminal" },
+					],
+				},
+				{ kind: "terminal", id: "success_terminal", outcome: "success", summary: "ok" },
+				{ kind: "terminal", id: "failure_terminal", outcome: "failure", summary: "never reached" },
+			],
+			entryStep: "decide",
+		};
+		const engine = new ScriptedActorEngine(new Map([["decide", [completed("good")]]]));
+		const { scheduler } = buildScheduler(plan, engine);
+		const report = await scheduler.run();
+		expect(report.outcome).toBe("success");
+		const failureBranch = report.steps.find((s) => unwrap(s.stepId) === "failure_terminal")!;
+		expect(failureBranch.status).toBe("skipped");
+		const decided = report.steps.find((s) => unwrap(s.stepId) === "decide")!;
+		expect(decided.status).toBe("succeeded");
+	});
 });

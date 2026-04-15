@@ -177,6 +177,30 @@ pi-coding-agent (the assistant)
 tool result → pi-coding-agent transcript
 ```
 
+## Writing a review/fix loop
+
+A common pattern is review → fix → re-review until the reviewer accepts.
+Relay's compiler enforces **one writer per artifact**, so if the reviewer
+writes an artifact on the first pass and again after the fix, you cannot
+reuse the same artifact id — the compiler rejects the plan with
+`multiple_artifact_writers`.
+
+The v0.1 workaround is to duplicate the artifact across iterations:
+
+```
+review         writes: [review_verdict]
+  route changes_requested → fix
+fix            reads: [review_verdict]  writes: [implementation_notes]
+  route done → re_review
+re_review      writes: [re_review_verdict]    ← new id
+  route accepted → done
+```
+
+Each iteration gets its own artifact id and its own writer step. The
+review-loop tests caught this correctly during the early dogfood runs.
+v0.2 will add plan-level loop annotations so the model can express
+"retry this review sub-DAG until accepted" without duplicating step ids.
+
 ## Limitations (v0.1)
 
 - **Sequential execution only.** Parallelism and `Join` steps land in v0.2.

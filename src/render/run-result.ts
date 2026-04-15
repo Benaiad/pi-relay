@@ -171,6 +171,9 @@ const buildGlyphStrip = (state: RelayRunState, theme: Theme): string => {
 const buildProgressDetail = (state: RelayRunState, theme: Theme): string => {
 	const total = state.program.stepOrder.length;
 	const done = countStatus(state, ["succeeded"]);
+	const skipped = countStatus(state, ["skipped"]);
+	const executed = total - skipped;
+	const skippedSuffix = skipped > 0 ? theme.fg("muted", ` · ${skipped} skipped`) : "";
 
 	switch (state.phase) {
 		case "pending":
@@ -188,7 +191,10 @@ const buildProgressDetail = (state: RelayRunState, theme: Theme): string => {
 
 		case "succeeded": {
 			const summary = state.finalSummary ? theme.fg("toolOutput", truncate(state.finalSummary, 70)) : "";
-			return `${theme.fg("muted", `all ${total} steps`)}${summary ? ` · ${summary}` : ""}`;
+			return (
+				`${theme.fg("muted", `${done}/${executed} steps succeeded`)}${skippedSuffix}` +
+				(summary ? ` · ${summary}` : "")
+			);
 		}
 
 		case "failed": {
@@ -201,14 +207,17 @@ const buildProgressDetail = (state: RelayRunState, theme: Theme): string => {
 				: state.finalSummary
 					? theme.fg("muted", truncate(state.finalSummary, 80))
 					: "";
-			return reason ? `${where} · ${reason}` : where;
+			return (reason ? `${where} · ${reason}` : where) + skippedSuffix;
 		}
 
 		case "aborted":
-			return theme.fg("warning", `aborted after ${done}/${total}`);
+			return theme.fg("warning", `aborted after ${done}/${executed}`) + skippedSuffix;
 
 		case "incomplete":
-			return theme.fg("warning", `incomplete · ran ${done}/${total} steps without reaching a terminal`);
+			return (
+				theme.fg("warning", `incomplete · ran ${done}/${executed} steps without reaching a terminal`) +
+				skippedSuffix
+			);
 	}
 };
 
@@ -238,14 +247,34 @@ const renderExpanded = (state: RelayRunState, theme: Theme): Component => {
 	const footer = buildFooter(state, theme);
 	if (footer.length > 0) container.addChild(new Text(`  ${footer}`, 0, 0));
 
+	const skippedIds: string[] = [];
 	for (const stepId of state.program.stepOrder) {
 		const runtime = state.steps.get(stepId);
 		const step = state.program.steps.get(stepId);
 		if (!runtime || !step) continue;
-		// Skip pending / ready steps in the expanded view — they have nothing to show.
+		// Elide steps with nothing to show: pending/ready during an in-progress
+		// run, or skipped (not reached) after the run finished. Skipped steps get
+		// a footer tally so the user knows why the final run didn't run everything.
 		if (runtime.status === "pending" || runtime.status === "ready") continue;
+		if (runtime.status === "skipped") {
+			skippedIds.push(unwrap(stepId));
+			continue;
+		}
 		container.addChild(new Spacer(1));
 		appendExpandedStepBlock(container, stepId, step, runtime, theme, mdTheme);
+	}
+
+	if (skippedIds.length > 0) {
+		container.addChild(new Spacer(1));
+		const preview = skippedIds.slice(0, 6).join(", ");
+		const more = skippedIds.length > 6 ? ` + ${skippedIds.length - 6} more` : "";
+		container.addChild(
+			new Text(
+				`${theme.fg("muted", `— ${skippedIds.length} step${skippedIds.length === 1 ? "" : "s"} skipped (not reached):`)} ${theme.fg("dim", `${preview}${more}`)}`,
+				0,
+				0,
+			),
+		);
 	}
 
 	return container;
