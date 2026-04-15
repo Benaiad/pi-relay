@@ -175,24 +175,13 @@ const buildProgressDetail = (state: RelayRunState, theme: Theme): string => {
 	const done = countStatus(state, ["succeeded"]);
 	const skipped = countStatus(state, ["skipped"]);
 	const executed = total - skipped;
-	const skippedSuffix = skipped > 0 ? theme.fg("muted", ` · ${skipped} skipped`) : "";
-
-	// Count steps that ran more than once — this surfaces loop iterations
-	// so the user can tell "4 steps + 1 re-entry" from "4 unique steps."
-	let totalActivations = 0;
-	let stepsReentered = 0;
-	for (const runtime of state.steps.values()) {
-		totalActivations += runtime.attempts;
-		if (runtime.attempts > 1) stepsReentered += 1;
-	}
-	const reentries = totalActivations - executed;
-	const reentrySuffix =
-		reentries > 0
-			? theme.fg(
-					"muted",
-					` · ${reentries} re-entr${reentries === 1 ? "y" : "ies"} across ${stepsReentered} step${stepsReentered === 1 ? "" : "s"}`,
-				)
-			: "";
+	// Skipped is the only secondary count we surface in the collapsed status
+	// — it explains why N/M doesn't match the plan's total step count when a
+	// branching DAG skipped some failure paths. Re-entry count is NOT shown:
+	// the glyph strip and expanded per-attempt blocks already express loops,
+	// and "4 re-entries across 1 step" is counting artifact that nobody asked
+	// for in a default summary.
+	const skippedSuffix = skipped > 0 ? theme.fg("muted", ` · ${skipped} not reached`) : "";
 
 	switch (state.phase) {
 		case "pending":
@@ -209,11 +198,10 @@ const buildProgressDetail = (state: RelayRunState, theme: Theme): string => {
 		}
 
 		case "succeeded": {
-			const summary = state.finalSummary ? theme.fg("toolOutput", truncate(state.finalSummary, 70)) : "";
-			return (
-				`${theme.fg("muted", `${done}/${executed} steps succeeded`)}${skippedSuffix}${reentrySuffix}` +
-				(summary ? ` · ${summary}` : "")
-			);
+			const summary = state.finalSummary ? theme.fg("toolOutput", truncate(state.finalSummary, 90)) : "";
+			const stepCount = executed === 1 ? "1 step" : `${executed} steps`;
+			const lead = theme.fg("muted", `completed ${stepCount}`);
+			return summary ? `${lead} · ${summary}${skippedSuffix}` : `${lead}${skippedSuffix}`;
 		}
 
 		case "failed": {
@@ -222,21 +210,20 @@ const buildProgressDetail = (state: RelayRunState, theme: Theme): string => {
 				? theme.fg("error", `failed at ${unwrap(failedStep.stepId)}`)
 				: theme.fg("error", "failed");
 			const reason = failedStep?.runtime.lastReason
-				? theme.fg("error", truncate(failedStep.runtime.lastReason, 80))
+				? theme.fg("error", truncate(failedStep.runtime.lastReason, 90))
 				: state.finalSummary
-					? theme.fg("muted", truncate(state.finalSummary, 80))
+					? theme.fg("muted", truncate(state.finalSummary, 90))
 					: "";
-			return (reason ? `${where} · ${reason}` : where) + skippedSuffix + reentrySuffix;
+			return (reason ? `${where} · ${reason}` : where) + skippedSuffix;
 		}
 
 		case "aborted":
-			return theme.fg("warning", `aborted after ${done}/${executed}`) + skippedSuffix + reentrySuffix;
+			return theme.fg("warning", `aborted after ${done} of ${executed} steps`) + skippedSuffix;
 
 		case "incomplete":
 			return (
-				theme.fg("warning", `incomplete · ran ${done}/${executed} steps without reaching a terminal`) +
-				skippedSuffix +
-				reentrySuffix
+				theme.fg("warning", `stopped before finishing (${done}/${executed} done without reaching an end state)`) +
+				skippedSuffix
 			);
 	}
 };
@@ -312,23 +299,27 @@ const appendAttemptBlock = (
 ): void => {
 	const icon = iconForAttemptOutcome(attempt.outcome, step);
 	const id = unwrap(stepId);
-	const kindLabel = describeStepKind(step);
-	// Only show "attempt N" for action steps that ran more than once in total
-	// — surfaces re-entries without cluttering single-attempt rows. Checks and
-	// terminals don't have meaningful attempt numbers.
-	const attemptSuffix =
-		step.kind === "action" && attempt.attemptNumber > 1 ? ` · attempt ${attempt.attemptNumber}` : "";
+
+	// Header: `─── ✓ stepId  — actor` (for actions) or `─── ✓ stepId`
+	// (for checks and terminals). No "action(actor)" label. Retries are
+	// marked `(retry)` or `(retry N)` for N > 2.
+	const actorTag = step.kind === "action" ? `  ${theme.fg("muted", `— ${unwrap(step.actor)}`)}` : "";
+	const retryTag =
+		step.kind === "action" && attempt.attemptNumber > 1
+			? `  ${theme.fg("warning", attempt.attemptNumber === 2 ? "(retry)" : `(retry ${attempt.attemptNumber - 1})`)}`
+			: "";
 	container.addChild(
 		new Text(
-			`${theme.fg("muted", "───")} ${theme.fg(icon.color, icon.glyph)} ${theme.fg("accent", id)}  ${theme.fg("muted", `${kindLabel}${attemptSuffix}`)}`,
+			`${theme.fg("muted", "───")} ${theme.fg(icon.color, icon.glyph)} ${theme.fg("accent", id)}${actorTag}${retryTag}`,
 			0,
 			0,
 		),
 	);
 
 	if (step.kind === "action") {
-		container.addChild(new Text(`  ${theme.fg("dim", truncate(step.instruction, 400))}`, 0, 0));
-
+		// Action body: tool calls + final narration as Markdown. No
+		// instruction echo (the user saw the plan preview already), no
+		// per-step usage stats (aggregate lives in the run footer).
 		const toolCallItems = attempt.transcript.filter(
 			(item): item is Extract<TranscriptItem, { kind: "tool_call" }> => item.kind === "tool_call",
 		);
@@ -349,33 +340,43 @@ const appendAttemptBlock = (
 			container.addChild(new Markdown(finalText, 0, 0, mdTheme));
 		}
 	} else if (step.kind === "check") {
-		container.addChild(new Text(`  ${theme.fg("dim", describeCheck(step))}`, 0, 0));
+		// Check body: render the check as a `$ command` or `File exists:`
+		// line, matching how bash tool renders itself.
+		container.addChild(new Text(`  ${theme.fg("toolOutput", describeCheckInline(step))}`, 0, 0));
 	} else if (step.kind === "terminal") {
-		container.addChild(new Text(`  ${theme.fg("dim", `[${step.outcome}] ${truncate(step.summary, 200)}`)}`, 0, 0));
+		// Terminal body: just the summary prose, nothing else. The icon
+		// already conveys success vs failure.
+		container.addChild(new Text(`  ${theme.fg("toolOutput", truncate(step.summary, 240))}`, 0, 0));
 	}
 
-	// Per-attempt outcome line. For completed actions show the route. For
-	// failed/no_completion attempts show the reason in error color. Terminals
-	// and check passes don't need extra text (the kind label covers it).
+	// Outcome line. For completed actions we surface the route name only
+	// when it's non-generic — "done" / "next" / "continue" are pure flow
+	// glue and carry no meaning to a user. Action failures and check
+	// failures show their reason in error color.
 	if (attempt.outcome === "completed" && attempt.route) {
-		container.addChild(new Text(`  ${theme.fg("muted", `route: ${unwrap(attempt.route)}`)}`, 0, 0));
+		const routeName = unwrap(attempt.route);
+		if (!GENERIC_ROUTE_NAMES.has(routeName.toLowerCase())) {
+			container.addChild(new Text(`  ${theme.fg("success", `→ ${routeName}`)}`, 0, 0));
+		}
 	} else if (attempt.outcome === "no_completion" || attempt.outcome === "engine_error") {
 		container.addChild(
-			new Text(
-				`  ${theme.fg("error", `[${attempt.outcome}: ${truncate(attempt.reason ?? "no reason", 200)}]`)}`,
-				0,
-				0,
-			),
+			new Text(`  ${theme.fg("error", `Failed: ${truncate(attempt.reason ?? "no reason", 240)}`)}`, 0, 0),
 		);
 	} else if (attempt.outcome === "check_fail") {
 		container.addChild(
-			new Text(`  ${theme.fg("error", `[check failed: ${truncate(attempt.reason ?? "no reason", 200)}]`)}`, 0, 0),
+			new Text(`  ${theme.fg("error", `Failed: ${truncate(attempt.reason ?? "no reason", 240)}`)}`, 0, 0),
 		);
 	}
+};
 
-	const attemptUsage = formatUsageStats(attempt.usage);
-	if (attemptUsage.length > 0) {
-		container.addChild(new Text(`  ${theme.fg("dim", `[${attemptUsage}]`)}`, 0, 0));
+const GENERIC_ROUTE_NAMES = new Set(["done", "next", "continue", "ok", "success", "pass"]);
+
+const describeCheckInline = (step: Extract<Step, { kind: "check" }>): string => {
+	switch (step.check.kind) {
+		case "file_exists":
+			return `File exists: ${step.check.path}`;
+		case "command_exits_zero":
+			return `$ ${[step.check.command, ...step.check.args].join(" ")}`;
 	}
 };
 
@@ -473,7 +474,7 @@ const hasExpandedDetail = (state: RelayRunState): boolean => {
 	return false;
 };
 
-const describeStepKind = (step: Step): string => {
+const _describeStepKind = (step: Step): string => {
 	switch (step.kind) {
 		case "action":
 			return `action(${unwrap(step.actor)})`;

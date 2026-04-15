@@ -2,27 +2,21 @@
  * Render the PlanDraft as a tool call header — pi `renderCall` hook.
  *
  * This view is where the user reviews the plan before approving it. It
- * must show enough information that a yes/no decision is informed:
+ * should read like a plan, not like a schema dump. No "action(worker)"
+ * kind labels. No raw "reads: [...] writes: [...] routes: X → Y".
+ * Instead: plain prose descriptions that match how pi's built-in tools
+ * talk about their own work (bash shows `$ command`, not "bash action").
  *
- *   - The full task and success criteria, not truncated
- *   - Every step with its actor and its task-specific instruction
- *   - Every check step's concrete command or path
- *   - Every terminal's outcome and summary
- *   - Reads, writes, routes, and retry policy
- *
- * Collapsed and expanded both show the full plan. The only difference is
- * that collapsed omits the reads/writes/routes/retry metadata — everything
- * a reviewer needs in a glance is there, and the mechanics go in expanded.
- *
- * The TUI `Text` component wraps on width, so we embed literal `\n` between
- * lines and let the terminal handle wrapping long instructions. No hand
- * truncation anywhere — the whole point of the view is to be complete.
+ * Collapsed: task header + one-line count summary. Two lines total.
+ * Expanded: header + plain-English step list with each step's actor,
+ * instruction, input/output artifact names (as `Uses:` / `Produces:`),
+ * and branching routes only when there are multiple options.
  */
 
 import type { Theme } from "@mariozechner/pi-coding-agent";
 import { type Component, Text } from "@mariozechner/pi-tui";
 import type { PlanDraftDoc } from "../plan/draft.js";
-import { invalidArg, str } from "./format.js";
+import { invalidArg, str, truncate } from "./format.js";
 
 export const renderPlanPreview = (
 	plan: PlanDraftDoc,
@@ -44,7 +38,7 @@ const formatPlan = (plan: PlanDraftDoc, theme: Theme, expanded: boolean): string
 
 	lines.push(buildHeader(plan, theme));
 	if (plan.successCriteria) {
-		lines.push(`  ${theme.fg("muted", "success:")} ${theme.fg("dim", plan.successCriteria)}`);
+		lines.push(`  ${theme.fg("muted", `success when: ${plan.successCriteria}`)}`);
 	}
 	lines.push(`  ${theme.fg("muted", buildCountSummary(plan))}`);
 	lines.push("");
@@ -72,25 +66,10 @@ const buildHeader = (plan: PlanDraftDoc, theme: Theme): string => {
 };
 
 const buildCountSummary = (plan: PlanDraftDoc): string => {
-	let action = 0;
-	let check = 0;
-	let terminal = 0;
-	const actors = new Set<string>();
-	for (const step of plan.steps) {
-		switch (step.kind) {
-			case "action":
-				action += 1;
-				actors.add(step.actor);
-				break;
-			case "check":
-				check += 1;
-				break;
-			case "terminal":
-				terminal += 1;
-				break;
-		}
-	}
-	return `${plan.steps.length} steps (${action} action · ${check} check · ${terminal} terminal) · ${actors.size} actors · ${plan.artifacts.length} artifacts`;
+	const actorNames = new Set<string>();
+	for (const step of plan.steps) if (step.kind === "action") actorNames.add(step.actor);
+	const agentList = actorNames.size > 0 ? Array.from(actorNames).join(", ") : "none";
+	return `${plan.steps.length} steps · agents: ${agentList}`;
 };
 
 // ============================================================================
@@ -107,7 +86,7 @@ const buildStepBlock = (
 		case "action":
 			return buildActionBlock(step, index, theme, expanded);
 		case "check":
-			return buildCheckBlock(step, index, theme, expanded);
+			return buildCheckBlock(step, index, theme);
 		case "terminal":
 			return buildTerminalBlock(step, index, theme);
 	}
@@ -123,24 +102,36 @@ const buildActionBlock = (
 	const header =
 		`  ${theme.fg("accent", `${index}.`)} ` +
 		`${theme.fg("toolTitle", step.id)} ` +
-		`${theme.fg("muted", `action(${step.actor})`)}`;
+		theme.fg("muted", `— ${step.actor}`);
 	lines.push(header);
-	// Instruction is the most important thing a reviewer needs — the task-specific
-	// prompt that will be handed to the actor. Show it in full, one paragraph per
-	// line. No truncation.
+
+	// Instruction: the task-specific prompt the actor will see. This is the
+	// single most important thing for review, so it's always shown and never
+	// truncated. Each paragraph gets its own line so a multi-paragraph
+	// instruction doesn't wrap into a blob.
 	for (const paragraph of step.instruction.split("\n")) {
 		lines.push(`     ${theme.fg("toolOutput", paragraph)}`);
 	}
+
+	// Only show uses/produces when non-empty — empty declarations would add
+	// noise. Use plain-English labels instead of `reads:` / `writes:`.
+	if (step.reads.length > 0) {
+		lines.push(`     ${theme.fg("dim", `Uses: ${step.reads.join(", ")}`)}`);
+	}
+	if (step.writes.length > 0) {
+		lines.push(`     ${theme.fg("dim", `Produces: ${step.writes.join(", ")}`)}`);
+	}
+
 	if (expanded) {
-		const metaParts: string[] = [];
-		if (step.reads.length > 0) metaParts.push(`reads: [${step.reads.join(", ")}]`);
-		if (step.writes.length > 0) metaParts.push(`writes: [${step.writes.join(", ")}]`);
-		if (metaParts.length > 0) lines.push(`     ${theme.fg("dim", metaParts.join("  "))}`);
-		const routes = step.routes.map((r) => `${r.route} → ${r.to}`).join("    ");
-		lines.push(`     ${theme.fg("dim", `routes: ${routes}`)}`);
+		if (step.routes.length === 1) {
+			lines.push(`     ${theme.fg("dim", `→ ${step.routes[0]!.to}`)}`);
+		} else if (step.routes.length > 1) {
+			const branches = step.routes.map((r) => `${r.route} → ${r.to}`).join(", ");
+			lines.push(`     ${theme.fg("dim", `Branches: ${branches}`)}`);
+		}
 		if (step.retry) {
-			const backoff = step.retry.backoffMs ? ` (backoff ${step.retry.backoffMs}ms)` : "";
-			lines.push(`     ${theme.fg("dim", `retry: up to ${step.retry.maxAttempts} attempts${backoff}`)}`);
+			const plural = step.retry.maxAttempts === 1 ? "attempt" : "attempts";
+			lines.push(`     ${theme.fg("dim", `Up to ${step.retry.maxAttempts} ${plural} on failure.`)}`);
 		}
 	}
 	return lines;
@@ -150,18 +141,16 @@ const buildCheckBlock = (
 	step: Extract<PlanDraftDoc["steps"][number], { kind: "check" }>,
 	index: number,
 	theme: Theme,
-	expanded: boolean,
 ): string[] => {
 	const lines: string[] = [];
-	const header =
-		`  ${theme.fg("warning", `${index}.`)} ` +
-		`${theme.fg("toolTitle", step.id)} ` +
-		`${theme.fg("muted", `check(${step.check.kind})`)}`;
-	lines.push(header);
-	lines.push(`     ${theme.fg("toolOutput", describeCheckForReview(step))}`);
-	if (expanded) {
-		lines.push(`     ${theme.fg("dim", `pass → ${step.onPass}    fail → ${step.onFail}`)}`);
-	}
+	// Render check steps as the command/check they actually run, matching how
+	// pi's built-in bash tool renders itself — no "check(command_exits_zero)"
+	// kind label anywhere in the rendered output.
+	const description = describeCheckForReview(step);
+	lines.push(
+		`  ${theme.fg("warning", `${index}.`)} ${theme.fg("toolTitle", step.id)}  ${theme.fg("toolOutput", description)}`,
+	);
+	lines.push(`     ${theme.fg("dim", `Pass → ${step.onPass}, fail → ${step.onFail}`)}`);
 	return lines;
 };
 
@@ -171,10 +160,8 @@ const buildTerminalBlock = (
 	theme: Theme,
 ): string[] => {
 	const color = step.outcome === "success" ? "success" : "error";
-	const header =
-		`  ${theme.fg(color, `${index}.`)} ` +
-		`${theme.fg("toolTitle", step.id)} ` +
-		`${theme.fg("muted", `terminal(${step.outcome})`)}`;
+	const glyph = step.outcome === "success" ? "✓" : "✗";
+	const header = `  ${theme.fg(color, `${index}.`)} ` + `${theme.fg("toolTitle", step.id)} ` + theme.fg(color, glyph);
 	const summary = `     ${theme.fg("dim", step.summary)}`;
 	return [header, summary];
 };
@@ -182,12 +169,12 @@ const buildTerminalBlock = (
 const describeCheckForReview = (step: Extract<PlanDraftDoc["steps"][number], { kind: "check" }>): string => {
 	switch (step.check.kind) {
 		case "file_exists":
-			return `file_exists: ${step.check.path}`;
+			return `File exists: ${step.check.path}`;
 		case "command_exits_zero": {
 			const cmd = [step.check.command, ...step.check.args].join(" ");
 			const cwdSuffix = step.check.cwd ? `  (cwd: ${step.check.cwd})` : "";
-			const timeoutSuffix = step.check.timeoutMs ? `  (timeout ${step.check.timeoutMs}ms)` : "";
-			return `command_exits_zero: ${cmd}${cwdSuffix}${timeoutSuffix}`;
+			const timeoutSuffix = step.check.timeoutMs ? `  (timeout ${Math.round(step.check.timeoutMs / 1000)}s)` : "";
+			return `$ ${truncate(cmd, 120)}${cwdSuffix}${timeoutSuffix}`;
 		}
 	}
 };

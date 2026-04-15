@@ -21,6 +21,7 @@ import { emptyUsage } from "../actors/types.js";
 import type { ArtifactId, PlanId, RouteId, StepId } from "../plan/ids.js";
 import { unwrap } from "../plan/ids.js";
 import type { Step, TerminalOutcome } from "../plan/types.js";
+import { formatToolCall, plainTheme } from "../render/format.js";
 import type { AuditLog } from "./audit.js";
 import type { RelayEvent, RelayRunState, RunPhase, StepStatus } from "./events.js";
 
@@ -75,6 +76,14 @@ export interface StepSummary {
 	readonly lastRoute?: RouteId;
 	readonly lastReason?: string;
 	readonly usage: ActorUsage;
+	/** Present for action steps — the actor this step delegates to. */
+	readonly actorName?: string;
+	/** Present for check steps — a human-readable description of what the check runs. */
+	readonly checkDescription?: string;
+	/** Present for terminal steps — the success/failure outcome declared on the step. */
+	readonly terminalOutcome?: TerminalOutcome;
+	/** Present for terminal steps — the summary prose declared on the step. */
+	readonly terminalSummary?: string;
 }
 
 export interface ArtifactSummary {
@@ -169,6 +178,10 @@ const buildStepSummary = (stepId: StepId, state: RelayRunState, attempts: readon
 		lastRoute: runtime.lastRoute,
 		lastReason: runtime.lastReason,
 		usage: runtime.usage,
+		actorName: step.kind === "action" ? unwrap(step.actor) : undefined,
+		checkDescription: step.kind === "check" ? describeCheckInline(step) : undefined,
+		terminalOutcome: step.kind === "terminal" ? step.outcome : undefined,
+		terminalSummary: step.kind === "terminal" ? step.summary : undefined,
 	};
 };
 
@@ -397,35 +410,25 @@ export const buildAttemptHistories = (events: readonly RelayEvent[]): Map<StepId
 /**
  * Render the run report as plain text for the tool result's `content` field.
  *
- * The outer assistant reads this as the tool output — it IS the channel
- * through which the model learns what happened inside the relay run. It
- * must include every attempt with its route and a short narration so the
- * model can narrate back: "the first review pass rejected, then fix
- * updated the file, then the second pass accepted."
+ * The outer assistant reads this to understand what happened inside the
+ * relay run, then narrates to the user. The format should read like an
+ * execution log a human could follow: no "kind" labels, no "route: X"
+ * jargon, no per-step token accounting. Just: what ran, what it did,
+ * what happened, in chronological order.
  *
- * Walks `report.timeline` (the chronological attempt sequence) not
- * `report.steps` (plan order), so a review/fix loop reads in execution
- * order:  create → review#1 → fix#1 → review#2 → done.  Matches what the
- * TUI expanded view shows.
+ * Walks `report.timeline` (execution order). For a review/fix loop the
+ * output reads:  create → review → fix → review (retry) → done.
  */
 export const renderRunReportText = (report: RunReport): string => {
 	const lines: string[] = [];
 	lines.push(`Relay run: ${outcomeLabel(report.outcome)} — ${oneLine(report.task, 120)}`);
 	if (report.summary && report.summary !== report.task) {
-		lines.push(oneLine(report.summary, 200));
+		lines.push(oneLine(report.summary, 240));
 	}
 	lines.push("");
 
-	const executedCount = report.steps.filter((s) => s.status !== "skipped").length;
-	const reentries = report.totalActivations - executedCount;
-	const timelineHeader =
-		reentries > 0
-			? `Timeline (${report.totalActivations} activations across ${executedCount} executed steps, ${reentries} re-entries):`
-			: `Timeline (${executedCount} executed):`;
-	lines.push(timelineHeader);
-
-	// Index step summaries so each timeline entry can look up its kind
-	// (action/check/terminal) for the block header.
+	// Index step summaries so each timeline entry can look up its actor
+	// (for action steps) and check/terminal metadata.
 	const stepById = new Map<string, StepSummary>();
 	for (const step of report.steps) stepById.set(unwrap(step.stepId), step);
 
@@ -433,54 +436,102 @@ export const renderRunReportText = (report: RunReport): string => {
 		const step = stepById.get(unwrap(entry.stepId));
 		if (!step) continue;
 		lines.push("");
-		lines.push(formatTimelineEntry(step, entry.attempt));
+		for (const line of formatTimelineEntry(step, entry.attempt)) lines.push(line);
 	}
 
 	const skippedSteps = report.steps.filter((s) => s.status === "skipped");
 	if (skippedSteps.length > 0) {
 		lines.push("");
 		lines.push(
-			`— ${skippedSteps.length} step${skippedSteps.length === 1 ? "" : "s"} skipped (not reached): ${skippedSteps.map((s) => unwrap(s.stepId)).join(", ")}`,
+			`(${skippedSteps.length} step${skippedSteps.length === 1 ? "" : "s"} not reached: ${skippedSteps.map((s) => unwrap(s.stepId)).join(", ")})`,
 		);
 	}
 
 	if (report.artifacts.length > 0) {
 		lines.push("");
-		lines.push(`Artifacts committed: ${report.artifacts.map((a) => unwrap(a.artifactId)).join(", ")}`);
+		lines.push(`Produced: ${report.artifacts.map((a) => unwrap(a.artifactId)).join(", ")}`);
 	}
 
 	if (report.usage.turns > 0) {
 		lines.push(
-			`Usage: ${report.usage.turns} turns, ${report.usage.input} input / ${report.usage.output} output, $${report.usage.cost.toFixed(4)}`,
+			`Total: ${report.usage.turns} turns · ${report.usage.input}↑ ${report.usage.output}↓ · $${report.usage.cost.toFixed(4)}`,
 		);
 	}
 
 	return lines.join("\n");
 };
 
-const formatTimelineEntry = (step: StepSummary, attempt: AttemptSummary): string => {
+const formatTimelineEntry = (step: StepSummary, attempt: AttemptSummary): string[] => {
 	const icon = statusGlyphForAttempt(attempt, step);
 	const stepId = unwrap(step.stepId);
-	const kindLabel = describeStepKind(step);
-	// Only action steps need the attempt suffix — and only when they ran
-	// more than once. Single-attempt actions, checks, and terminals stay
-	// uncluttered.
-	const attemptSuffix =
-		step.kind === "action" && attempt.attemptNumber > 1 ? ` · attempt ${attempt.attemptNumber}` : "";
-	const header = `${icon} ${stepId} [${kindLabel}]${attemptSuffix}`;
-	const inline = formatAttemptInline(attempt);
-	return inline ? `${header}\n  ${inline}` : header;
+	const lines: string[] = [];
+
+	// Header: `✓ stepId — actor` for actions, `✓ stepId` for checks/terminals.
+	// Retries marked as `(retry)` or `(retry N)` for N > 2.
+	if (step.kind === "action") {
+		const actor = step.actorName ?? "";
+		const retryTag =
+			attempt.attemptNumber > 1
+				? ` ${attempt.attemptNumber === 2 ? "(retry)" : `(retry ${attempt.attemptNumber - 1})`}`
+				: "";
+		const suffix = actor ? ` — ${actor}${retryTag}` : retryTag;
+		lines.push(`${icon} ${stepId}${suffix}`);
+	} else {
+		lines.push(`${icon} ${stepId}`);
+	}
+
+	// Body: per-kind content.
+	if (step.kind === "action") {
+		// Tool calls in the order they fired. Use plainTheme so formatToolCall
+		// produces uncolored text matching the TUI but without ANSI.
+		const toolCalls = attempt.transcript.filter(
+			(item): item is Extract<TranscriptItem, { kind: "tool_call" }> => item.kind === "tool_call",
+		);
+		const shown = toolCalls.slice(-6);
+		const skipped = toolCalls.length - shown.length;
+		if (skipped > 0) lines.push(`  (${skipped} earlier tool calls)`);
+		for (const tc of shown) {
+			lines.push(`  → ${formatToolCall(tc.toolName, tc.args, plainTheme)}`);
+		}
+
+		// Final narration, in quotes, one-lined and capped.
+		const finalText = extractAttemptFinalText(attempt);
+		if (finalText.length > 0) {
+			lines.push(`  "${oneLine(finalText, 220)}"`);
+		}
+	} else if (step.kind === "check") {
+		// Checks are shown as their own command/file line — same idiom as
+		// how pi's bash tool shows its own `$ command` header.
+		if (step.checkDescription) lines.push(`  ${step.checkDescription}`);
+	} else if (step.kind === "terminal") {
+		if (step.terminalSummary) lines.push(`  ${oneLine(step.terminalSummary, 240)}`);
+	}
+
+	// Outcome line — only when meaningful. Generic route names like "done",
+	// "next", or "continue" carry no information and pollute the output.
+	if (attempt.outcome === "completed" && attempt.route) {
+		const routeName = unwrap(attempt.route);
+		if (!GENERIC_ROUTE_NAMES_TEXT.has(routeName.toLowerCase())) {
+			lines.push(`  → ${routeName}`);
+		}
+	} else if (attempt.outcome === "no_completion" || attempt.outcome === "engine_error") {
+		lines.push(`  Failed: ${attempt.reason ? oneLine(attempt.reason, 240) : "no reason"}`);
+	} else if (attempt.outcome === "check_fail") {
+		lines.push(`  Failed: ${attempt.reason ? oneLine(attempt.reason, 240) : "no reason"}`);
+	}
+
+	return lines;
 };
 
-const formatAttemptInline = (attempt: AttemptSummary): string => {
-	const outcomeTag = formatAttemptOutcome(attempt);
-	const toolCalls = attempt.transcript
-		.filter((item): item is Extract<TranscriptItem, { kind: "tool_call" }> => item.kind === "tool_call")
-		.map((item) => item.toolName);
-	const toolSuffix = toolCalls.length > 0 ? ` · tools: ${truncateList(toolCalls, 6)}` : "";
-	const finalText = extractAttemptFinalText(attempt);
-	const quote = finalText ? `\n    "${oneLine(finalText, 180)}"` : "";
-	return `${outcomeTag}${toolSuffix}${quote}`;
+const GENERIC_ROUTE_NAMES_TEXT = new Set(["done", "next", "continue", "ok", "success", "pass"]);
+
+const describeCheckInline = (step: Extract<Step, { kind: "check" }>): string => {
+	switch (step.check.kind) {
+		case "file_exists":
+			return `File exists: ${step.check.path}`;
+		case "command_exits_zero":
+			return `$ ${[step.check.command, ...step.check.args].join(" ").slice(0, 120)}`;
+	}
 };
 
 const statusGlyphForAttempt = (attempt: AttemptSummary, step: StepSummary): string => {
@@ -499,25 +550,6 @@ const statusGlyphForAttempt = (attempt: AttemptSummary, step: StepSummary): stri
 	}
 };
 
-const formatAttemptOutcome = (attempt: AttemptSummary): string => {
-	switch (attempt.outcome) {
-		case "completed":
-			return `route: ${attempt.route ? unwrap(attempt.route) : "?"}`;
-		case "no_completion":
-			return `no_completion: ${attempt.reason ? oneLine(attempt.reason, 160) : "no reason"}`;
-		case "engine_error":
-			return `engine_error: ${attempt.reason ? oneLine(attempt.reason, 160) : "no reason"}`;
-		case "check_pass":
-			return "check passed";
-		case "check_fail":
-			return `check failed: ${attempt.reason ? oneLine(attempt.reason, 160) : "no reason"}`;
-		case "terminal":
-			return "terminal reached";
-		case "open":
-			return "open (not completed)";
-	}
-};
-
 const extractAttemptFinalText = (attempt: AttemptSummary): string => {
 	const texts: string[] = [];
 	for (const item of attempt.transcript) {
@@ -525,17 +557,6 @@ const extractAttemptFinalText = (attempt: AttemptSummary): string => {
 	}
 	if (texts.length === 0) return "";
 	return stripCompletionTag(texts.join("\n"));
-};
-
-const describeStepKind = (step: StepSummary): string => {
-	switch (step.kind) {
-		case "action":
-			return "action";
-		case "check":
-			return "check";
-		case "terminal":
-			return "terminal";
-	}
 };
 
 const outcomeLabel = (outcome: RunOutcome): string => {
@@ -557,7 +578,7 @@ const oneLine = (text: string, limit: number): string => {
 	return `${collapsed.slice(0, limit)}…`;
 };
 
-const truncateList = (items: readonly string[], limit: number): string => {
+const _truncateList = (items: readonly string[], limit: number): string => {
 	if (items.length <= limit) return items.join(", ");
 	return `${items.slice(0, limit).join(", ")}, +${items.length - limit} more`;
 };

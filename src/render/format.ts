@@ -83,6 +83,21 @@ export const maxWidth = (items: readonly string[]): number => {
 };
 
 /**
+ * A theme stand-in that returns every string unchanged — used by the
+ * plain-text run report where we want subagent-style tool previews
+ * without ANSI colors. Pass this wherever a callsite expects a real
+ * `Theme` and you want text-only output.
+ */
+export const plainTheme: Theme = {
+	fg: (_color: string, text: string) => text,
+	bg: (_color: string, text: string) => text,
+	bold: (text: string) => text,
+	italic: (text: string) => text,
+	underline: (text: string) => text,
+	strikethrough: (text: string) => text,
+} as unknown as Theme;
+
+/**
  * One-line preview of a tool call, formatted to visually match how pi's
  * own built-in tools render the same invocation.
  *
