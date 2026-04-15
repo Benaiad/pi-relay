@@ -317,28 +317,14 @@ const appendAttemptBlock = (
 	);
 
 	if (step.kind === "action") {
-		// Action body: tool calls + final narration as Markdown. No
-		// instruction echo (the user saw the plan preview already), no
-		// per-step usage stats (aggregate lives in the run footer).
-		const toolCallItems = attempt.transcript.filter(
-			(item): item is Extract<TranscriptItem, { kind: "tool_call" }> => item.kind === "tool_call",
-		);
-		const shownToolCalls = toolCallItems.slice(-EXPANDED_TRANSCRIPT_LIMIT);
-		const skippedToolCalls = toolCallItems.length - shownToolCalls.length;
-		if (skippedToolCalls > 0) {
-			container.addChild(new Text(`  ${theme.fg("muted", `... ${skippedToolCalls} earlier tool calls`)}`, 0, 0));
-		}
-		for (const tc of shownToolCalls) {
-			container.addChild(
-				new Text(`  ${theme.fg("muted", "→ ")}${formatToolCall(tc.toolName, tc.args, theme)}`, 0, 0),
-			);
-		}
-
-		const finalText = extractFinalText(attempt.transcript);
-		if (finalText.length > 0) {
-			container.addChild(new Spacer(1));
-			container.addChild(new Markdown(finalText, 0, 0, mdTheme));
-		}
+		// Action body: walk the transcript in its natural chronological order
+		// and interleave text narration with tool calls. This captures the
+		// actor's actual thought flow: "I'll add lang. → read → edit → Let me
+		// verify. → read" rather than "read read edit read. All the text at
+		// the end." The final text chunk gets Markdown rendering for code
+		// blocks and headings; mid-reply text renders as plain truncated
+		// lines for compactness.
+		renderActionTranscript(container, attempt.transcript, theme, mdTheme);
 	} else if (step.kind === "check") {
 		// Check body: render the check as a `$ command` or `File exists:`
 		// line, matching how bash tool renders itself.
@@ -366,6 +352,94 @@ const appendAttemptBlock = (
 		container.addChild(
 			new Text(`  ${theme.fg("error", `Failed: ${truncate(attempt.reason ?? "no reason", 240)}`)}`, 0, 0),
 		);
+	}
+};
+
+/**
+ * Walk an attempt's transcript in chronological order and emit interleaved
+ * tool-call and text lines into the container.
+ *
+ * Design notes:
+ *
+ * - Tool calls always render as `→ <formatToolCall>`, matching pi's own
+ *   built-in tool header style.
+ * - Text chunks that appear mid-reply (before or between tool calls, but
+ *   NOT the final chunk) render as plain truncated `toolOutput`-colored
+ *   lines. Markdown features are stripped implicitly because the lines go
+ *   through plain `Text` components.
+ * - The FINAL text chunk in the transcript (if it comes after every tool
+ *   call) renders as a `Markdown` block so code blocks, headings, and
+ *   lists in the actor's wrap-up reply survive. Gets a leading `Spacer`
+ *   to visually separate it from the interleaved log above.
+ * - If the transcript ends with a tool call, there is no final text and
+ *   everything renders inline.
+ * - Text chunks are split on `\n` and empty lines are dropped so a
+ *   multi-paragraph narration doesn't become one long wrapped blob.
+ * - Completion tags are stripped before rendering anywhere.
+ *
+ * Tool calls are capped at `EXPANDED_TRANSCRIPT_LIMIT`; if exceeded, the
+ * earliest calls are dropped and a `(N earlier tool calls)` line is shown
+ * at the top. We do not cap text chunks — actor narration is almost always
+ * short and losing it hurts comprehension.
+ */
+const renderActionTranscript = (
+	container: Container,
+	transcript: readonly TranscriptItem[],
+	theme: Theme,
+	mdTheme: ReturnType<typeof getMarkdownTheme>,
+): void => {
+	// Find the last text chunk's index iff it's ALSO the last item in the
+	// transcript. That's the "final reply" slot; everything else is
+	// mid-reply commentary rendered inline.
+	let finalTextIndex = -1;
+	if (transcript.length > 0) {
+		const last = transcript[transcript.length - 1];
+		if (last?.kind === "text" && stripCompletionTag(last.text).trim().length > 0) {
+			finalTextIndex = transcript.length - 1;
+		}
+	}
+
+	// Drop the oldest tool calls if we're over the display cap. We count
+	// tool calls only (not text) so a chatty actor with many narrations
+	// isn't penalized.
+	const toolCallPositions: number[] = [];
+	transcript.forEach((item, idx) => {
+		if (item.kind === "tool_call") toolCallPositions.push(idx);
+	});
+	const droppedToolCalls = Math.max(0, toolCallPositions.length - EXPANDED_TRANSCRIPT_LIMIT);
+	const droppedToolCallIndices = new Set(toolCallPositions.slice(0, droppedToolCalls));
+	if (droppedToolCalls > 0) {
+		container.addChild(new Text(`  ${theme.fg("muted", `(${droppedToolCalls} earlier tool calls)`)}`, 0, 0));
+	}
+
+	for (let i = 0; i < transcript.length; i += 1) {
+		const item = transcript[i];
+		if (!item) continue;
+		if (droppedToolCallIndices.has(i)) continue;
+
+		if (item.kind === "tool_call") {
+			container.addChild(
+				new Text(`  ${theme.fg("muted", "→ ")}${formatToolCall(item.toolName, item.args, theme)}`, 0, 0),
+			);
+			continue;
+		}
+
+		// Text item. The final one (after every tool call) gets Markdown
+		// treatment; mid-reply chunks get inline plain-text treatment.
+		const cleaned = stripCompletionTag(item.text).trim();
+		if (cleaned.length === 0) continue;
+
+		if (i === finalTextIndex) {
+			container.addChild(new Spacer(1));
+			container.addChild(new Markdown(cleaned, 0, 0, mdTheme));
+			continue;
+		}
+
+		for (const rawLine of cleaned.split("\n")) {
+			const line = rawLine.trim();
+			if (line.length === 0) continue;
+			container.addChild(new Text(`  ${theme.fg("toolOutput", truncate(line, 200))}`, 0, 0));
+		}
 	}
 };
 
@@ -442,22 +516,6 @@ const describeActiveStep = (step: Step, runtime: StepRuntimeState, theme: Theme)
 	return "";
 };
 
-const extractFinalText = (transcript: readonly TranscriptItem[]): string => {
-	const parts: string[] = [];
-	for (const item of transcript) {
-		if (item.kind === "text" && item.text.trim().length > 0) parts.push(item.text);
-	}
-	return stripCompletionTag(parts.join("\n"));
-};
-
-// Keep these imports referenced so the runtime-state-based helpers still
-// compile even though the expanded renderer no longer uses them. They are
-// used by `buildProgressLine` and friends.
-const _keepRuntimeReferenced = (_s: StepRuntimeState): void => {
-	void _s;
-};
-void _keepRuntimeReferenced;
-
 const countStatus = (state: RelayRunState, statuses: readonly StepRuntimeState["status"][]): number => {
 	let n = 0;
 	for (const runtime of state.steps.values()) {
@@ -472,17 +530,6 @@ const hasExpandedDetail = (state: RelayRunState): boolean => {
 		if (runtime.status === "failed" || runtime.status === "succeeded") return true;
 	}
 	return false;
-};
-
-const _describeStepKind = (step: Step): string => {
-	switch (step.kind) {
-		case "action":
-			return `action(${unwrap(step.actor)})`;
-		case "check":
-			return `check(${step.check.kind})`;
-		case "terminal":
-			return `terminal(${step.outcome})`;
-	}
 };
 
 const describeCheck = (step: Extract<Step, { kind: "check" }>): string => {

@@ -578,11 +578,6 @@ const oneLine = (text: string, limit: number): string => {
 	return `${collapsed.slice(0, limit)}…`;
 };
 
-const _truncateList = (items: readonly string[], limit: number): string => {
-	if (items.length <= limit) return items.join(", ");
-	return `${items.slice(0, limit).join(", ")}, +${items.length - limit} more`;
-};
-
 /**
  * Prefix used by the scheduler when a step's retry policy is exhausted.
  * Exported so the scheduler and tests agree.

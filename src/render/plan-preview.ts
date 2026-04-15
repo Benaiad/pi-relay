@@ -161,7 +161,7 @@ const buildTerminalBlock = (
 ): string[] => {
 	const color = step.outcome === "success" ? "success" : "error";
 	const glyph = step.outcome === "success" ? "✓" : "✗";
-	const header = `  ${theme.fg(color, `${index}.`)} ` + `${theme.fg("toolTitle", step.id)} ` + theme.fg(color, glyph);
+	const header = `  ${theme.fg(color, `${index}.`)} ${theme.fg("toolTitle", step.id)} ${theme.fg(color, glyph)}`;
 	const summary = `     ${theme.fg("dim", step.summary)}`;
 	return [header, summary];
 };
