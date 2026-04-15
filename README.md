@@ -79,14 +79,24 @@ Responsibilities:
 Fields:
 
 - `name` (required) — the id steps reference in `step.actor`
-- `description` (required) — surfaced in the `/relay` command list and errors
+- `description` (required) — shown to the model as part of the `relay` tool
+  description so it knows which actor to pick for each step
 - `tools` (optional, comma-separated) — restricts the actor to a subset of
   pi's registered tools. Omit to use pi's default tool list.
 - `model` (optional) — overrides pi's active model for this actor
 - body — the actor's system prompt
 
-Discovery is fresh on every invocation, so editing an actor file takes
-effect on the next `relay` call without restarting pi.
+Two discovery phases with different cache semantics:
+
+- **Tool description (model-visible)** is built ONCE at extension load from
+  the actor set present at that moment. The list is embedded in the `relay`
+  tool's description so the model sees it from turn 1 with zero per-turn
+  cost and stable prompt caching. If you add or rename an actor mid-session,
+  run pi's `/reload` command to rebuild the description.
+- **Execute path (runtime)** re-discovers on every `relay` call, so
+  *editing the body* of an existing actor (its system prompt or tool list)
+  takes effect on the very next call without `/reload`. Only adding, renaming,
+  or removing actors needs a reload.
 
 ## Writing a plan (JSON shape)
 
@@ -145,6 +155,59 @@ to the model, which may resubmit a corrected plan in the same turn):
 - Every declared artifact has exactly one writer and at least one reference.
 - Check steps have both `onPass` and `onFail` pointing at real steps.
 - No step requests a context policy other than `fresh_per_run` in v0.1.
+
+## Plan review (the TUI dialog)
+
+When the model calls `relay` with a plan that can touch the filesystem or
+run shell commands, pi's TUI fires a review dialog before the scheduler
+runs. The user sees three options:
+
+- **Run the plan** — execution proceeds as described.
+- **Refine (tell the model what to change)** — opens a freeform editor.
+  Whatever the user writes is returned to the model as the tool result
+  with a clear instruction: *revise this plan, do not run the original*.
+  The model produces a new `relay` call on its next turn incorporating the
+  feedback. Iterate until the user accepts, refines again, or cancels.
+- **Cancel** — execution is aborted and the model sees a cancelled result.
+
+**Read-only plans skip the dialog entirely.** If no actor in the plan has
+`edit`/`write`/`bash` in its tool list and no check step runs a shell
+command, there's nothing destructive happening and the prompt is pure
+friction. Q&A and exploration plans run unattended.
+
+The dialog body is compact because the full plan is already rendered above
+it in the chat via pi's normal tool call preview — title line surfaces only
+the impact tags (`may edit files`, `runs shell`, `check: npm test`) and the
+unknown-actor warning if any step references an actor that isn't installed.
+
+**Important caveat:** the subprocess actors run with `pi -p --no-session`
+which is non-interactive, so pi's built-in bash/edit/write confirmations
+do NOT fire inside a relay run. Approving the review dialog authorizes
+every step in the plan. There is no "approve each step" granularity in v0.1.
+
+## Outcomes and the result view
+
+Four things can happen when the model calls `relay`, each with its own
+distinct result rendering:
+
+- **Compile failure.** The plan references an unknown actor, an
+  unresolvable route target, or a multi-writer artifact. Relay returns a
+  structured compiler error naming the offending id and candidates, the
+  model sees it and may resubmit a corrected plan in the same turn.
+- **User cancelled.** Review dialog declined. Model sees a cancelled tool
+  result and moves on.
+- **User refined.** Review dialog returned a refinement request. Model
+  sees the user's feedback and produces a revised plan.
+- **Execution outcome.** The scheduler ran and reached a terminal:
+  `success`, `failure`, `aborted`, or `incomplete` (no terminal reached).
+  The collapsed view shows a 3-row summary with a glyph strip (one glyph
+  per step), progress count, and timing/usage. Expanded view (Ctrl+O)
+  shows per-step detail with actor transcripts, tool calls, and the
+  actor's final reply rendered as Markdown.
+
+Unreached branches of the DAG are marked `skipped` in the final render
+with a dim `−` glyph, distinguished from steps that are still pending or
+running.
 
 ## Architecture at a glance
 
@@ -207,13 +270,23 @@ v0.2 will add plan-level loop annotations so the model can express
 - **`FreshPerRun` context policy only.** Per-step and per-actor caching
   land in v0.2.
 - **Untyped JSON artifacts only.** Named TypeBox shapes land in v0.2.
+- **Single writer per artifact.** Review/fix loops need separate artifact
+  ids per iteration (see "Writing a review/fix loop" above). Loop
+  ergonomics land in v0.2 — the constraint itself won't be relaxed because
+  it's what makes plans reason about.
 - **No step-level timeouts.** The scheduler's overall abort propagates from
   pi's signal, but individual steps cannot declare their own timeout yet.
+- **No per-step approval inside a run.** Approving the review dialog
+  authorizes every step in the plan. Subprocess actors run
+  non-interactively and cannot prompt for per-call confirmation.
 - **TUI rendering only.** The pi-mono web UI does not expose extension
   renderer hooks, so web users see a generic tool result.
 - **Subprocess-per-action execution.** Each action step spawns a fresh pi
   subprocess. This is the only way the actor's inner tool calls can reach
   pi's registered tools. Expect ~200–500ms startup overhead per step.
+- **No web tools in actors by default.** pi's built-in tool set is
+  `read, bash, edit, write, grep, find, ls`. Actors that need web access
+  use `bash + curl` until a web extension exists.
 
 ## Development
 
