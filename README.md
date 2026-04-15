@@ -290,10 +290,15 @@ Three things worth knowing:
 - **Reads are latest-wins.** Every commit is atomic, but readers always
   see the most recently committed value. `review`'s second pass reads the
   fresh `notes` that `fix` just wrote.
-- **There's an activation cap.** A runaway loop halts with an
-  `incomplete` outcome after 64 total step activations (configurable via
-  `maxActivations` on the scheduler). `review → fix → review → fix` uses
-  2 activations per iteration, so the default cap allows ~30 fix cycles.
+- **Two loop-safety caps, both tripping as `incomplete`:**
+  - **`maxStepRuns`** (default 10) — any single step can run at most 10
+    times within one run. The primary guard against actor ping-pong
+    (`review ↔ fix` that never converges): whichever side spins first
+    halts the run and its id is named in the outcome summary. Tighten
+    this on the scheduler config if you want faster bailout.
+  - **`maxActivations`** (default 64) — total step activations across
+    the whole run. Global safety net for plans with many steps where no
+    single step hits its per-step cap.
 
 The single-writer default stays for non-loop artifacts because it's what
 makes plans reason about — you can statically verify the producer of any

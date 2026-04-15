@@ -46,6 +46,7 @@ import { buildRunReport, type RunReport, SYNTHETIC_FAILURE_REASON_PREFIX } from 
 const DEFAULT_CLOCK = () => Date.now();
 const DEFAULT_RETRY_MAX_ATTEMPTS = 1;
 const DEFAULT_MAX_ACTIVATIONS = 64;
+const DEFAULT_MAX_STEP_RUNS = 10;
 const FAILURE_ROUTE_CANDIDATES = ["failure", "error"] as const;
 
 export interface SchedulerConfig {
@@ -61,13 +62,25 @@ export interface SchedulerConfig {
 	/**
 	 * Maximum total step activations per run, across all steps.
 	 *
-	 * Bounds loops: a review/fix loop that keeps routing back to the
-	 * reviewer will eventually trip this cap and halt with an
-	 * `incomplete` outcome. Defaults to 64 — enough for review/fix loops
-	 * with several iterations, small enough that a runaway plan can't
-	 * burn through an API budget.
+	 * Global safety net — catches plans with many steps where no single
+	 * step trips its per-step cap. Defaults to 64, which allows a
+	 * sequential 60-step plan with some retries or a 2-step review/fix
+	 * loop that runs up to 32 iterations.
 	 */
 	readonly maxActivations?: number;
+
+	/**
+	 * Maximum times any single step may run within one scheduler run.
+	 *
+	 * Primary guard against non-converging loops between actors. A
+	 * review/fix pair that keeps ping-ponging without making progress
+	 * will trip this cap on the first side that reaches it, and the run
+	 * halts with an `incomplete` outcome naming the offending step.
+	 * Defaults to 10 — enough for legitimate loops (most review cycles
+	 * converge in 1–3 iterations), tight enough that a pathology is
+	 * caught early.
+	 */
+	readonly maxStepRuns?: number;
 }
 
 export interface SchedulerSubscription {
@@ -92,6 +105,7 @@ export class Scheduler {
 	private hasRun = false;
 	private activationCount = 0;
 	private readonly maxActivations: number;
+	private readonly maxStepRuns: number;
 
 	constructor(config: SchedulerConfig) {
 		this.program = config.program;
@@ -103,6 +117,7 @@ export class Scheduler {
 		this.audit = config.audit ?? new AuditLog();
 		this.artifactStore = config.artifactStore ?? new ArtifactStore(this.program, this.clock);
 		this.maxActivations = config.maxActivations ?? DEFAULT_MAX_ACTIVATIONS;
+		this.maxStepRuns = config.maxStepRuns ?? DEFAULT_MAX_STEP_RUNS;
 		this.state = initRunState(this.program);
 	}
 
@@ -153,6 +168,21 @@ export class Scheduler {
 				this.finishWith("failed", `scheduler picked unknown step '${unwrap(nextId)}'`);
 				return buildRunReport(this.state);
 			}
+
+			// Per-step run cap. The primary guard against non-converging loops
+			// between actors: once any step has run `maxStepRuns` times, we
+			// assume the loop isn't making progress and halt. The offending
+			// step id goes in the summary so the model and user can see
+			// which actor was spinning.
+			const priorAttempts = this.state.steps.get(nextId)?.attempts ?? 0;
+			if (priorAttempts >= this.maxStepRuns) {
+				this.finishWith(
+					"incomplete",
+					`step '${unwrap(nextId)}' exceeded the per-step run cap (${this.maxStepRuns}) — the loop through this step is not converging`,
+				);
+				break;
+			}
+
 			this.activationCount += 1;
 			await this.executeStep(step);
 
