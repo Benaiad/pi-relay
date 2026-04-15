@@ -36,13 +36,18 @@ import { Scheduler } from "./runtime/scheduler.js";
 /**
  * The `details` payload carried by `onUpdate` and the final tool result.
  *
- * Three shapes because compile failures, runtime states, and user cancels are
- * very different things to render.
+ * Four shapes because compile failures, user cancels, user refinement
+ * requests, and runtime states are very different things to render.
  */
 export type RelayDetails =
 	| { readonly kind: "compile_failed"; readonly message: string }
 	| { readonly kind: "cancelled"; readonly reason: string }
+	| { readonly kind: "refined"; readonly feedback: string }
 	| { readonly kind: "state"; readonly state: RelayRunState };
+
+const CHOICE_RUN = "Run the plan";
+const CHOICE_REFINE = "Refine (tell the model what to change)";
+const CHOICE_CANCEL = "Cancel";
 
 export default function (pi: ExtensionAPI): void {
 	// Discover actors once at extension load. The tool description embeds the
@@ -91,20 +96,60 @@ export default function (pi: ExtensionAPI): void {
 			// Interactive plan review. Pi's built-in bash/edit/write confirmations
 			// don't fire for custom extension tools, and the subprocess actors run
 			// with `pi -p --no-session` which auto-accepts everything. The outer
-			// confirmation is therefore the ONLY gate on a relay plan — it has to
-			// exist, and it has to carry enough information for an informed decision.
+			// review is therefore the ONLY gate on a relay plan — it has to exist,
+			// and it has to carry enough information for an informed decision.
 			//
-			// Read-only plans (no edit/write/bash actors, no command_exits_zero
-			// checks, no unknown actors) skip the dialog — nothing destructive can
+			// Three-option select mirrors plan-mode's pattern: Run / Refine /
+			// Cancel. The plan itself is already visible above the dialog via
+			// `renderCall`, so the select title just carries the one-line impact
+			// summary and nothing else. Refine opens a freeform editor and
+			// returns the feedback as the tool result — the model sees it next
+			// turn and revises the plan.
+			//
+			// Read-only plans skip the dialog entirely. Nothing destructive can
 			// happen, and prompting for Q&A / exploration plans is pure friction.
 			if (ctx.hasUI) {
 				const impact = summarizePlanImpact(plan, actorsByName);
-				const needsConfirm = impact.mayEdit || impact.mayRunCommands || impact.unknownActors.length > 0;
-				if (needsConfirm) {
-					const title = "Run this Relay plan?";
-					const body = buildConfirmationBody(plan, impact);
-					const approved = await ctx.ui.confirm(title, body);
-					if (!approved) {
+				const needsReview = impact.mayEdit || impact.mayRunCommands || impact.unknownActors.length > 0;
+				if (needsReview) {
+					const title = buildSelectTitle(plan, impact);
+					const choice = await ctx.ui.select(title, [CHOICE_RUN, CHOICE_REFINE, CHOICE_CANCEL]);
+
+					if (choice === CHOICE_REFINE) {
+						const feedback = await ctx.ui.editor("Refine the plan — what should the model change?", "");
+						const trimmed = feedback?.trim() ?? "";
+						if (trimmed.length === 0) {
+							return {
+								content: [
+									{
+										type: "text",
+										text: "Relay plan cancelled: user opened the refine editor but submitted no feedback.",
+									},
+								],
+								details: { kind: "cancelled", reason: "empty refinement feedback" },
+							};
+						}
+						return {
+							content: [
+								{
+									type: "text",
+									text: [
+										"The user reviewed this Relay plan and requested refinements instead of running it.",
+										"Their feedback:",
+										"---",
+										trimmed,
+										"---",
+										"Revise the plan according to this feedback and call relay again with the updated plan.",
+										"Do NOT run the original plan.",
+									].join("\n"),
+								},
+							],
+							details: { kind: "refined", feedback: trimmed },
+						};
+					}
+
+					if (choice !== CHOICE_RUN) {
+						// CHOICE_CANCEL or undefined (user dismissed the dialog).
 						return {
 							content: [
 								{
@@ -254,45 +299,38 @@ export const summarizePlanImpact = (
 };
 
 /**
- * Compact confirmation body.
+ * Compact title for the plan-review `ctx.ui.select` dialog.
  *
  * The full plan is already rendered above the dialog via `renderCall` — the
  * user sees task, step list, actors, and artifacts in the chat scroll as a
  * normal tool call preview. Duplicating that inside the modal just produces
  * a truncated body users can't scroll through.
  *
- * The dialog therefore carries only the IMPACT summary (what the plan is
- * authorized to touch) plus the subprocess-actors disclaimer. Three to five
- * short lines, always visible regardless of the modal's size limits.
+ * The title carries only the one-line impact summary. The plan itself is
+ * above; the action is below (Run / Refine / Cancel).
  */
-export const buildConfirmationBody = (plan: import("./plan/draft.js").PlanDraftDoc, impact: PlanImpact): string => {
-	const lines: string[] = [];
+export const buildSelectTitle = (plan: import("./plan/draft.js").PlanDraftDoc, impact: PlanImpact): string => {
+	const parts: string[] = [`${plan.steps.length} steps`];
 
 	if (impact.unknownActors.length > 0) {
-		lines.push(`⚠ unknown actors: ${impact.unknownActors.join(", ")}`);
+		parts.push(`⚠ unknown actors: ${impact.unknownActors.join(", ")}`);
 	}
 
 	const bullets: string[] = [];
-	if (impact.mayEdit) bullets.push("may create, edit, or write files");
-	if (impact.mayRunCommands) bullets.push("may run shell commands");
+	if (impact.mayEdit) bullets.push("may edit files");
+	if (impact.mayRunCommands) bullets.push("runs shell");
 	if (impact.commandChecks.length > 0) {
 		const first = impact.commandChecks[0];
 		const rest = impact.commandChecks.length - 1;
-		const suffix = rest > 0 ? ` (+${rest} more)` : "";
-		bullets.push(`check runs: ${first}${suffix}`);
+		const suffix = rest > 0 ? ` (+${rest})` : "";
+		bullets.push(`check: ${first}${suffix}`);
 	}
-	for (const bullet of bullets) lines.push(`• ${bullet}`);
-
 	if (bullets.length === 0) {
-		lines.push("read-only (no filesystem writes or shell commands)");
+		bullets.push("read-only");
 	}
+	parts.push(...bullets);
 
-	lines.push("");
-	lines.push("Subprocess actors run non-interactively: approving this");
-	lines.push("authorizes every step in the plan. Full plan is shown above.");
-
-	void plan;
-	return lines.join("\n");
+	return `Relay plan · ${parts.join(" · ")}`;
 };
 
 /**
