@@ -9,6 +9,12 @@
  * This file stays thin. All compile, runtime, and rendering logic lives in
  * the modules under src/plan, src/runtime, src/actors, and src/render. The
  * only job here is wiring pi's extension API to those modules.
+ *
+ * The tool description is built once at extension load and lists every
+ * discovered actor. This is deliberate: rebuilding it per-turn would break
+ * prompt caching and add no value, because the actor set is stable within
+ * a session. Users who add or edit actor files mid-session run `/reload`
+ * to pick up the changes.
  */
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
@@ -38,20 +44,23 @@ export type RelayDetails =
 	| { readonly kind: "state"; readonly state: RelayRunState };
 
 export default function (pi: ExtensionAPI): void {
+	// Discover actors once at extension load. The tool description embeds the
+	// current actor list so the model sees it from turn 1 without per-turn
+	// system prompt injection. Users `/reload` after editing actor files.
+	const loadDiscovery = discoverActors(process.cwd(), "user");
+	const description = buildToolDescription(loadDiscovery.actors);
+
 	pi.registerTool<typeof PlanDraftSchema, RelayDetails>({
 		name: "relay",
 		label: "Relay",
-		description: [
-			"Execute a structured multi-step workflow with typed artifacts and deterministic verification gates.",
-			"Use this for tasks that require multiple specialized actors, verification gates (tests/checks),",
-			"or workflows where partial success is unacceptable.",
-			"Do NOT use this for single-tool edits, Q&A, explanations, or simple bug fixes — call the",
-			"underlying tools directly instead.",
-			"The plan's actor names must match actors discovered from ~/.pi/agent/relay-actors/.",
-		].join(" "),
+		description,
 		parameters: PlanDraftSchema,
 
 		async execute(_toolCallId, plan, signal, onUpdate, ctx) {
+			// Re-discover on every execute so mid-session actor file edits take
+			// effect the NEXT time relay is called, without `/reload`. The tool
+			// description the model saw remains stable for prompt caching; only
+			// the runtime registry is fresh.
 			const discovery = discoverActors(ctx.cwd, "user");
 			const actorsByName = new Map<ReturnType<typeof ActorId>, ActorConfig>(
 				discovery.actors.map((a) => [ActorId(a.name), a]),
@@ -128,9 +137,58 @@ export default function (pi: ExtensionAPI): void {
 			if (details?.kind === "state") {
 				return renderRunResult(details.state, theme, options.expanded);
 			}
-			// Compile failed (or no details yet) — fall back to the plan preview so the user still
-			// sees what the model proposed, alongside the compile error text in `content`.
 			return renderPlanPreview(context.args, theme, options.expanded);
 		},
 	});
 }
+
+/**
+ * Build the tool description shown to the model in the system prompt's tools
+ * section.
+ *
+ * Includes:
+ *   - A static prose block describing when to use the tool and when not to
+ *   - A dynamically-rendered actor list with each actor's description and
+ *     declared tool restrictions
+ *   - A reminder that per-step `instruction` is the task-specific input, not
+ *     the actor's persona
+ *
+ * Stable for the session. Users run `/reload` to refresh after editing actor
+ * files.
+ */
+export const buildToolDescription = (actors: readonly ActorConfig[]): string => {
+	const staticPart = [
+		"Execute a structured multi-step workflow with typed artifacts and deterministic verification gates.",
+		"Use this for tasks that require multiple specialized actors, verification gates (tests/checks),",
+		"or workflows where partial success is unacceptable.",
+		"Do NOT use this for single-tool edits, Q&A, explanations, or simple bug fixes — call the",
+		"underlying tools directly instead.",
+	].join(" ");
+
+	if (actors.length === 0) {
+		return [
+			staticPart,
+			"",
+			"NO ACTORS ARE CURRENTLY INSTALLED. Drop actor markdown files into",
+			"~/.pi/agent/relay-actors/ and run /reload to enable this tool.",
+		].join("\n");
+	}
+
+	const actorLines = actors.map((actor) => {
+		const toolsSuffix =
+			actor.tools && actor.tools.length > 0 ? ` [allowed tools: ${actor.tools.join(", ")}]` : " [default tool set]";
+		const modelSuffix = actor.model ? ` [model: ${actor.model}]` : "";
+		return `  - ${actor.name}: ${actor.description}${toolsSuffix}${modelSuffix}`;
+	});
+
+	return [
+		staticPart,
+		"",
+		"Available actors for the 'actor' field of each action step. Use these names EXACTLY:",
+		...actorLines,
+		"",
+		"Each action step carries an 'instruction' field that is the task-specific prompt for that step.",
+		"The actor's persona (tool list, coding standards, output style) stays the same across steps;",
+		"the 'instruction' is how you tell the SAME actor to do DIFFERENT work at different points in the plan.",
+	].join("\n");
+};
