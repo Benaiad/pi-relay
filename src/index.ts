@@ -385,6 +385,11 @@ export const buildToolDescription = (actors: readonly ActorConfig[]): string => 
 		"or workflows where partial success is unacceptable.",
 		"Do NOT use this for single-tool edits, Q&A, explanations, or simple bug fixes — call the",
 		"underlying tools directly instead.",
+		"YOU are the planner: when you submit a plan, the step instructions must already contain concrete",
+		"file paths, commands, and decisions you have reasoned through. Do NOT add a 'planner' actor to",
+		"the plan expecting a second round of planning to happen at runtime — actors execute, they do not",
+		"plan. If you need to scout the codebase, use your own read/grep/find tools before calling relay,",
+		"then bake the findings into the plan's instructions.",
 	].join(" ");
 
 	if (actors.length === 0) {
