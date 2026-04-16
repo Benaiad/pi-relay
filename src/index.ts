@@ -9,9 +9,11 @@
  * This file stays thin: it discovers actors and templates at extension load,
  * builds tool descriptions, and wires the pi extension API to the modules.
  *
- * Tool descriptions are built once at extension load and embed the current
- * actor and template lists. This is deliberate: rebuilding per-turn would
- * break prompt caching. Users run `/reload` after editing files.
+ * Tool descriptions are built once at extension load and list the current
+ * actors and templates. Adding, removing, or renaming actors/templates
+ * requires `/reload` to update what the model sees. Edits to system
+ * prompts, plan bodies, and tool lists are picked up on the next
+ * execution without reloading.
  */
 
 import * as fs from "node:fs";
