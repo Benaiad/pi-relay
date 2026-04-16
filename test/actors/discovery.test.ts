@@ -37,9 +37,9 @@ describe("discoverActors", () => {
 
 	beforeEach(async () => {
 		tmp = await mkdtemp(path.join(os.tmpdir(), "pi-relay-actors-"));
-		userDir = path.join(tmp, "user-pi", "agent", "relay-actors");
+		userDir = path.join(tmp, "user-pi", "agent", "relay", "actors");
 		projectRoot = path.join(tmp, "proj");
-		projectDir = path.join(projectRoot, ".pi", "relay-actors");
+		projectDir = path.join(projectRoot, ".pi", "relay", "actors");
 		await mkdir(userDir, { recursive: true });
 		await mkdir(projectDir, { recursive: true });
 	});

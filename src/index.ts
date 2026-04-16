@@ -87,7 +87,7 @@ export default function (pi: ExtensionAPI): void {
 				const message = formatCompileError(compileResult.error);
 				const actorList =
 					discovery.actors.length === 0
-						? "(none — drop actor markdown files into ~/.pi/agent/relay-actors/)"
+						? "(none — drop actor markdown files into ~/.pi/agent/relay/actors/)"
 						: discovery.actors.map((a) => a.name).join(", ");
 				return {
 					content: [
@@ -397,7 +397,7 @@ export const buildToolDescription = (actors: readonly ActorConfig[]): string => 
 			staticPart,
 			"",
 			"NO ACTORS ARE CURRENTLY INSTALLED. Drop actor markdown files into",
-			"~/.pi/agent/relay-actors/ and run /reload to enable this tool.",
+			"~/.pi/agent/relay/actors/ and run /reload to enable this tool.",
 		].join("\n");
 	}
 
