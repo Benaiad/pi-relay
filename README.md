@@ -225,7 +225,7 @@ hand-written plan looks like this:
     {
       "kind": "check",
       "id": "verify",
-      "check": { "kind": "command_exits_zero", "command": "npm", "args": ["test"], "timeoutMs": 120000 },
+      "check": { "kind": "command_exits_zero", "command": "npm test", "timeoutMs": 120000 },
       "onPass": "done",
       "onFail": "failed"
     },

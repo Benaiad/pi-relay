@@ -40,7 +40,7 @@ describe("runCheck (file_exists)", () => {
 describe("runCheck (command_exits_zero)", () => {
 	it("passes when the command exits 0", async () => {
 		const outcome = await runCheck(
-			{ kind: "command_exits_zero", command: "node", args: ["-e", "process.exit(0)"] },
+			{ kind: "command_exits_zero", command: "node -e \"process.exit(0)\"" },
 			{ cwd: process.cwd() },
 		);
 		expect(outcome.kind).toBe("pass");
@@ -48,11 +48,7 @@ describe("runCheck (command_exits_zero)", () => {
 
 	it("fails when the command exits non-zero and captures stderr in the reason", async () => {
 		const outcome = await runCheck(
-			{
-				kind: "command_exits_zero",
-				command: "node",
-				args: ["-e", "process.stderr.write('boom\\n'); process.exit(3)"],
-			},
+			{ kind: "command_exits_zero", command: "node -e \"process.stderr.write('boom\\n'); process.exit(3)\"" },
 			{ cwd: process.cwd() },
 		);
 		expect(outcome.kind).toBe("fail");
@@ -64,7 +60,7 @@ describe("runCheck (command_exits_zero)", () => {
 
 	it("fails when the command does not exist (spawn error)", async () => {
 		const outcome = await runCheck(
-			{ kind: "command_exits_zero", command: "definitely-not-a-real-binary-xyz", args: [] },
+			{ kind: "command_exits_zero", command: "definitely-not-a-real-binary-xyz" },
 			{ cwd: process.cwd() },
 		);
 		expect(outcome.kind).toBe("fail");
@@ -74,8 +70,7 @@ describe("runCheck (command_exits_zero)", () => {
 		const outcome = await runCheck(
 			{
 				kind: "command_exits_zero",
-				command: "node",
-				args: ["-e", "setTimeout(() => process.exit(0), 5000)"],
+				command: "node -e \"setTimeout(() => process.exit(0), 5000)\"",
 				timeoutMs: 200,
 			},
 			{ cwd: process.cwd() },
@@ -91,8 +86,7 @@ describe("runCheck (command_exits_zero)", () => {
 		const promise = runCheck(
 			{
 				kind: "command_exits_zero",
-				command: "node",
-				args: ["-e", "setTimeout(() => process.exit(0), 5000)"],
+				command: "node -e \"setTimeout(() => process.exit(0), 5000)\"",
 				timeoutMs: 10_000,
 			},
 			{ cwd: process.cwd(), signal: ctl.signal },
@@ -100,5 +94,13 @@ describe("runCheck (command_exits_zero)", () => {
 		setTimeout(() => ctl.abort(), 50);
 		const outcome = await promise;
 		expect(outcome.kind).toBe("fail");
+	});
+
+	it("supports compound shell commands", async () => {
+		const outcome = await runCheck(
+			{ kind: "command_exits_zero", command: "echo hello && echo world" },
+			{ cwd: process.cwd() },
+		);
+		expect(outcome.kind).toBe("pass");
 	});
 });

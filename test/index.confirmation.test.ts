@@ -54,7 +54,7 @@ const mutatingPlan: PlanDraftDoc = {
 		{
 			kind: "check",
 			id: "verify",
-			check: { kind: "command_exits_zero", command: "npm", args: ["test"] },
+			check: { kind: "command_exits_zero", command: "npm test" },
 			onPass: "end",
 			onFail: "bad",
 		},
@@ -127,14 +127,14 @@ describe("buildSelectTitle", () => {
 				{
 					kind: "check",
 					id: "verify",
-					check: { kind: "command_exits_zero", command: "npm", args: ["test"] },
+					check: { kind: "command_exits_zero", command: "npm test" },
 					onPass: "step2",
 					onFail: "bad",
 				},
 				{
 					kind: "check",
 					id: "step2",
-					check: { kind: "command_exits_zero", command: "npm", args: ["run", "lint"] },
+					check: { kind: "command_exits_zero", command: "npm run lint" },
 					onPass: "end",
 					onFail: "bad",
 				},

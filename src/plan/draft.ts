@@ -107,8 +107,12 @@ const CheckSpecSchema = Type.Union(
 		Type.Object(
 			{
 				kind: Type.Literal("command_exits_zero"),
-				command: Type.String({ minLength: 1, description: "Executable name or absolute path." }),
-				args: Type.Array(Type.String(), { description: "Command arguments, in order." }),
+				command: Type.String({
+					minLength: 1,
+					description:
+						"Shell command to run, e.g. 'npm test' or 'cargo test && cargo clippy'. " +
+						"Executed through the platform shell (sh on Unix, cmd.exe on Windows).",
+				}),
 				cwd: Type.Optional(Type.String({ description: "Working directory override. Defaults to run cwd." })),
 				timeoutMs: Type.Optional(
 					Type.Integer({

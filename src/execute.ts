@@ -213,7 +213,7 @@ export const summarizePlanImpact = (
 		} else if (step.kind === "check") {
 			checkStepCount += 1;
 			if (step.check.kind === "command_exits_zero") {
-				const cmd = [step.check.command, ...step.check.args].join(" ");
+				const cmd = step.check.command;
 				commandChecks.push(cmd.length > 80 ? `${cmd.slice(0, 80)}…` : cmd);
 				mayRunCommands = true;
 			}

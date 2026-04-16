@@ -214,7 +214,7 @@ describe("instantiateTemplate", () => {
 					{
 						kind: "check",
 						id: "lint",
-						check: { kind: "command_exits_zero", command: "npm", args: ["run", "lint"] },
+						check: { kind: "command_exits_zero", command: "npm run lint" },
 						onPass: "done",
 						onFail: "failed",
 					},

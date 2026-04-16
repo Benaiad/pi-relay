@@ -94,7 +94,7 @@ steps:
     routes: [{ route: done, to: verify }]
   - kind: check
     id: verify
-    check: { kind: command_exits_zero, command: echo, args: [ok] }
+    check: { kind: command_exits_zero, command: echo ok }
     onPass: success
     onFail: failed
   - kind: terminal

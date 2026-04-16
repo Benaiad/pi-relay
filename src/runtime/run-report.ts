@@ -535,7 +535,7 @@ const describeCheckInline = (step: Extract<Step, { kind: "check" }>): string => 
 		case "file_exists":
 			return `File exists: ${step.check.path}`;
 		case "command_exits_zero":
-			return `$ ${[step.check.command, ...step.check.args].join(" ").slice(0, 120)}`;
+			return `$ ${step.check.command.slice(0, 120)}`;
 	}
 };
 

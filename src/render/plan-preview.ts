@@ -171,10 +171,9 @@ const describeCheckForReview = (step: Extract<PlanDraftDoc["steps"][number], { k
 		case "file_exists":
 			return `File exists: ${step.check.path}`;
 		case "command_exits_zero": {
-			const cmd = [step.check.command, ...step.check.args].join(" ");
 			const cwdSuffix = step.check.cwd ? `  (cwd: ${step.check.cwd})` : "";
 			const timeoutSuffix = step.check.timeoutMs ? `  (timeout ${Math.round(step.check.timeoutMs / 1000)}s)` : "";
-			return `$ ${cmd}${cwdSuffix}${timeoutSuffix}`;
+			return `$ ${step.check.command}${cwdSuffix}${timeoutSuffix}`;
 		}
 	}
 };

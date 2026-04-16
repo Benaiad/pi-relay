@@ -163,7 +163,7 @@ describe("Scheduler — happy paths", () => {
 				{
 					kind: "check",
 					id: "verify",
-					check: { kind: "command_exits_zero", command: "node", args: ["-e", "process.exit(0)"] },
+					check: { kind: "command_exits_zero", command: "node -e \"process.exit(0)\"" },
 					onPass: "ok",
 					onFail: "broken",
 				},
@@ -187,7 +187,7 @@ describe("Scheduler — happy paths", () => {
 				{
 					kind: "check",
 					id: "verify",
-					check: { kind: "command_exits_zero", command: "node", args: ["-e", "process.exit(2)"] },
+					check: { kind: "command_exits_zero", command: "node -e \"process.exit(2)\"" },
 					onPass: "ok",
 					onFail: "broken",
 				},

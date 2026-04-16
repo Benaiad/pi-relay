@@ -34,8 +34,7 @@ const validPlan: PlanDraftDoc = {
 			id: "run-tests",
 			check: {
 				kind: "command_exits_zero",
-				command: "npm",
-				args: ["test"],
+				command: "npm test",
 				timeoutMs: 120_000,
 			},
 			onPass: "done",

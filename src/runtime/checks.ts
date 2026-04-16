@@ -73,10 +73,9 @@ const runCommandExitsZero = (
 			resolve(outcome);
 		};
 
-		const useShell = spec.args.length === 0;
-		const proc = spawn(spec.command, [...spec.args], {
+		const proc = spawn(spec.command, [], {
 			cwd,
-			shell: useShell,
+			shell: true,
 			stdio: ["ignore", "pipe", "pipe"],
 		});
 
@@ -88,7 +87,7 @@ const runCommandExitsZero = (
 			hardTimer.unref?.();
 			settle({
 				kind: "fail",
-				reason: `command timed out after ${timeoutMs}ms: ${formatCommand(spec.command, spec.args)}`,
+				reason: `command timed out after ${timeoutMs}ms: ${spec.command}`,
 			});
 		}, timeoutMs);
 		softTimer.unref?.();
@@ -130,25 +129,21 @@ const runCommandExitsZero = (
 			}
 			settle({
 				kind: "fail",
-				reason: formatCommandFailure(spec.command, spec.args, code, signal, stdout, stderr),
+				reason: formatCommandFailure(spec.command, code, signal, stdout, stderr),
 			});
 		});
 	});
 };
 
-const formatCommand = (command: string, args: readonly string[]): string =>
-	args.length > 0 ? `${command} ${args.join(" ")}` : command;
-
 const formatCommandFailure = (
 	command: string,
-	args: readonly string[],
 	code: number | null,
 	signal: NodeJS.Signals | null,
 	stdout: string,
 	stderr: string,
 ): string => {
 	const status = signal ? `killed by signal ${signal}` : `exited with code ${code ?? "unknown"}`;
-	const prefix = `${formatCommand(command, args)} ${status}`;
+	const prefix = `${command} ${status}`;
 	const combined = [
 		stderr.length > 0 ? `stderr: ${truncateOutput(stderr)}` : null,
 		stdout.length > 0 ? `stdout: ${truncateOutput(stdout)}` : null,

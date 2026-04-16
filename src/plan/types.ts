@@ -61,7 +61,6 @@ export type CheckSpec =
 	| {
 			readonly kind: "command_exits_zero";
 			readonly command: string;
-			readonly args: readonly string[];
 			readonly cwd?: string;
 			readonly timeoutMs?: number;
 	  };
