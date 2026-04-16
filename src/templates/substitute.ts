@@ -46,7 +46,6 @@ export const instantiateTemplate = (
 		});
 	}
 
-	const declaredNames = new Set(template.parameters.map((p) => p.name));
 	const substitutionMap = new Map<string, string>();
 	for (const param of template.parameters) {
 		substitutionMap.set(param.name, args[param.name] ?? "");
@@ -81,9 +80,7 @@ export const instantiateTemplate = (
 		plan: cloned as PlanDraftDoc,
 		templateName: template.name,
 		templateArgs: Object.fromEntries(
-			template.parameters
-				.filter((p) => p.name in args)
-				.map((p) => [p.name, args[p.name]!]),
+			template.parameters.filter((p) => p.name in args).map((p) => [p.name, args[p.name]!]),
 		),
 	});
 };

@@ -14,6 +14,7 @@ import type { AgentToolResult, AgentToolUpdateCallback, ExtensionContext } from 
 import { actorRegistryFromDiscovery } from "./actors/discovery.js";
 import { createSubprocessActorEngine } from "./actors/engine.js";
 import type { ActorConfig, ActorDiscovery } from "./actors/types.js";
+import type { RelayDetails } from "./index.js";
 import { compile } from "./plan/compile.js";
 import { formatCompileError } from "./plan/compile-error-format.js";
 import type { PlanDraftDoc } from "./plan/draft.js";
@@ -22,7 +23,6 @@ import { ArtifactStore } from "./runtime/artifacts.js";
 import { AuditLog } from "./runtime/audit.js";
 import { buildAttemptTimeline, buildRunReport, renderRunReportText } from "./runtime/run-report.js";
 import { Scheduler } from "./runtime/scheduler.js";
-import type { RelayDetails } from "./index.js";
 
 export interface ExecuteInput {
 	readonly plan: PlanDraftDoc;

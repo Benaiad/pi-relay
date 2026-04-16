@@ -12,12 +12,11 @@
 
 import type { ExtensionAPI, Theme } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
-import { Type, type Static } from "@sinclair/typebox";
+import { type Static, Type } from "@sinclair/typebox";
 import { discoverActors } from "./actors/discovery.js";
 import { executePlan } from "./execute.js";
 import type { RelayDetails } from "./index.js";
 import { renderRelayResult } from "./index.js";
-import { renderPlanPreview } from "./render/plan-preview.js";
 import { discoverPlanTemplates } from "./templates/discovery.js";
 import { formatTemplateError } from "./templates/errors.js";
 import { instantiateTemplate } from "./templates/substitute.js";

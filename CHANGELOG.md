@@ -4,6 +4,31 @@
 
 ### Added
 
+- **`replay` tool** — a second tool that runs saved, parameterized plan
+  templates by name. The model calls `replay` with a template name and
+  arguments; Relay substitutes, validates, compiles, and executes through
+  the same pipeline `relay` uses. Templates are YAML-body markdown files
+  discovered from `~/.pi/agent/relay/plans/` and `<cwd>/.pi/relay/plans/`.
+- Template discovery with YAML frontmatter (name, description, parameters)
+  and YAML body parsing. Cross-validates actor references at load time.
+- Post-parse substitution engine: `{{name}}` placeholders in all string
+  values, residual placeholder detection, PlanDraftSchema validation after
+  substitution.
+- Shared `executePlan` pipeline extracted from `index.ts` — both tools
+  call into the same compile → review → schedule flow.
+- Two sample templates: `plans/refactor-module.md` and
+  `plans/review-fix-loop.md`.
+
+### Changed
+
+- **Directory consolidation.** Actor files moved from
+  `~/.pi/agent/relay-actors/` to `~/.pi/agent/relay/actors/`. Project-scope
+  actors moved from `<cwd>/.pi/relay-actors/` to `<cwd>/.pi/relay/actors/`.
+  Templates live alongside actors under the same `relay/` parent. A
+  one-time warning is emitted if the legacy path exists.
+
+### Previously added
+
 - Repository scaffold with TypeScript, biome, vitest, and the `pi` manifest
   field in `package.json`.
 - Architecture document (`architecture/RELAY_PI.md`) describing the goals,

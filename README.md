@@ -2,11 +2,14 @@
 
 Graph-based planning and execution for the [pi coding agent](https://github.com/badlogic/pi-mono).
 
-The pi assistant decides whether a task is simple enough for direct tool
-calls or complex enough to delegate to Relay. When it delegates, it produces
-a structured plan as the arguments of a single `relay` tool call. Relay
-compiles the plan into a validated executable program, runs it as a DAG of
-typed action, check, and terminal steps, and returns a structured run report.
+Two tools, one runtime:
+
+- **`relay`** — the model builds an ad-hoc plan from scratch for novel tasks.
+- **`replay`** — the model invokes a saved plan template by name with
+  arguments for recurring workflows.
+
+Both compile through the same compiler, run on the same scheduler, and
+render with the same TUI components.
 
 > Status: v0.1 in development. See [`architecture/RELAY_PI.md`](architecture/RELAY_PI.md)
 > for the design and [`architecture/RELAY_PI_IMPL.md`](architecture/RELAY_PI_IMPL.md)
@@ -60,14 +63,20 @@ npm install
 # symlink is enough — do NOT also symlink individual files inside it.
 ln -sfn "$(pwd)/src" ~/.pi/agent/extensions/relay
 
-# Drop the sample actor files into pi's actor directory
-mkdir -p ~/.pi/agent/relay-actors
+# Drop the sample actor files into pi's relay directory
+mkdir -p ~/.pi/agent/relay/actors
 for actor in actors/*.md; do
-  ln -sf "$(pwd)/$actor" ~/.pi/agent/relay-actors/$(basename "$actor")
+  ln -sf "$(pwd)/$actor" ~/.pi/agent/relay/actors/$(basename "$actor")
+done
+
+# (Optional) Drop the sample plan templates
+mkdir -p ~/.pi/agent/relay/plans
+for plan in plans/*.md; do
+  ln -sf "$(pwd)/$plan" ~/.pi/agent/relay/plans/$(basename "$plan")
 done
 ```
 
-Launch pi as usual. The model will see a `relay` tool in its tool list.
+Launch pi as usual. The model will see `relay` and `replay` tools in its tool list.
 Ask pi for something that needs planning + implementation + verification
 (for example: "plan the migration to adjust the auth flow, implement it,
 and make sure the test suite still passes") and the model should call
@@ -76,7 +85,7 @@ and make sure the test suite still passes") and the model should call
 ## Writing an actor
 
 Actors are markdown files with YAML frontmatter, dropped into
-`~/.pi/agent/relay-actors/` (user scope) or `<project>/.pi/relay-actors/`
+`~/.pi/agent/relay/actors/` (user scope) or `<project>/.pi/relay/actors/`
 (project scope). The structure matches pi's existing subagent convention:
 
 ```markdown
@@ -116,6 +125,79 @@ Two discovery phases with different cache semantics:
   *editing the body* of an existing actor (its system prompt or tool list)
   takes effect on the very next call without `/reload`. Only adding, renaming,
   or removing actors needs a reload.
+
+## Replay — saved plan templates
+
+For recurring workflows, save a plan as a markdown file with YAML
+frontmatter. The `replay` tool lets the model (or you) invoke it by name
+with arguments, and the plan structure runs exactly as authored.
+
+Templates live in `~/.pi/agent/relay/plans/` (user scope) or
+`<project>/.pi/relay/plans/` (project scope).
+
+```markdown
+---
+name: refactor-module
+description: Rename a symbol across a module, verified by the test suite.
+parameters:
+  - name: module
+    description: Path to the module directory or file.
+    required: true
+  - name: old_name
+    description: Current symbol name to rename.
+    required: true
+  - name: new_name
+    description: New symbol name.
+    required: true
+---
+
+task: "Rename `{{old_name}}` to `{{new_name}}` in `{{module}}`"
+entryStep: rename
+artifacts:
+  - id: rename_notes
+    description: Summary of what was changed.
+    shape: { kind: untyped_json }
+steps:
+  - kind: action
+    id: rename
+    actor: worker
+    instruction: |
+      Rename `{{old_name}}` to `{{new_name}}` throughout `{{module}}`.
+      Write a summary to rename_notes.
+    reads: []
+    writes: [rename_notes]
+    routes: [{ route: done, to: verify }]
+  - kind: check
+    id: verify
+    check: { kind: command_exits_zero, command: npm, args: [test] }
+    onPass: success
+    onFail: failed
+  - kind: terminal
+    id: success
+    outcome: success
+    summary: Rename verified.
+  - kind: terminal
+    id: failed
+    outcome: failure
+    summary: Tests failed after rename.
+```
+
+The frontmatter declares `name`, `description`, and `parameters`. The
+body is the plan in YAML with `{{param}}` placeholders. When the model
+calls `replay` with `{ name: "refactor-module", args: { module: "src/foo", old_name: "Foo", new_name: "Bar" } }`,
+Relay substitutes the arguments, validates against the plan schema,
+compiles, and runs — no model reinterpretation of the plan structure.
+
+The `replay` tool description dynamically lists available templates:
+
+```
+Available plans:
+  - refactor-module(module, old_name, new_name): Rename a symbol across a module.
+  - review-fix-loop(target, task, criteria): Implement, review, fix loop.
+```
+
+Two sample templates ship with the repo: `plans/refactor-module.md` and
+`plans/review-fix-loop.md`.
 
 ## Writing a plan (JSON shape)
 

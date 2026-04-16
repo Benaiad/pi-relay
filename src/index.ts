@@ -17,14 +17,14 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { discoverActors } from "./actors/discovery.js";
 import type { ActorConfig } from "./actors/types.js";
+import { executePlan } from "./execute.js";
 import { PlanDraftSchema } from "./plan/draft.js";
 import { renderPlanPreview } from "./render/plan-preview.js";
 import { renderCancelled, renderCompileFailure, renderRefined, renderRunResult } from "./render/run-result.js";
+import { registerReplayTool } from "./replay.js";
 import type { RelayRunState } from "./runtime/events.js";
 import type { AttemptTimelineEntry } from "./runtime/run-report.js";
-import { executePlan } from "./execute.js";
 import { discoverPlanTemplates } from "./templates/discovery.js";
-import { registerReplayTool } from "./replay.js";
 
 /**
  * The `details` payload carried by `onUpdate` and the final tool result.

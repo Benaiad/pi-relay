@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ActionOutcome, ActionRequest, ActorConfig, ActorEngine, ActorUsage } from "../src/actors/types.js";
 import { emptyUsage } from "../src/actors/types.js";
 import { type ActorRegistry, compile } from "../src/plan/compile.js";
-import { ActorId, ArtifactId, RouteId, unwrap } from "../src/plan/ids.js";
+import { ActorId, type ArtifactId, unwrap } from "../src/plan/ids.js";
 import { ArtifactStore } from "../src/runtime/artifacts.js";
 import { AuditLog } from "../src/runtime/audit.js";
 import { Scheduler } from "../src/runtime/scheduler.js";
@@ -145,7 +145,13 @@ describe("replay integration", () => {
 
 		const program = compileResult.value;
 		const engine = new SimpleActorEngine();
-		const clock = { tick: 0, next() { this.tick++; return this.tick; } };
+		const clock = {
+			tick: 0,
+			next() {
+				this.tick++;
+				return this.tick;
+			},
+		};
 		const audit = new AuditLog();
 
 		const scheduler = new Scheduler({

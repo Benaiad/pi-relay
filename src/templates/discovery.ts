@@ -86,11 +86,7 @@ const isDirectory = (p: string): boolean => {
 	}
 };
 
-const loadTemplatesFromDir = (
-	dir: string,
-	source: TemplateSource,
-	warnings: TemplateWarning[],
-): PlanTemplate[] => {
+const loadTemplatesFromDir = (dir: string, source: TemplateSource, warnings: TemplateWarning[]): PlanTemplate[] => {
 	if (!fs.existsSync(dir)) return [];
 
 	let entries: fs.Dirent[];
@@ -178,7 +174,11 @@ const parseParameters = (
 
 	for (const entry of raw) {
 		if (typeof entry !== "object" || entry === null) {
-			warnings.push({ templateName, message: "Each parameter must be an object with 'name' and 'description'", filePath });
+			warnings.push({
+				templateName,
+				message: "Each parameter must be an object with 'name' and 'description'",
+				filePath,
+			});
 			return null;
 		}
 		const e = entry as Record<string, unknown>;
