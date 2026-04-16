@@ -14,7 +14,8 @@
  * break prompt caching. Users run `/reload` after editing files.
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { DynamicBorder, getMarkdownTheme, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { Container, Markdown, matchesKey, Text } from "@mariozechner/pi-tui";
 import { discoverActors } from "./actors/discovery.js";
 import type { ActorConfig } from "./actors/types.js";
 import { executePlan } from "./execute.js";
@@ -79,12 +80,30 @@ export default function (pi: ExtensionAPI): void {
 	pi.registerCommand("relay", {
 		description: "Show available relay actors and plan templates",
 		async handler(_args, ctx) {
+			if (!ctx.hasUI) return;
 			const discovery = discoverActors(ctx.cwd, "user");
 			const actorNameSet = new Set(discovery.actors.map((a) => a.name));
 			const templates = discoverPlanTemplates(ctx.cwd, "user", { actorNames: actorNameSet });
+			const md = formatRelayOverview(discovery.actors, templates.templates);
 
-			const items = formatRelayOverview(discovery.actors, templates.templates);
-			await ctx.ui.select("Relay", items);
+			await ctx.ui.custom((_tui, theme, _kb, done) => {
+				const container = new Container();
+				const border = new DynamicBorder((s: string) => theme.fg("accent", s));
+				container.addChild(border);
+				container.addChild(new Text(theme.fg("accent", theme.bold("Relay")), 1, 0));
+				container.addChild(new Markdown(md, 1, 1, getMarkdownTheme()));
+				container.addChild(new Text(theme.fg("dim", "Press Enter or Esc to close"), 1, 0));
+				container.addChild(border);
+				return {
+					render: (width: number) => container.render(width),
+					invalidate: () => container.invalidate(),
+					handleInput: (data: string) => {
+						if (matchesKey(data, "enter") || matchesKey(data, "escape")) {
+							done(undefined);
+						}
+					},
+				};
+			});
 		},
 	});
 }
@@ -119,40 +138,44 @@ export const renderRelayResult = (
 // /relay command
 // ============================================================================
 
-const formatRelayOverview = (actors: readonly ActorConfig[], templates: readonly PlanTemplate[]): string[] => {
-	const items: string[] = [];
+const formatRelayOverview = (actors: readonly ActorConfig[], templates: readonly PlanTemplate[]): string => {
+	const lines: string[] = [];
 
-	items.push("── Actors ──");
+	lines.push("## Actors");
+	lines.push("");
 	if (actors.length === 0) {
-		items.push("  (none — add .md files to ~/.pi/agent/relay/actors/)");
+		lines.push("*None installed.* Add `.md` files to `~/.pi/agent/relay/actors/`");
 	} else {
 		for (const a of actors) {
-			const tools = a.tools ? a.tools.join(", ") : "default";
-			const model = a.model ? ` · model: ${a.model}` : "";
-			items.push(`  ${a.name}: ${a.description}`);
-			items.push(`    tools: ${tools}${model} · source: ${a.source}`);
+			const tools = a.tools ? a.tools.join(", ") : "default tool set";
+			const model = a.model ? `, model: \`${a.model}\`` : "";
+			lines.push(`**${a.name}** — ${a.description}`);
+			lines.push(`  tools: ${tools}${model}`);
+			lines.push("");
 		}
 	}
 
-	items.push("");
-	items.push("── Plan Templates ──");
+	lines.push("");
+	lines.push("## Plan Templates");
+	lines.push("");
 	if (templates.length === 0) {
-		items.push("  (none — add .md files to ~/.pi/agent/relay/plans/)");
+		lines.push("*None installed.* Add `.md` files to `~/.pi/agent/relay/plans/`");
 	} else {
 		for (const t of templates) {
-			const params =
+			const sig =
 				t.parameters.length > 0
 					? t.parameters.map((p) => (p.required ? p.name : `${p.name}?`)).join(", ")
-					: "no parameters";
-			items.push(`  ${t.name}(${params}): ${t.description}`);
+					: "";
+			lines.push(`**${t.name}**(${sig}) — ${t.description}`);
 			for (const p of t.parameters) {
-				const req = p.required ? "required" : "optional";
-				items.push(`    ${p.name} (${req}): ${p.description}`);
+				const req = p.required ? "" : ", optional";
+				lines.push(`- \`${p.name}\`: ${p.description}${req}`);
 			}
+			lines.push("");
 		}
 	}
 
-	return items;
+	return lines.join("\n");
 };
 
 // ============================================================================
