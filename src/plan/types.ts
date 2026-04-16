@@ -79,6 +79,7 @@ export interface ActionStep {
 	readonly writes: readonly ArtifactId[];
 	readonly routes: readonly RouteEdge[];
 	readonly retry?: RetryPolicy;
+	readonly maxRuns?: number;
 	readonly contextPolicy?: ContextPolicy;
 }
 

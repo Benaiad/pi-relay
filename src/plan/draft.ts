@@ -83,6 +83,16 @@ const ActionStepSchema = Type.Object(
 			description: "Outgoing edges. The actor must emit exactly one of these routes on successful completion.",
 		}),
 		retry: Type.Optional(RetryPolicySchema),
+		maxRuns: Type.Optional(
+			Type.Integer({
+				minimum: 1,
+				maximum: 10_000,
+				description:
+					"Maximum times this step can be activated in a single run. Defaults to 10. " +
+					"Increase for steps that are re-entered via back-edges in long-running loops " +
+					"(e.g. an experiment loop that runs overnight).",
+			}),
+		),
 		contextPolicy: Type.Optional(ContextPolicySchema),
 	},
 	{

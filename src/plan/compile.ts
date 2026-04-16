@@ -144,6 +144,7 @@ const brandAction = (doc: Extract<PlanDraftDoc["steps"][number], { kind: "action
 	writes: doc.writes.map((w) => ArtifactId(w)),
 	routes: doc.routes.map((edge) => ({ route: RouteId(edge.route), to: StepId(edge.to) })),
 	retry: doc.retry,
+	maxRuns: doc.maxRuns,
 	contextPolicy: doc.contextPolicy,
 });
 

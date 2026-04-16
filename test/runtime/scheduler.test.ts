@@ -652,7 +652,7 @@ describe("Scheduler — terminal routes", () => {
 		expect(engine.callCounts().get("fix")).toBe(1);
 	});
 
-	it("halts when a single step exceeds maxStepRuns (non-converging loop guard)", async () => {
+	it("halts when an action step exceeds its maxRuns cap", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Two-actor ping-pong that never converges.",
 			artifacts: [{ id: "state", description: "s", shape: { kind: "untyped_json" }, multiWriter: true }],
@@ -665,6 +665,7 @@ describe("Scheduler — terminal routes", () => {
 					reads: [],
 					writes: ["state"],
 					routes: [{ route: "next", to: "b" }],
+					maxRuns: 3,
 				},
 				{
 					kind: "action",
@@ -674,6 +675,7 @@ describe("Scheduler — terminal routes", () => {
 					reads: ["state"],
 					writes: [],
 					routes: [{ route: "again", to: "a" }],
+					maxRuns: 3,
 				},
 				{ kind: "terminal", id: "never", outcome: "success", summary: "never" },
 			],
@@ -685,60 +687,12 @@ describe("Scheduler — terminal routes", () => {
 				["b", [completed("again")]],
 			]),
 		);
-		const compiled = compile(plan, actorRegistry, { generateId: () => "pid" });
-		if (!isOk(compiled)) throw new Error("compile should succeed");
-		const clock = new StubClock();
-		const scheduler = new Scheduler({
-			program: compiled.value,
-			actorEngine: engine,
-			actorsByName: fakeActorsByName,
-			cwd: process.cwd(),
-			clock: () => clock.next(),
-			maxStepRuns: 3,
-		});
+		const { scheduler } = buildScheduler(plan, engine);
 		const report = await scheduler.run();
 		expect(report.outcome).toBe("incomplete");
-		expect(report.summary).toContain("per-step run cap (3)");
-		// Both steps hit the cap at different moments; the one that's about to run
-		// third is the one that gets named.
+		expect(report.summary).toContain("maxRuns cap (3)");
 		const runCounts = engine.callCounts();
 		expect((runCounts.get("a") ?? 0) + (runCounts.get("b") ?? 0)).toBeLessThanOrEqual(6);
-	});
-
-	it("halts with incomplete when a loop exceeds maxActivations", async () => {
-		const plan: PlanDraftDoc = {
-			task: "Infinite loop — should be capped.",
-			artifacts: [{ id: "state", description: "s", shape: { kind: "untyped_json" }, multiWriter: true }],
-			steps: [
-				{
-					kind: "action",
-					id: "spin",
-					actor: "worker",
-					instruction: "spin",
-					reads: [],
-					writes: ["state"],
-					routes: [{ route: "loop", to: "spin" }],
-				},
-				{ kind: "terminal", id: "end", outcome: "success", summary: "never" },
-			],
-			entryStep: "spin",
-		};
-		const engine = new ScriptedActorEngine(new Map([["spin", [completed("loop", { state: 1 })]]]));
-		const compiled = compile(plan, actorRegistry, { generateId: () => "pid" });
-		if (!isOk(compiled)) throw new Error("compile should succeed");
-		const clock = new StubClock();
-		const scheduler = new Scheduler({
-			program: compiled.value,
-			actorEngine: engine,
-			actorsByName: fakeActorsByName,
-			cwd: process.cwd(),
-			clock: () => clock.next(),
-			maxActivations: 5,
-		});
-		const report = await scheduler.run();
-		expect(report.outcome).toBe("incomplete");
-		expect(report.summary).toContain("activation limit reached");
-		expect(engine.callCounts().get("spin")).toBe(5);
 	});
 
 	it("marks unreached branches as skipped after run_finished fires", async () => {
