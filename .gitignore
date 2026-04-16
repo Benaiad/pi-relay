@@ -7,3 +7,7 @@ coverage/
 .env
 .env.local
 *.tsbuildinfo
+examples/autoresearch/result.json
+examples/autoresearch/best.json
+examples/autoresearch/optimize.best.js
+examples/autoresearch/results.tsv
