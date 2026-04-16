@@ -229,6 +229,81 @@ describe("instantiateTemplate", () => {
 		expect(result.value.plan.task).toBe("Run the linter");
 	});
 
+	it("coerces a sole placeholder to a number when the arg is numeric", () => {
+		const template = makeTemplate({
+			parameters: [{ name: "count", description: "a number", required: true }],
+			rawPlan: {
+				task: "test",
+				entryStep: "a",
+				artifacts: [],
+				steps: [
+					{
+						kind: "action",
+						id: "a",
+						actor: "worker",
+						instruction: "do it",
+						reads: [],
+						writes: [],
+						routes: [{ route: "done", to: "b" }],
+						maxRuns: "{{count}}",
+					},
+					{ kind: "terminal", id: "b", outcome: "success", summary: "ok" },
+				],
+			},
+		});
+		const result = instantiateTemplate(template, { count: "25" });
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		const step = result.value.plan.steps[0]!;
+		if (step.kind !== "action") throw new Error("expected action");
+		expect(step.maxRuns).toBe(25);
+		expect(typeof step.maxRuns).toBe("number");
+	});
+
+	it("coerces booleans when the entire value is a placeholder", () => {
+		const template = makeTemplate({
+			parameters: [{ name: "multi", description: "bool", required: true }],
+			rawPlan: {
+				task: "test",
+				entryStep: "a",
+				artifacts: [{ id: "x", description: "x", shape: { kind: "untyped_json" }, multiWriter: "{{multi}}" }],
+				steps: [
+					{
+						kind: "action",
+						id: "a",
+						actor: "worker",
+						instruction: "do it",
+						reads: [],
+						writes: ["x"],
+						routes: [{ route: "done", to: "b" }],
+					},
+					{ kind: "terminal", id: "b", outcome: "success", summary: "ok" },
+				],
+			},
+		});
+		const result = instantiateTemplate(template, { multi: "true" });
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.value.plan.artifacts[0]!.multiWriter).toBe(true);
+	});
+
+	it("keeps string type when placeholder is embedded in a larger string", () => {
+		const template = makeTemplate({
+			parameters: [{ name: "n", description: "num", required: true }],
+			rawPlan: {
+				task: "run {{n}} times",
+				entryStep: "a",
+				artifacts: [],
+				steps: [{ kind: "terminal", id: "a", outcome: "success", summary: "ok" }],
+			},
+		});
+		const result = instantiateTemplate(template, { n: "42" });
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.value.plan.task).toBe("run 42 times");
+		expect(typeof result.value.plan.task).toBe("string");
+	});
+
 	it("does not mutate the original rawPlan", () => {
 		const template = makeTemplate();
 		const originalTask = template.rawPlan.task;

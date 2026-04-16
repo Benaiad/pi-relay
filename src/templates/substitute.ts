@@ -89,12 +89,14 @@ export const instantiateTemplate = (
 // Internal helpers
 // ============================================================================
 
+const SINGLE_PLACEHOLDER_RE = /^\{\{([^}]+)\}\}$/;
+
 const substituteStrings = (obj: unknown, map: ReadonlyMap<string, string>): void => {
 	if (Array.isArray(obj)) {
 		for (let i = 0; i < obj.length; i++) {
 			const val = obj[i];
 			if (typeof val === "string") {
-				obj[i] = replaceAll(val, map);
+				obj[i] = substituteValue(val, map);
 			} else if (typeof val === "object" && val !== null) {
 				substituteStrings(val, map);
 			}
@@ -107,7 +109,7 @@ const substituteStrings = (obj: unknown, map: ReadonlyMap<string, string>): void
 		for (const key of Object.keys(record)) {
 			const val = record[key];
 			if (typeof val === "string") {
-				record[key] = replaceAll(val, map);
+				record[key] = substituteValue(val, map);
 			} else if (typeof val === "object" && val !== null) {
 				substituteStrings(val, map);
 			}
@@ -115,11 +117,26 @@ const substituteStrings = (obj: unknown, map: ReadonlyMap<string, string>): void
 	}
 };
 
-const replaceAll = (str: string, map: ReadonlyMap<string, string>): string =>
-	str.replace(PLACEHOLDER_RE, (match, name: string) => {
+const substituteValue = (str: string, map: ReadonlyMap<string, string>): unknown => {
+	const singleMatch = SINGLE_PLACEHOLDER_RE.exec(str);
+	if (singleMatch) {
+		const value = map.get(singleMatch[1]!);
+		if (value !== undefined) return coerce(value);
+		return str;
+	}
+	return str.replace(PLACEHOLDER_RE, (match, name: string) => {
 		const value = map.get(name);
 		return value !== undefined ? value : match;
 	});
+};
+
+const coerce = (value: string): unknown => {
+	if (/^-?\d+$/.test(value)) return Number.parseInt(value, 10);
+	if (/^-?\d+\.\d+$/.test(value)) return Number.parseFloat(value);
+	if (value === "true") return true;
+	if (value === "false") return false;
+	return value;
+};
 
 interface ResidualPlaceholder {
 	readonly placeholder: string;

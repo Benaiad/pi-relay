@@ -17,6 +17,9 @@ parameters:
   - name: recover
     description: "Shell command to restore the target file after a crash, e.g. 'cp optimize.best.js optimize.js'."
     required: true
+  - name: max_experiments
+    description: "Maximum number of experiments to run, e.g. '50' for overnight or '10' for a quick test."
+    required: true
 ---
 
 task: "Optimize {{target}} for {{goal}}"
@@ -47,7 +50,7 @@ steps:
     reads: []
     writes: []
     routes: [{ route: done, to: benchmark }]
-    maxRuns: 50
+    maxRuns: "{{max_experiments}}"
   - kind: check
     id: benchmark
     check: { kind: command_exits_zero, command: "{{benchmark}}" }
