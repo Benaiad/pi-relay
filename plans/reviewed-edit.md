@@ -1,19 +1,19 @@
 ---
 name: reviewed-edit
-description: Make a change, have it reviewed by a fresh-context reviewer, and iterate until approved. Then verify with a deterministic check.
+description: "Implement, then two-stage fresh-context review: first spec compliance, then code quality. Fix issues in a loop until both reviewers approve, then verify with a deterministic check."
 parameters:
   - name: task
     description: What to implement. Include file paths and expected behavior.
     required: true
   - name: criteria
-    description: What the reviewer checks against — quality bar, requirements, edge cases to cover.
+    description: Acceptance criteria the spec reviewer checks against.
     required: true
   - name: verify
     description: "Shell command that must exit 0 after approval, e.g. 'npm test && npm run lint'."
     required: true
 ---
 
-task: "{{task}} (reviewed against: {{criteria}})"
+task: "{{task}}"
 successCriteria: "{{criteria}}"
 entryStep: implement
 artifacts:
@@ -21,8 +21,12 @@ artifacts:
     description: Implementation and fix notes from the worker.
     shape: { kind: untyped_json }
     multiWriter: true
-  - id: verdict
-    description: "Review verdict: approved or changes_requested with specific feedback."
+  - id: spec_verdict
+    description: "Spec compliance verdict: does the implementation match the requirements?"
+    shape: { kind: untyped_json }
+    multiWriter: true
+  - id: quality_verdict
+    description: "Code quality verdict: is the implementation well-written?"
     shape: { kind: untyped_json }
     multiWriter: true
 steps:
@@ -34,22 +38,47 @@ steps:
       Write a summary of your changes to the notes artifact.
     reads: []
     writes: [notes]
-    routes: [{ route: done, to: review }]
+    routes: [{ route: done, to: spec_review }]
   - kind: action
-    id: review
+    id: spec_review
     actor: reviewer
     instruction: |
-      Review the implementation against these criteria:
+      Review the implementation for spec compliance only.
+      The requirements are:
       {{criteria}}
 
-      Read the notes artifact and the actual files to understand what changed.
-      Write a verdict artifact:
-      - If acceptable: {"approved": true, "summary": "..."}
+      Read the notes artifact and the actual changed files.
+      Check: does the implementation satisfy every requirement?
+      Ignore code quality — that's a separate review.
+
+      Write a spec_verdict artifact:
+      - If compliant: {"compliant": true}
+      - If not: {"compliant": false, "gaps": ["requirement X is missing", ...]}
+    reads: [notes]
+    writes: [spec_verdict]
+    routes:
+      - { route: approved, to: quality_review }
+      - { route: changes_requested, to: fix }
+  - kind: action
+    id: quality_review
+    actor: reviewer
+    instruction: |
+      Review the implementation for code quality only.
+      Spec compliance has already been verified — focus on:
+      - Correctness and edge cases
+      - Error handling
+      - Naming and readability
+      - Unnecessary complexity
+
+      Read the notes artifact and the actual changed files.
+
+      Write a quality_verdict artifact:
+      - If acceptable: {"approved": true}
       - If not: {"approved": false, "issues": ["..."], "fixes": ["..."]}
 
       Be specific. Name files, functions, and line numbers.
     reads: [notes]
-    writes: [verdict]
+    writes: [quality_verdict]
     routes:
       - { route: approved, to: verify }
       - { route: changes_requested, to: fix }
@@ -57,11 +86,12 @@ steps:
     id: fix
     actor: worker
     instruction: |
-      Read the verdict artifact and apply every requested change.
+      Read the spec_verdict and quality_verdict artifacts.
+      Apply every requested change.
       Update the notes artifact with what you fixed.
-    reads: [verdict]
+    reads: [spec_verdict, quality_verdict]
     writes: [notes]
-    routes: [{ route: done, to: review }]
+    routes: [{ route: done, to: spec_review }]
     retry: { maxAttempts: 3 }
   - kind: check
     id: verify
@@ -71,8 +101,8 @@ steps:
   - kind: terminal
     id: done
     outcome: success
-    summary: "Change approved by reviewer and verified."
+    summary: "Implemented, reviewed (spec + quality), and verified."
   - kind: terminal
     id: failed
     outcome: failure
-    summary: "Verification failed after review approval."
+    summary: Verification failed after review approval.
