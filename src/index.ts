@@ -17,7 +17,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { DynamicBorder, getAgentDir, getMarkdownTheme, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { DynamicBorder, type ExtensionAPI, getAgentDir, getMarkdownTheme } from "@mariozechner/pi-coding-agent";
 import { Container, Markdown, matchesKey, Text } from "@mariozechner/pi-tui";
 import { discoverActors } from "./actors/discovery.js";
 import type { ActorConfig } from "./actors/types.js";
@@ -222,9 +222,7 @@ const formatRelayOverview = (actors: readonly ActorConfig[], templates: readonly
 	} else {
 		for (const t of templates) {
 			const sig =
-				t.parameters.length > 0
-					? t.parameters.map((p) => (p.required ? p.name : `${p.name}?`)).join(", ")
-					: "";
+				t.parameters.length > 0 ? t.parameters.map((p) => (p.required ? p.name : `${p.name}?`)).join(", ") : "";
 			lines.push(`**${t.name}**(${sig}) — ${t.description}`);
 			for (const p of t.parameters) {
 				const req = p.required ? "" : ", optional";

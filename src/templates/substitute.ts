@@ -147,10 +147,11 @@ const findResidualPlaceholders = (obj: unknown, path: string): ResidualPlacehold
 	const results: ResidualPlaceholder[] = [];
 
 	if (typeof obj === "string") {
-		let match: RegExpExecArray | null;
 		PLACEHOLDER_RE.lastIndex = 0;
-		while ((match = PLACEHOLDER_RE.exec(obj)) !== null) {
+		let match = PLACEHOLDER_RE.exec(obj);
+		while (match !== null) {
 			results.push({ placeholder: match[1]!, fieldPath: path || "(root)" });
+			match = PLACEHOLDER_RE.exec(obj);
 		}
 		return results;
 	}

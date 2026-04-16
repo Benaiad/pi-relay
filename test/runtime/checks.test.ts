@@ -40,7 +40,7 @@ describe("runCheck (file_exists)", () => {
 describe("runCheck (command_exits_zero)", () => {
 	it("passes when the command exits 0", async () => {
 		const outcome = await runCheck(
-			{ kind: "command_exits_zero", command: "node -e \"process.exit(0)\"" },
+			{ kind: "command_exits_zero", command: 'node -e "process.exit(0)"' },
 			{ cwd: process.cwd() },
 		);
 		expect(outcome.kind).toBe("pass");
@@ -70,7 +70,7 @@ describe("runCheck (command_exits_zero)", () => {
 		const outcome = await runCheck(
 			{
 				kind: "command_exits_zero",
-				command: "node -e \"setTimeout(() => process.exit(0), 5000)\"",
+				command: 'node -e "setTimeout(() => process.exit(0), 5000)"',
 				timeoutMs: 200,
 			},
 			{ cwd: process.cwd() },
@@ -86,7 +86,7 @@ describe("runCheck (command_exits_zero)", () => {
 		const promise = runCheck(
 			{
 				kind: "command_exits_zero",
-				command: "node -e \"setTimeout(() => process.exit(0), 5000)\"",
+				command: 'node -e "setTimeout(() => process.exit(0), 5000)"',
 				timeoutMs: 10_000,
 			},
 			{ cwd: process.cwd(), signal: ctl.signal },
