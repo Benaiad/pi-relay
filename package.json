@@ -5,7 +5,9 @@
 	"type": "module",
 	"main": "src/index.ts",
 	"pi": {
-		"extensions": ["src/index.ts"]
+		"extensions": [
+			"src/index.ts"
+		]
 	},
 	"files": [
 		"src",
@@ -55,5 +57,8 @@
 		"dag",
 		"planning",
 		"agent"
-	]
+	],
+	"dependencies": {
+		"yaml": "^2.8.3"
+	}
 }
