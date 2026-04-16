@@ -68,5 +68,11 @@ export const formatCompileError = (error: CompileError): string => {
 				`Step '${unwrap(error.stepId)}' requests contextPolicy '${error.policy}', which is not supported in v0.1. ` +
 				`Only 'fresh_per_run' is available. Remove the override or use 'fresh_per_run'.`
 			);
+
+		case "accumulate_requires_multi_writer":
+			return (
+				`Artifact '${unwrap(error.artifactId)}' has accumulate: true but multiWriter is not set. ` +
+				`Accumulating artifacts must also set multiWriter: true.`
+			);
 	}
 };

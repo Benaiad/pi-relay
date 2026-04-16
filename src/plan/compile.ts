@@ -257,11 +257,16 @@ const buildArtifacts = (
 		if (artifacts.has(id)) {
 			return err({ kind: "duplicate_artifact", artifactId: id });
 		}
+		const accumulate = c.accumulate === true;
+		if (accumulate && c.multiWriter !== true) {
+			return err({ kind: "accumulate_requires_multi_writer", artifactId: id });
+		}
 		artifacts.set(id, {
 			id,
 			description: c.description,
 			shape: c.shape,
 			multiWriter: c.multiWriter === true,
+			accumulate,
 		});
 	}
 

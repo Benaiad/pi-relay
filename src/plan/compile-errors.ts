@@ -55,4 +55,8 @@ export type CompileError =
 			readonly kind: "unsupported_context_policy";
 			readonly stepId: StepId;
 			readonly policy: ContextPolicy;
+	  }
+	| {
+			readonly kind: "accumulate_requires_multi_writer";
+			readonly artifactId: ArtifactId;
 	  };

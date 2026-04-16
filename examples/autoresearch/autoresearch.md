@@ -25,7 +25,12 @@ parameters:
 task: "Optimize {{target}} for {{goal}}"
 successCriteria: "The optimization loop runs until maxRuns is reached. Improvements are kept, non-improvements are reverted by the evaluate script."
 entryStep: experiment
-artifacts: []
+artifacts:
+  - id: experiment_log
+    description: "Accumulated log of what each experiment tried and why. Each entry is appended automatically — the actor writes one entry per iteration."
+    shape: { kind: untyped_json }
+    multiWriter: true
+    accumulate: true
 steps:
   - kind: action
     id: experiment
@@ -34,8 +39,10 @@ steps:
       You are an autonomous researcher optimizing {{target}} for {{goal}}.
 
       Read {{target}} to understand the current implementation.
-      Check if there are previous results (look for results files in the
-      working directory) to understand what has already been tried.
+
+      Read the experiment_log artifact to see what has been tried before.
+      Do NOT repeat approaches that have already been tried. If an approach
+      was tried and discarded, try something structurally different.
 
       Propose and apply ONE optimization to {{target}}. Be creative but
       disciplined — try one idea at a time. Consider:
@@ -47,8 +54,11 @@ steps:
 
       Do NOT modify any other files. The benchmark and evaluation scripts
       are fixed.
-    reads: []
-    writes: []
+
+      Write an entry to experiment_log describing what you tried and why:
+      { "approach": "what you changed", "rationale": "why this should help" }
+    reads: [experiment_log]
+    writes: [experiment_log]
     routes: [{ route: done, to: benchmark }]
     maxRuns: "{{max_experiments}}"
   - kind: check

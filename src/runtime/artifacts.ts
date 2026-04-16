@@ -166,7 +166,9 @@ export class ArtifactStore {
 			if (!shapeResult.ok) {
 				return err({ kind: "shape_mismatch", artifactId, reason: shapeResult.error });
 			}
-			patch.push({ id: artifactId, value, writerStep: stepId, committedAt });
+
+			const finalValue = contract.accumulate ? this.appendToAccumulator(artifactId, value) : value;
+			patch.push({ id: artifactId, value: finalValue, writerStep: stepId, committedAt });
 		}
 
 		for (const entry of patch) {
@@ -183,5 +185,11 @@ export class ArtifactStore {
 	/** Whether a specific artifact has been committed. */
 	has(id: ArtifactId): boolean {
 		return this.committed.has(id);
+	}
+
+	private appendToAccumulator(id: ArtifactId, value: unknown): unknown[] {
+		const existing = this.committed.get(id);
+		const prior = existing !== undefined && Array.isArray(existing.value) ? existing.value : [];
+		return [...prior, value];
 	}
 }

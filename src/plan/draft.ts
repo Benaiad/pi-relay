@@ -207,6 +207,15 @@ const ArtifactContractSchema = Type.Object(
 					"artifacts — single-writer is the default and makes plans easier to reason about.",
 			}),
 		),
+		accumulate: Type.Optional(
+			Type.Boolean({
+				description:
+					"When true, each commit appends to an array instead of replacing the value. " +
+					"Reads return the full array of all committed entries. Use for loop artifacts " +
+					"where each iteration should see the history of prior iterations (e.g. experiment logs). " +
+					"Requires multiWriter: true.",
+			}),
+		),
 	},
 	{ description: "Compile-time declaration of an artifact's identity, description, and shape." },
 );

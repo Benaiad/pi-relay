@@ -47,6 +47,7 @@ export interface ArtifactContract {
 	readonly description: string;
 	readonly shape: ArtifactShape;
 	readonly multiWriter?: boolean;
+	readonly accumulate?: boolean;
 }
 
 /**
