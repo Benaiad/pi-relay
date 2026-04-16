@@ -15,9 +15,25 @@ metric improved.
 - `benchmark.js` — runs `findPrimes(50000)` three times, takes best time, verifies correctness (DO NOT MODIFY)
 - `evaluate.js` — compares `result.json` to `best.json`, keeps or reverts (DO NOT MODIFY)
 
+## Installing the plan template
+
+The autoresearch template doesn't ship with the default plans. Add it
+to make it available via the `replay` tool:
+
+```bash
+# Global (available in all projects)
+cp autoresearch.md ~/.pi/agent/relay/plans/
+
+# Or project-local (available only in the current project)
+mkdir -p .pi/relay/plans
+cp autoresearch.md .pi/relay/plans/
+```
+
+Then `/reload` in pi.
+
 ## Running
 
-From this directory, ask pi to use the `autoresearch` replay template:
+Ask pi to use the `autoresearch` replay template:
 
 ```
 Use replay with the autoresearch template:
@@ -26,6 +42,7 @@ Use replay with the autoresearch template:
   benchmark: node benchmark.js
   evaluate: node evaluate.js
   recover: cp optimize.best.js optimize.js
+  max_experiments: 10
 ```
 
 The agent iterates, trying progressively better algorithms (e.g.,
