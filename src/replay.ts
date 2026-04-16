@@ -99,10 +99,18 @@ export const registerReplayTool = (pi: ExtensionAPI, templates: readonly PlanTem
 // ============================================================================
 
 export const buildReplayToolDescription = (templates: readonly PlanTemplate[]): string => {
-	const staticPart =
-		"Run a saved relay plan template by name with arguments. " +
-		"Use this when a recurring workflow has been saved as a template. " +
-		"The plan structure is fixed by the template author; you provide only the arguments.";
+	const staticPart = [
+		"Run a saved relay plan by name with arguments.",
+		"Each plan is a multi-step workflow that spawns AI agents to read, edit, and write files,",
+		"run shell commands, and pass structured artifacts between steps.",
+		"Deterministic verification gates (test suites, linters, type checkers) decide pass/fail — not the agents.",
+		"The user reviews and approves the plan before execution begins.",
+		"",
+		"Use this when the task matches a saved plan. You provide only the arguments;",
+		"the plan structure, actors, and verification gates are fixed by the template author.",
+		"Do NOT use this for tasks that don't match any available plan — use relay for ad-hoc workflows,",
+		"or call tools directly for simple one-step work.",
+	].join(" ");
 
 	if (templates.length === 0) {
 		return [
