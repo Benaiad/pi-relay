@@ -35,18 +35,17 @@ export type ArtifactShape = { readonly kind: "untyped_json" };
  * their `reads`). The compiler enforces single-writer ownership; multiple
  * writers reject the plan.
  *
- * `multiWriter: true` relaxes the single-writer check so a plan can express
- * a loop: multiple steps (or the same step re-entered via back-edges) write
- * to the artifact, and readers see the latest committed value. Use this
- * when you have a review/fix loop that re-runs a step with updated inputs.
- * The runtime always commits atomically — in-flight writes stay invisible
- * until the writer succeeds — so latest-wins is deterministic.
+ * Multiple steps can write to the same artifact. Readers see the latest
+ * committed value. The runtime always commits atomically — in-flight
+ * writes stay invisible until the writer succeeds.
+ *
+ * `accumulate: true` changes write semantics from replace to append:
+ * each commit adds an entry to an array, and readers see the full history.
  */
 export interface ArtifactContract {
 	readonly id: ArtifactId;
 	readonly description: string;
 	readonly shape: ArtifactShape;
-	readonly multiWriter?: boolean;
 	readonly accumulate?: boolean;
 }
 

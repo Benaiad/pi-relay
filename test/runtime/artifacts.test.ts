@@ -146,7 +146,7 @@ describe("ArtifactStore", () => {
 	it("accumulates values when artifact has accumulate: true", () => {
 		const plan: PlanDraftDoc = {
 			task: "t",
-			artifacts: [{ id: "log", description: "log", shape: { kind: "untyped_json" }, multiWriter: true, accumulate: true }],
+			artifacts: [{ id: "log", description: "log", shape: { kind: "untyped_json" }, accumulate: true }],
 			steps: [
 				{
 					kind: "action",
@@ -178,30 +178,6 @@ describe("ArtifactStore", () => {
 		store.commit(StepId("step"), new Map([[ArtifactId("log"), { tried: "wheel" }]]));
 		const snap = store.snapshot([ArtifactId("log")]);
 		expect(snap.get(ArtifactId("log"))).toEqual([{ tried: "sieve" }, { tried: "bitwise" }, { tried: "wheel" }]);
-	});
-
-	it("rejects accumulate: true without multiWriter at compile time", () => {
-		const plan: PlanDraftDoc = {
-			task: "t",
-			artifacts: [{ id: "log", description: "log", shape: { kind: "untyped_json" }, accumulate: true }],
-			steps: [
-				{
-					kind: "action",
-					id: "step",
-					actor: "worker",
-					instruction: "do",
-					reads: [],
-					writes: ["log"],
-					routes: [{ route: "done", to: "end" }],
-				},
-				{ kind: "terminal", id: "end", outcome: "success", summary: "ok" },
-			],
-			entryStep: "step",
-		};
-		const result = compile(plan, actors, { generateId: () => "pid" });
-		expect(isErr(result)).toBe(true);
-		if (!isErr(result)) return;
-		expect(result.error.kind).toBe("accumulate_requires_multi_writer");
 	});
 
 	it("formatContractViolation produces a useful message for each variant", () => {

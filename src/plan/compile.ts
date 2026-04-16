@@ -257,24 +257,14 @@ const buildArtifacts = (
 		if (artifacts.has(id)) {
 			return err({ kind: "duplicate_artifact", artifactId: id });
 		}
-		const accumulate = c.accumulate === true;
-		if (accumulate && c.multiWriter !== true) {
-			return err({ kind: "accumulate_requires_multi_writer", artifactId: id });
-		}
 		artifacts.set(id, {
 			id,
 			description: c.description,
 			shape: c.shape,
-			multiWriter: c.multiWriter === true,
-			accumulate,
+			accumulate: c.accumulate === true,
 		});
 	}
 
-	// `writers` stores the FIRST writer seen for each artifact — used by the
-	// runtime for attribution and display. `allowedWriters` stores the
-	// complete permitted set, which the runtime uses on every commit to
-	// authorize the writing step. For single-writer artifacts both maps
-	// agree. For multi-writer artifacts allowedWriters is a superset.
 	const writers = new Map<ArtifactId, StepId>();
 	const allowedWriters = new Map<ArtifactId, Set<StepId>>();
 	const readers = new Map<ArtifactId, Set<StepId>>();
@@ -293,13 +283,6 @@ const buildArtifacts = (
 				});
 			}
 			const prior = writers.get(writeId);
-			if (prior !== undefined && prior !== step.id && !contract.multiWriter) {
-				return err({
-					kind: "multiple_artifact_writers",
-					artifactId: writeId,
-					writers: [prior, step.id],
-				});
-			}
 			if (prior === undefined) writers.set(writeId, step.id);
 			const bucket = allowedWriters.get(writeId) ?? new Set<StepId>();
 			bucket.add(step.id);

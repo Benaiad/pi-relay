@@ -47,24 +47,10 @@ export interface Program {
 	 */
 	readonly edges: ReadonlyMap<EdgeKey, StepId>;
 
-	/**
-	 * Primary producer index: the step the compiler attributes the artifact to.
-	 *
-	 * For single-writer artifacts this is the only writer. For multi-writer
-	 * artifacts (those with `contract.multiWriter === true`) this is the
-	 * first step seen during compile — used for display and attribution.
-	 * Use `allowedWriters` to check commit authorization.
-	 */
+	/** Primary producer: the first step the compiler sees writing each artifact. Used for attribution. */
 	readonly writers: ReadonlyMap<ArtifactId, StepId>;
 
-	/**
-	 * Complete set of steps authorized to commit each artifact.
-	 *
-	 * For single-writer artifacts this is exactly one step id. For
-	 * multi-writer artifacts it contains every step that declared the
-	 * artifact in its `writes` list. The artifact store consults this
-	 * set on every commit to validate the writing step is permitted.
-	 */
+	/** Every step authorized to commit each artifact. The artifact store checks this on every commit. */
 	readonly allowedWriters: ReadonlyMap<ArtifactId, ReadonlySet<StepId>>;
 
 	/** Consumer index: which steps declared they read each artifact. */

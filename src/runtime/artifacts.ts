@@ -148,10 +148,7 @@ export class ArtifactStore {
 			if (contract === undefined) {
 				return err({ kind: "unknown_artifact", artifactId, stepId });
 			}
-			// For single-writer artifacts, exactly one step is allowed. For
-			// multi-writer artifacts (contract.multiWriter === true), any step
-			// that declared the artifact in its `writes` is allowed and commits
-			// are latest-wins.
+			// Any step that declared the artifact in its `writes` is allowed.
 			const permitted = this.program.allowedWriters.get(artifactId);
 			if (permitted === undefined || !permitted.has(stepId)) {
 				const primary = this.program.writers.get(artifactId);

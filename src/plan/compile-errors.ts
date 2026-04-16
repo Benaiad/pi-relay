@@ -43,11 +43,6 @@ export type CompileError =
 			readonly direction: "read" | "write";
 	  }
 	| {
-			readonly kind: "multiple_artifact_writers";
-			readonly artifactId: ArtifactId;
-			readonly writers: readonly StepId[];
-	  }
-	| {
 			readonly kind: "missing_artifact_producer";
 			readonly artifactId: ArtifactId;
 	  }
@@ -56,7 +51,4 @@ export type CompileError =
 			readonly stepId: StepId;
 			readonly policy: ContextPolicy;
 	  }
-	| {
-			readonly kind: "accumulate_requires_multi_writer";
-			readonly artifactId: ArtifactId;
-	  };
+;

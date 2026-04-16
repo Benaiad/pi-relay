@@ -51,12 +51,6 @@ export const formatCompileError = (error: CompileError): string => {
 				`but no contract for that artifact is declared in the plan's artifacts list.`
 			);
 
-		case "multiple_artifact_writers":
-			return (
-				`Artifact '${unwrap(error.artifactId)}' is declared writable by multiple steps: ` +
-				`${listOrNone(error.writers.map(unwrap))}. Every artifact must have exactly one writer.`
-			);
-
 		case "missing_artifact_producer":
 			return (
 				`Artifact '${unwrap(error.artifactId)}' is declared in the plan's artifacts list but no step writes it. ` +
@@ -69,10 +63,5 @@ export const formatCompileError = (error: CompileError): string => {
 				`Only 'fresh_per_run' is available. Remove the override or use 'fresh_per_run'.`
 			);
 
-		case "accumulate_requires_multi_writer":
-			return (
-				`Artifact '${unwrap(error.artifactId)}' has accumulate: true but multiWriter is not set. ` +
-				`Accumulating artifacts must also set multiWriter: true.`
-			);
 	}
 };

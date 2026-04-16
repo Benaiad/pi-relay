@@ -383,8 +383,8 @@ describe("Scheduler — terminal routes", () => {
 		const plan: PlanDraftDoc = {
 			task: "Loop with back-edge, timeline check.",
 			artifacts: [
-				{ id: "notes", description: "n", shape: { kind: "untyped_json" }, multiWriter: true },
-				{ id: "verdict", description: "v", shape: { kind: "untyped_json" }, multiWriter: true },
+				{ id: "notes", description: "n", shape: { kind: "untyped_json" } },
+				{ id: "verdict", description: "v", shape: { kind: "untyped_json" } },
 			],
 			steps: [
 				{
@@ -453,8 +453,8 @@ describe("Scheduler — terminal routes", () => {
 		const plan: PlanDraftDoc = {
 			task: "Simple review loop with one iteration.",
 			artifacts: [
-				{ id: "notes", description: "impl", shape: { kind: "untyped_json" }, multiWriter: true },
-				{ id: "verdict", description: "r", shape: { kind: "untyped_json" }, multiWriter: true },
+				{ id: "notes", description: "impl", shape: { kind: "untyped_json" } },
+				{ id: "verdict", description: "r", shape: { kind: "untyped_json" } },
 			],
 			steps: [
 				{
@@ -525,8 +525,8 @@ describe("Scheduler — terminal routes", () => {
 		const plan: PlanDraftDoc = {
 			task: "Loop once.",
 			artifacts: [
-				{ id: "notes", description: "n", shape: { kind: "untyped_json" }, multiWriter: true },
-				{ id: "verdict", description: "v", shape: { kind: "untyped_json" }, multiWriter: true },
+				{ id: "notes", description: "n", shape: { kind: "untyped_json" } },
+				{ id: "verdict", description: "v", shape: { kind: "untyped_json" } },
 			],
 			steps: [
 				{
@@ -591,8 +591,8 @@ describe("Scheduler — terminal routes", () => {
 		const plan: PlanDraftDoc = {
 			task: "Review-fix loop.",
 			artifacts: [
-				{ id: "notes", description: "impl", shape: { kind: "untyped_json" }, multiWriter: true },
-				{ id: "verdict", description: "review", shape: { kind: "untyped_json" }, multiWriter: true },
+				{ id: "notes", description: "impl", shape: { kind: "untyped_json" } },
+				{ id: "verdict", description: "review", shape: { kind: "untyped_json" } },
 			],
 			steps: [
 				{
@@ -655,7 +655,7 @@ describe("Scheduler — terminal routes", () => {
 	it("halts when an action step exceeds its maxRuns cap", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Two-actor ping-pong that never converges.",
-			artifacts: [{ id: "state", description: "s", shape: { kind: "untyped_json" }, multiWriter: true }],
+			artifacts: [{ id: "state", description: "s", shape: { kind: "untyped_json" } }],
 			steps: [
 				{
 					kind: "action",

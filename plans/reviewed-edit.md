@@ -20,15 +20,12 @@ artifacts:
   - id: notes
     description: Implementation and fix notes from the worker.
     shape: { kind: untyped_json }
-    multiWriter: true
   - id: spec_verdict
     description: "Spec compliance verdict: does the implementation match the requirements?"
     shape: { kind: untyped_json }
-    multiWriter: true
   - id: quality_verdict
     description: "Code quality verdict: is the implementation well-written?"
     shape: { kind: untyped_json }
-    multiWriter: true
 steps:
   - kind: action
     id: implement

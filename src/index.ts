@@ -281,10 +281,9 @@ export const buildToolDescription = (actors: readonly ActorConfig[]): string => 
 		"The actor's persona (tool list, coding standards, output style) stays the same across steps;",
 		"the 'instruction' is how you tell the SAME actor to do DIFFERENT work at different points in the plan.",
 		"",
-		"For review/fix loops, mark the looped artifacts with 'multiWriter: true' in the artifacts list.",
-		"This lets multiple steps (or the same step re-entered via a back-edge) write to the same artifact",
-		"id with latest-wins semantics. Without multiWriter the compiler rejects multi-writer plans. A clean",
-		"review loop looks like: create writes notes → review reads notes writes verdict → fix reads verdict",
-		"writes notes → (back-edge) review → accepted terminates. notes and verdict are both multiWriter.",
+		"Multiple steps can write the same artifact — the latest commit wins. For loops where each iteration",
+		"should see the full history of prior writes, set 'accumulate: true' on the artifact contract.",
+		"A review loop looks like: create writes notes → review reads notes writes verdict → fix reads verdict",
+		"writes notes → (back-edge) review → accepted terminates.",
 	].join("\n");
 };

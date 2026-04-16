@@ -29,7 +29,6 @@ artifacts:
   - id: experiment_log
     description: "Accumulated log of what each experiment tried and why. Each entry is appended automatically — the actor writes one entry per iteration."
     shape: { kind: untyped_json }
-    multiWriter: true
     accumulate: true
 steps:
   - kind: action

@@ -198,22 +198,12 @@ const ArtifactContractSchema = Type.Object(
 			description: "What this artifact represents, e.g. 'parsed requirements' or 'test output JSON'.",
 		}),
 		shape: ArtifactShapeSchema,
-		multiWriter: Type.Optional(
-			Type.Boolean({
-				description:
-					"Opt-in relaxation of the default single-writer rule. Set to true when a loop re-enters a " +
-					"step via a back-edge and the step needs to update the SAME artifact across iterations. " +
-					"Reads see the latest committed value; commits are still atomic. Leave unset for normal " +
-					"artifacts — single-writer is the default and makes plans easier to reason about.",
-			}),
-		),
 		accumulate: Type.Optional(
 			Type.Boolean({
 				description:
 					"When true, each commit appends to an array instead of replacing the value. " +
 					"Reads return the full array of all committed entries. Use for loop artifacts " +
-					"where each iteration should see the history of prior iterations (e.g. experiment logs). " +
-					"Requires multiWriter: true.",
+					"where each iteration should see the history of prior iterations (e.g. experiment logs).",
 			}),
 		),
 	},
