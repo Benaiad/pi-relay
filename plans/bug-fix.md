@@ -1,6 +1,6 @@
 ---
 name: bug-fix
-description: Structured diagnosis then fix. Diagnosis and fix run in separate contexts — the fix is informed by structured findings, not guesswork.
+description: "Diagnose a bug, then fix it, then verify. Use instead of verified-edit when you want the root cause documented before any code changes. Diagnosis writes a structured artifact that the fix step reads — no guesswork, no 'let me just try something'."
 parameters:
   - name: bug
     description: The bug — symptoms, reproduction steps, or the failing test.

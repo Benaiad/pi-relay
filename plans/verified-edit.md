@@ -1,6 +1,6 @@
 ---
 name: verified-edit
-description: Make a change and verify it with a deterministic check. The runtime decides pass/fail — the model's opinion is irrelevant.
+description: "Implement a change then verify with a shell command. Use for any task where you need a guarantee the change didn't break things — the check is deterministic, not the model's judgment. Simplest template: one action step, one gate."
 parameters:
   - name: task
     description: What to change. Include file paths, function names, and expected behavior.

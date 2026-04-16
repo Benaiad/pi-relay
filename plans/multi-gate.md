@@ -1,6 +1,6 @@
 ---
 name: multi-gate
-description: "Implement a change and verify it through multiple sequential gates. Each gate independently passes or fails — the model sees exactly which gate failed and why."
+description: "Implement a change then run three sequential verification gates (e.g., lint → typecheck → tests). Use instead of verified-edit when you need to know exactly which gate failed — each reports independently. A compound 'lint && tsc && test' command hides which step broke."
 parameters:
   - name: task
     description: What to implement. Include file paths and expected behavior.

@@ -1,6 +1,6 @@
 ---
 name: reviewed-edit
-description: "Implement, then two-stage fresh-context review: first spec compliance, then code quality. Fix issues in a loop until both reviewers approve, then verify with a deterministic check."
+description: "Implement, then review in two passes — spec compliance first, code quality second — then verify. Use for quality-critical changes where you don't trust a single pass. Reviewers run in fresh contexts with no memory of the implementation reasoning. Fix loop iterates until both approve."
 parameters:
   - name: task
     description: What to implement. Include file paths and expected behavior.
