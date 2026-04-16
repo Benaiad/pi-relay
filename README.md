@@ -129,75 +129,83 @@ Two discovery phases with different cache semantics:
 ## Replay — saved plan templates
 
 For recurring workflows, save a plan as a markdown file with YAML
-frontmatter. The `replay` tool lets the model (or you) invoke it by name
-with arguments, and the plan structure runs exactly as authored.
+frontmatter. The `replay` tool lets the model invoke it by name with
+arguments. The plan structure runs exactly as authored — the model
+provides arguments, not the plan itself.
 
 Templates live in `~/.pi/agent/relay/plans/` (user scope) or
-`<project>/.pi/relay/plans/` (project scope).
+`<project>/.pi/relay/plans/` (project scope). Four templates ship
+with the repo:
 
-```markdown
----
-name: refactor-module
-description: Rename a symbol across a module, verified by the test suite.
-parameters:
-  - name: module
-    description: Path to the module directory or file.
-    required: true
-  - name: old_name
-    description: Current symbol name to rename.
-    required: true
-  - name: new_name
-    description: New symbol name.
-    required: true
----
-
-task: "Rename `{{old_name}}` to `{{new_name}}` in `{{module}}`"
-entryStep: rename
-artifacts:
-  - id: rename_notes
-    description: Summary of what was changed.
-    shape: { kind: untyped_json }
-steps:
-  - kind: action
-    id: rename
-    actor: worker
-    instruction: |
-      Rename `{{old_name}}` to `{{new_name}}` throughout `{{module}}`.
-      Write a summary to rename_notes.
-    reads: []
-    writes: [rename_notes]
-    routes: [{ route: done, to: verify }]
-  - kind: check
-    id: verify
-    check: { kind: command_exits_zero, command: npm, args: [test] }
-    onPass: success
-    onFail: failed
-  - kind: terminal
-    id: success
-    outcome: success
-    summary: Rename verified.
-  - kind: terminal
-    id: failed
-    outcome: failure
-    summary: Tests failed after rename.
-```
+- **verified-edit**(task, verify) — implement a change then verify with
+  a shell command. The simplest template: one action step, one gate.
+- **bug-fix**(bug, verify) — structured diagnosis then fix then verify.
+  The diagnosis writes an artifact the fix step reads — root cause
+  before code changes.
+- **reviewed-edit**(task, criteria, verify) — implement, then two-stage
+  fresh-context review (spec compliance then code quality), fix loop
+  until both approve, then verify.
+- **multi-gate**(task, gate1, gate1_name, gate2, gate2_name, gate3,
+  gate3_name) — implement then run three sequential verification gates.
+  Each gate reports independently so you see exactly which one failed.
 
 The frontmatter declares `name`, `description`, and `parameters`. The
 body is the plan in YAML with `{{param}}` placeholders. When the model
-calls `replay` with `{ name: "refactor-module", args: { module: "src/foo", old_name: "Foo", new_name: "Bar" } }`,
-Relay substitutes the arguments, validates against the plan schema,
-compiles, and runs — no model reinterpretation of the plan structure.
+calls `replay`, the extension substitutes the arguments, validates
+against the plan schema, compiles, and runs — no model reinterpretation
+of the plan structure.
 
-The `replay` tool description dynamically lists available templates:
+### Writing a template
 
+```markdown
+---
+name: my-workflow
+description: "What this does and when to use it."
+parameters:
+  - name: task
+    description: What to implement.
+    required: true
+  - name: verify
+    description: Shell command that must exit 0.
+    required: true
+---
+
+task: "{{task}}"
+entryStep: implement
+artifacts:
+  - id: notes
+    description: Implementation notes.
+    shape: { kind: untyped_json }
+steps:
+  - kind: action
+    id: implement
+    actor: worker
+    instruction: |
+      {{task}}
+      Write notes to the notes artifact.
+    reads: []
+    writes: [notes]
+    routes: [{ route: done, to: verify }]
+  - kind: check
+    id: verify
+    check: { kind: command_exits_zero, command: "{{verify}}" }
+    onPass: done
+    onFail: failed
+  - kind: terminal
+    id: done
+    outcome: success
+    summary: Done.
+  - kind: terminal
+    id: failed
+    outcome: failure
+    summary: Verification failed.
 ```
-Available plans:
-  - refactor-module(module, old_name, new_name): Rename a symbol across a module.
-  - review-fix-loop(target, task, criteria): Implement, review, fix loop.
-```
 
-Two sample templates ship with the repo: `plans/refactor-module.md` and
-`plans/review-fix-loop.md`.
+Check commands run through the platform shell (`/bin/sh` on Unix,
+`cmd.exe` on Windows), so compound commands like
+`npm test && npm run lint` work directly.
+
+Use `/relay` to browse installed actors and templates.
 
 ## Writing a plan (JSON shape)
 
