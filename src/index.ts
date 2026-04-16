@@ -14,7 +14,10 @@
  * break prompt caching. Users run `/reload` after editing files.
  */
 
-import { DynamicBorder, getMarkdownTheme, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+import { DynamicBorder, getAgentDir, getMarkdownTheme, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Container, Markdown, matchesKey, Text } from "@mariozechner/pi-tui";
 import { discoverActors } from "./actors/discovery.js";
 import type { ActorConfig } from "./actors/types.js";
@@ -45,6 +48,8 @@ export type RelayDetails =
 	  };
 
 export default function (pi: ExtensionAPI): void {
+	seedBundledFiles();
+
 	const loadDiscovery = discoverActors(process.cwd(), "user");
 	const actorNames = new Set(loadDiscovery.actors.map((a) => a.name));
 
@@ -131,6 +136,62 @@ export const renderRelayResult = (
 		return renderRefined(details.feedback, theme, context.lastComponent);
 	}
 	return renderPlanPreview(context.args, theme, options.expanded, context.lastComponent);
+};
+
+// ============================================================================
+// Auto-seed bundled actors and plans
+// ============================================================================
+
+const seedBundledFiles = (): void => {
+	const packageRoot = findPackageRoot(path.dirname(fileURLToPath(import.meta.url)));
+	if (!packageRoot) return;
+	const agentDir = getAgentDir();
+
+	seedDir(path.join(packageRoot, "actors"), path.join(agentDir, "relay", "actors"));
+	seedDir(path.join(packageRoot, "plans"), path.join(agentDir, "relay", "plans"));
+};
+
+const findPackageRoot = (startDir: string): string | null => {
+	let dir = fs.realpathSync(startDir);
+	for (;;) {
+		if (fs.existsSync(path.join(dir, "package.json"))) {
+			try {
+				const pkg = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf-8"));
+				if (pkg.pi?.extensions) return dir;
+			} catch {
+				// Not our package.json, keep walking
+			}
+		}
+		const parent = path.dirname(dir);
+		if (parent === dir) return null;
+		dir = parent;
+	}
+};
+
+const seedDir = (sourceDir: string, targetDir: string): void => {
+	if (!fs.existsSync(sourceDir)) return;
+
+	let entries: fs.Dirent[];
+	try {
+		entries = fs.readdirSync(sourceDir, { withFileTypes: true });
+	} catch {
+		return;
+	}
+
+	const mdFiles = entries.filter((e) => e.name.endsWith(".md") && (e.isFile() || e.isSymbolicLink()));
+	if (mdFiles.length === 0) return;
+
+	fs.mkdirSync(targetDir, { recursive: true });
+
+	for (const entry of mdFiles) {
+		const targetPath = path.join(targetDir, entry.name);
+		if (fs.existsSync(targetPath)) continue;
+		try {
+			fs.copyFileSync(path.join(sourceDir, entry.name), targetPath);
+		} catch {
+			// Best-effort — don't fail extension load if a copy fails.
+		}
+	}
 };
 
 // ============================================================================
