@@ -54,7 +54,7 @@ planner inside the plan.
 ## Install
 
 ```bash
-pi install https://github.com/badlogic/pi-relay
+pi install https://github.com/benaiad/pi-relay
 ```
 
 On first load, the extension automatically copies sample actors
@@ -68,7 +68,7 @@ Use `/relay` to browse installed actors and templates.
 ### Development install
 
 ```bash
-git clone https://github.com/badlogic/pi-relay.git ~/repos/pi-relay
+git clone https://github.com/benaiad/pi-relay.git ~/repos/pi-relay
 cd ~/repos/pi-relay
 npm install
 ln -sfn "$(pwd)/src" ~/.pi/agent/extensions/relay
