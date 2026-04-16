@@ -51,32 +51,31 @@ This project ships two sample actors (`worker`, `reviewer`) and no
 planner. Roll your own roles freely, but resist the urge to put a
 planner inside the plan.
 
-## Install (development)
+## Install
+
+```bash
+pi install https://github.com/badlogic/pi-relay
+```
+
+On first load, the extension automatically copies sample actors
+(`worker`, `reviewer`) and plan templates (`verified-edit`, `bug-fix`,
+`reviewed-edit`, `multi-gate`, `autoresearch`) to
+`~/.pi/agent/relay/`. Existing files are never overwritten.
+
+The model will see `relay` and `replay` tools in its tool list.
+Use `/relay` to browse installed actors and templates.
+
+### Development install
 
 ```bash
 git clone https://github.com/badlogic/pi-relay.git ~/repos/pi-relay
 cd ~/repos/pi-relay
 npm install
-
-# Symlink the whole src/ directory as the extension. jiti follows the symlink
-# and resolves relative imports against the real src/ tree, so this single
-# symlink is enough — do NOT also symlink individual files inside it.
 ln -sfn "$(pwd)/src" ~/.pi/agent/extensions/relay
-
-# Drop the sample actor files into pi's relay directory
-mkdir -p ~/.pi/agent/relay/actors
-for actor in actors/*.md; do
-  ln -sf "$(pwd)/$actor" ~/.pi/agent/relay/actors/$(basename "$actor")
-done
-
-# (Optional) Drop the sample plan templates
-mkdir -p ~/.pi/agent/relay/plans
-for plan in plans/*.md; do
-  ln -sf "$(pwd)/$plan" ~/.pi/agent/relay/plans/$(basename "$plan")
-done
 ```
 
-Launch pi as usual. The model will see `relay` and `replay` tools in its tool list.
+The auto-seed runs on first load and skips any files that already
+exist (including symlinks).
 Ask pi for something that needs planning + implementation + verification
 (for example: "plan the migration to adjust the auth flow, implement it,
 and make sure the test suite still passes") and the model should call
