@@ -21,7 +21,7 @@ Type `/relay` to browse installed actors and templates.
 2. The plan is compiled — actor references, route targets, and artifact contracts are validated.
 3. You review the plan and choose: **Run**, **Refine**, or **Cancel**.
 4. The scheduler executes steps sequentially. Action steps spawn isolated agent subprocesses. Check steps run shell commands and route on exit code — pass or fail, no interpretation.
-5. The run report shows what happened: per-step outcomes, tool calls, and actor transcripts.
+5. The run report shows what happened: per-step outcomes, tool calls, and actor transcripts. Press `Ctrl+O` to expand the full step-by-step detail.
 
 Use `/relay` to browse installed actors and templates.
 
