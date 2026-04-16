@@ -71,11 +71,8 @@ Use `/relay` to browse installed actors and templates.
 git clone https://github.com/benaiad/pi-relay.git ~/repos/pi-relay
 cd ~/repos/pi-relay
 npm install
-ln -sfn "$(pwd)/src" ~/.pi/agent/extensions/relay
+pi install .
 ```
-
-The auto-seed runs on first load and skips any files that already
-exist (including symlinks).
 Ask pi for something that needs planning + implementation + verification
 (for example: "plan the migration to adjust the auth flow, implement it,
 and make sure the test suite still passes") and the model should call
