@@ -36,7 +36,7 @@ steps:
     routes: [{ route: done, to: verify }]
   - kind: check
     id: verify
-    check: { kind: command_exits_zero, command: bash, args: ["-c", "{{test_command}}"] }
+    check: { kind: command_exits_zero, command: "{{test_command}}", args: [] }
     onPass: success
     onFail: failed
   - kind: terminal

@@ -73,9 +73,10 @@ const runCommandExitsZero = (
 			resolve(outcome);
 		};
 
+		const useShell = spec.args.length === 0;
 		const proc = spawn(spec.command, [...spec.args], {
 			cwd,
-			shell: false,
+			shell: useShell,
 			stdio: ["ignore", "pipe", "pipe"],
 		});
 
