@@ -211,8 +211,9 @@ const formatRelayOverview = (actors: readonly ActorConfig[], templates: readonly
 		for (const a of actors) {
 			const tools = a.tools ? a.tools.join(", ") : "default tool set";
 			const model = a.model ? `, model: \`${a.model}\`` : "";
+			const thinking = a.thinking ? `, thinking: ${a.thinking}` : "";
 			lines.push(`**${a.name}** — ${a.description}`);
-			lines.push(`  tools: ${tools}${model}`);
+			lines.push(`  tools: ${tools}${model}${thinking}`);
 			lines.push("");
 		}
 	}
@@ -268,7 +269,8 @@ export const buildToolDescription = (actors: readonly ActorConfig[]): string => 
 		const toolsSuffix =
 			actor.tools && actor.tools.length > 0 ? ` [allowed tools: ${actor.tools.join(", ")}]` : " [default tool set]";
 		const modelSuffix = actor.model ? ` [model: ${actor.model}]` : "";
-		return `  - ${actor.name}: ${actor.description}${toolsSuffix}${modelSuffix}`;
+		const thinkingSuffix = actor.thinking ? ` [thinking: ${actor.thinking}]` : "";
+		return `  - ${actor.name}: ${actor.description}${toolsSuffix}${modelSuffix}${thinkingSuffix}`;
 	});
 
 	return [

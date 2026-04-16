@@ -21,11 +21,15 @@ export type ActorScope = "user" | "project" | "both";
 export type ActorSource = "user" | "project";
 
 /** Discovered actor configuration from a `.md` file with YAML frontmatter. */
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
+/** Discovered actor configuration from a `.md` file with YAML frontmatter. */
 export interface ActorConfig {
 	readonly name: string;
 	readonly description: string;
 	readonly tools?: readonly string[];
 	readonly model?: string;
+	readonly thinking?: ThinkingLevel;
 	readonly systemPrompt: string;
 	readonly source: ActorSource;
 	readonly filePath: string;

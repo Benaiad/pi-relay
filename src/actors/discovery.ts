@@ -21,7 +21,7 @@ import * as path from "node:path";
 import { getAgentDir, parseFrontmatter } from "@mariozechner/pi-coding-agent";
 import type { ActorRegistry } from "../plan/compile.js";
 import { ActorId, unwrap } from "../plan/ids.js";
-import type { ActorConfig, ActorDiscovery, ActorScope, ActorSource } from "./types.js";
+import type { ActorConfig, ActorDiscovery, ActorScope, ActorSource, ThinkingLevel } from "./types.js";
 
 const ACTORS_SUBDIR = "relay/actors";
 
@@ -132,16 +132,25 @@ const parseActorFile = (filePath: string, source: ActorSource): ActorConfig | nu
 
 	const tools = typeof frontmatter.tools === "string" ? splitCommaList(frontmatter.tools) : undefined;
 	const model = typeof frontmatter.model === "string" ? frontmatter.model : undefined;
+	const thinking = parseThinkingLevel(frontmatter.thinking);
 
 	return {
 		name: frontmatter.name,
 		description: frontmatter.description,
 		tools: tools && tools.length > 0 ? tools : undefined,
 		model,
+		thinking,
 		systemPrompt: body,
 		source,
 		filePath,
 	};
+};
+
+const VALID_THINKING_LEVELS = new Set<string>(["off", "minimal", "low", "medium", "high", "xhigh"]);
+
+const parseThinkingLevel = (value: unknown): ThinkingLevel | undefined => {
+	if (typeof value !== "string") return undefined;
+	return VALID_THINKING_LEVELS.has(value) ? (value as ThinkingLevel) : undefined;
 };
 
 const splitCommaList = (raw: string): readonly string[] =>
