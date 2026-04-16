@@ -24,7 +24,6 @@ import { ActorId, unwrap } from "../plan/ids.js";
 import type { ActorConfig, ActorDiscovery, ActorScope, ActorSource } from "./types.js";
 
 const ACTORS_SUBDIR = "relay/actors";
-const LEGACY_ACTORS_SUBDIR = "relay-actors";
 
 export interface DiscoveryOptions {
 	/** Override the user-scope directory (used by tests). Defaults to `<getAgentDir()>/relay-actors`. */
@@ -33,7 +32,6 @@ export interface DiscoveryOptions {
 
 export const discoverActors = (cwd: string, scope: ActorScope, options: DiscoveryOptions = {}): ActorDiscovery => {
 	const userDir = options.userDir ?? path.join(getAgentDir(), ACTORS_SUBDIR);
-	warnLegacyPath(userDir);
 	const projectDir = findNearestProjectActorsDir(cwd);
 
 	const wantsUser = scope === "user" || scope === "both";
@@ -77,21 +75,6 @@ export const formatActorList = (actors: readonly ActorConfig[]): string => {
 // ============================================================================
 // Internal helpers
 // ============================================================================
-
-let legacyWarningEmitted = false;
-
-const warnLegacyPath = (currentUserDir: string): void => {
-	if (legacyWarningEmitted) return;
-	const legacyDir = path.join(path.dirname(path.dirname(currentUserDir)), LEGACY_ACTORS_SUBDIR);
-	if (isDirectory(legacyDir) && !isDirectory(currentUserDir)) {
-		legacyWarningEmitted = true;
-		console.error(
-			`[relay] Actor files found at legacy path ${legacyDir}\n` +
-				`        Move them to ${currentUserDir} and run /reload.\n` +
-				`        The old relay-actors/ path is no longer scanned.`,
-		);
-	}
-};
 
 const findNearestProjectActorsDir = (cwd: string): string | null => {
 	let current = cwd;
