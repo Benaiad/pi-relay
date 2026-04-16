@@ -12,8 +12,8 @@ parameters:
     description: New symbol name.
     required: true
   - name: test_command
-    description: Test command to verify the rename. Defaults to 'npm test' if omitted.
-    required: false
+    description: "Shell command to verify the rename, e.g. 'npm test' or 'npm test && npm run lint'."
+    required: true
 ---
 
 task: "Rename `{{old_name}}` to `{{new_name}}` in `{{module}}`"
@@ -36,7 +36,7 @@ steps:
     routes: [{ route: done, to: verify }]
   - kind: check
     id: verify
-    check: { kind: command_exits_zero, command: npm, args: [test] }
+    check: { kind: command_exits_zero, command: bash, args: ["-c", "{{test_command}}"] }
     onPass: success
     onFail: failed
   - kind: terminal
