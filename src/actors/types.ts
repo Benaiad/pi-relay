@@ -12,6 +12,7 @@
  * one of the typed failure modes.
  */
 
+import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 import type { ActorId, ArtifactId, RouteId, StepId } from "../plan/ids.js";
 import type { ActionStep, ArtifactContract } from "../plan/types.js";
 import type { ArtifactSnapshot } from "../runtime/artifacts.js";
@@ -20,8 +21,7 @@ export type ActorScope = "user" | "project" | "both";
 
 export type ActorSource = "user" | "project";
 
-/** Discovered actor configuration from a `.md` file with YAML frontmatter. */
-export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+export type { ThinkingLevel };
 
 /** Discovered actor configuration from a `.md` file with YAML frontmatter. */
 export interface ActorConfig {
