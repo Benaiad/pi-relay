@@ -25,6 +25,7 @@ import { registerReplayTool } from "./replay.js";
 import type { RelayRunState } from "./runtime/events.js";
 import type { AttemptTimelineEntry } from "./runtime/run-report.js";
 import { discoverPlanTemplates } from "./templates/discovery.js";
+import type { PlanTemplate } from "./templates/types.js";
 
 /**
  * The `details` payload carried by `onUpdate` and the final tool result.
@@ -74,6 +75,18 @@ export default function (pi: ExtensionAPI): void {
 	});
 
 	registerReplayTool(pi, templateDiscovery.templates);
+
+	pi.registerCommand("relay", {
+		description: "Show available relay actors and plan templates",
+		async handler(_args, ctx) {
+			const discovery = discoverActors(ctx.cwd, "user");
+			const actorNameSet = new Set(discovery.actors.map((a) => a.name));
+			const templates = discoverPlanTemplates(ctx.cwd, "user", { actorNames: actorNameSet });
+
+			const items = formatRelayOverview(discovery.actors, templates.templates);
+			await ctx.ui.select("Relay", items);
+		},
+	});
 }
 
 // ============================================================================
@@ -100,6 +113,46 @@ export const renderRelayResult = (
 		return renderRefined(details.feedback, theme, context.lastComponent);
 	}
 	return renderPlanPreview(context.args, theme, options.expanded, context.lastComponent);
+};
+
+// ============================================================================
+// /relay command
+// ============================================================================
+
+const formatRelayOverview = (actors: readonly ActorConfig[], templates: readonly PlanTemplate[]): string[] => {
+	const items: string[] = [];
+
+	items.push("── Actors ──");
+	if (actors.length === 0) {
+		items.push("  (none — add .md files to ~/.pi/agent/relay/actors/)");
+	} else {
+		for (const a of actors) {
+			const tools = a.tools ? a.tools.join(", ") : "default";
+			const model = a.model ? ` · model: ${a.model}` : "";
+			items.push(`  ${a.name}: ${a.description}`);
+			items.push(`    tools: ${tools}${model} · source: ${a.source}`);
+		}
+	}
+
+	items.push("");
+	items.push("── Plan Templates ──");
+	if (templates.length === 0) {
+		items.push("  (none — add .md files to ~/.pi/agent/relay/plans/)");
+	} else {
+		for (const t of templates) {
+			const params =
+				t.parameters.length > 0
+					? t.parameters.map((p) => (p.required ? p.name : `${p.name}?`)).join(", ")
+					: "no parameters";
+			items.push(`  ${t.name}(${params}): ${t.description}`);
+			for (const p of t.parameters) {
+				const req = p.required ? "required" : "optional";
+				items.push(`    ${p.name} (${req}): ${p.description}`);
+			}
+		}
+	}
+
+	return items;
 };
 
 // ============================================================================
