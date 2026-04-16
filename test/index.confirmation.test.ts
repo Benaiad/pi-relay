@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActorConfig } from "../src/actors/types.js";
-import { buildSelectTitle, summarizePlanImpact } from "../src/index.js";
+import { buildSelectTitle, summarizePlanImpact } from "../src/execute.js";
 import type { PlanDraftDoc } from "../src/plan/draft.js";
 import { ActorId } from "../src/plan/ids.js";
 

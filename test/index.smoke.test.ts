@@ -12,7 +12,7 @@ import factory from "../src/index.js";
  */
 
 describe("pi-relay extension entry", () => {
-	it("registers a single tool named 'relay' with renderCall and renderResult", () => {
+	it("registers relay and replay tools with renderCall and renderResult", () => {
 		const registered: Array<{ name: string; hasRenderCall: boolean; hasRenderResult: boolean }> = [];
 
 		const stubApi = {
@@ -50,10 +50,15 @@ describe("pi-relay extension entry", () => {
 
 		factory(stubApi as never);
 
-		expect(registered.length).toBe(1);
-		expect(registered[0]?.name).toBe("relay");
-		expect(registered[0]?.hasRenderCall).toBe(true);
-		expect(registered[0]?.hasRenderResult).toBe(true);
+		expect(registered.length).toBe(2);
+		const relay = registered.find((r) => r.name === "relay");
+		const replay = registered.find((r) => r.name === "replay");
+		expect(relay).toBeDefined();
+		expect(relay?.hasRenderCall).toBe(true);
+		expect(relay?.hasRenderResult).toBe(true);
+		expect(replay).toBeDefined();
+		expect(replay?.hasRenderCall).toBe(true);
+		expect(replay?.hasRenderResult).toBe(true);
 	});
 
 	it("the registered tool has a TypeBox parameter schema", () => {

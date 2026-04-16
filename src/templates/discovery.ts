@@ -112,11 +112,7 @@ const loadTemplatesFromDir = (
 	return templates;
 };
 
-interface TemplateFrontmatter {
-	name?: string;
-	description?: string;
-	parameters?: unknown;
-}
+type TemplateFrontmatter = Record<string, unknown>;
 
 const parseTemplateFile = (
 	filePath: string,
