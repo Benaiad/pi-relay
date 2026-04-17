@@ -102,6 +102,32 @@ describe("parseCompletion", () => {
 		expect(result.value.route).toBe("first");
 	});
 
+	it("recovers when trailing text follows valid JSON inside the tag", () => {
+		const text = `<relay-complete>{"route":"done","writes":{"notes":{"ok":true}}} and then the model kept writing</relay-complete>`;
+		const result = parseCompletion(text);
+		expect(isOk(result)).toBe(true);
+		if (!isOk(result)) return;
+		expect(result.value.route).toBe("done");
+		expect(result.value.writes).toEqual({ notes: { ok: true } });
+	});
+
+	it("recovers when JSON string values contain unescaped newlines", () => {
+		const text = `<relay-complete>{"route":"done","writes":{"notes":{"text":"line one\nline two"}}}</relay-complete>`;
+		const result = parseCompletion(text);
+		expect(isOk(result)).toBe(true);
+		if (!isOk(result)) return;
+		expect(result.value.route).toBe("done");
+	});
+
+	it("recovers from a large JSON payload with trailing content", () => {
+		const longValue = "x".repeat(5000);
+		const text = `<relay-complete>{"route":"done","writes":{"log":{"data":"${longValue}"}}} extra junk here</relay-complete>`;
+		const result = parseCompletion(text);
+		expect(isOk(result)).toBe(true);
+		if (!isOk(result)) return;
+		expect(result.value.route).toBe("done");
+	});
+
 	it("tolerates a json code fence inside the completion tag", () => {
 		const text = `<relay-complete>
 \`\`\`json

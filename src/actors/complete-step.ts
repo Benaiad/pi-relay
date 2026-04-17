@@ -79,8 +79,12 @@ export const buildCompletionInstruction = (input: CompletionInstructionInput): s
 		`${COMPLETE_OPEN}{"route":"<ROUTE>","writes":{"<artifact-id>": <value>, ...}}${COMPLETE_CLOSE}`,
 		"",
 		"Requirements:",
-		"- Emit the block exactly once, as the final thing in your reply.",
-		"- The JSON must parse. Use double-quoted keys and values.",
+		"- Emit the block exactly once, as the VERY LAST thing in your reply.",
+		"- The content between the tags must be valid JSON. Double-quote all",
+		"  keys and string values. Escape newlines as \\n and quotes as \\\".",
+		"- Keep artifact values compact — short strings, arrays, simple objects.",
+		"  Do NOT embed long prose in JSON strings. Put detailed text in your",
+		"  narration (before the tag), not inside the writes object.",
 		"- `route` must be one of the allowed routes listed below.",
 		"- `writes` is an object mapping every writable artifact id (listed below)",
 		"  to the value you want committed. Omit artifacts you do not produce;",
@@ -116,9 +120,12 @@ export const parseCompletion = (text: string): Result<ParsedCompletion, string> 
 	let raw: unknown;
 	try {
 		raw = JSON.parse(payload);
-	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
-		return err(`completion JSON did not parse: ${message}`);
+	} catch {
+		raw = tryExtractJson(payload);
+		if (raw === undefined) {
+			const preview = payload.length > 200 ? `${payload.slice(0, 200)}…` : payload;
+			return err(`completion JSON did not parse. Payload starts with: ${preview}`);
+		}
 	}
 
 	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
@@ -141,6 +148,65 @@ export const parseCompletion = (text: string): Result<ParsedCompletion, string> 
 	}
 
 	return ok({ route, writes });
+};
+
+/**
+ * Attempt to extract a valid JSON object from a payload that failed
+ * `JSON.parse`. Handles two common model errors:
+ *
+ *   1. Trailing text after the JSON object (the model wrote more
+ *      content after closing the braces).
+ *   2. Unescaped newlines inside string values.
+ *
+ * Returns `undefined` if no valid JSON object can be extracted.
+ */
+const tryExtractJson = (payload: string): unknown | undefined => {
+	const start = payload.indexOf("{");
+	if (start === -1) return undefined;
+
+	let depth = 0;
+	let inString = false;
+	let escaped = false;
+	let end = -1;
+
+	for (let i = start; i < payload.length; i++) {
+		const ch = payload[i]!;
+		if (escaped) {
+			escaped = false;
+			continue;
+		}
+		if (ch === "\\") {
+			escaped = true;
+			continue;
+		}
+		if (ch === '"') {
+			inString = !inString;
+			continue;
+		}
+		if (inString) continue;
+		if (ch === "{") depth++;
+		else if (ch === "}") {
+			depth--;
+			if (depth === 0) {
+				end = i;
+				break;
+			}
+		}
+	}
+
+	if (end === -1) return undefined;
+
+	const candidate = payload.slice(start, end + 1);
+	try {
+		return JSON.parse(candidate);
+	} catch {
+		const fixed = candidate.replace(/[\n\r]/g, "\\n").replace(/\t/g, "\\t");
+		try {
+			return JSON.parse(fixed);
+		} catch {
+			return undefined;
+		}
+	}
 };
 
 const FENCE_OPEN = /^```(?:json)?\s*\n?/i;
