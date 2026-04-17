@@ -81,7 +81,7 @@ export const buildCompletionInstruction = (input: CompletionInstructionInput): s
 		"Requirements:",
 		"- Emit the block exactly once, as the VERY LAST thing in your reply.",
 		"- The content between the tags must be valid JSON. Double-quote all",
-		"  keys and string values. Escape newlines as \\n and quotes as \\\".",
+		'  keys and string values. Escape newlines as \\n and quotes as \\".',
 		"- Keep artifact values compact — short strings, arrays, simple objects.",
 		"  Do NOT embed long prose in JSON strings. Put detailed text in your",
 		"  narration (before the tag), not inside the writes object.",

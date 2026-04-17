@@ -35,18 +35,14 @@ export type ArtifactShape = { readonly kind: "untyped_json" };
  * their `reads`). The compiler enforces single-writer ownership; multiple
  * writers reject the plan.
  *
- * Multiple steps can write to the same artifact. Readers see the latest
- * committed value. The runtime always commits atomically — in-flight
- * writes stay invisible until the writer succeeds.
- *
- * `accumulate: true` changes write semantics from replace to append:
- * each commit adds an entry to an array, and readers see the full history.
+ * Multiple steps can write to the same artifact. Every commit appends
+ * an entry with attribution metadata (step, attempt, timestamp).
+ * Readers see the full history as an array of entries.
  */
 export interface ArtifactContract {
 	readonly id: ArtifactId;
 	readonly description: string;
 	readonly shape: ArtifactShape;
-	readonly accumulate?: boolean;
 }
 
 /**

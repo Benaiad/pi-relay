@@ -1,10 +1,9 @@
 /**
- * Metadata wrapper for entries in accumulated artifacts.
+ * Metadata wrapper for artifact entries.
  *
- * When an artifact has `accumulate: true`, each commit appends an
- * `AccumulatedEntry` instead of the raw value. The entry carries
- * attribution metadata the store already has at commit time: who
- * wrote it (step), when, and its position in the sequence.
+ * Every artifact commit appends an `AccumulatedEntry` with
+ * attribution metadata: who wrote it (step), when, and its
+ * position in the sequence. Readers see the full history.
  *
  * The presentation layer uses this metadata to render attributed
  * history (e.g., "[1] by philosopher (step: argue): ...") instead

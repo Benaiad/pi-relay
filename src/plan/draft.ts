@@ -198,14 +198,6 @@ const ArtifactContractSchema = Type.Object(
 			description: "What this artifact represents, e.g. 'parsed requirements' or 'test output JSON'.",
 		}),
 		shape: ArtifactShapeSchema,
-		accumulate: Type.Optional(
-			Type.Boolean({
-				description:
-					"When true, each commit appends to an array instead of replacing the value. " +
-					"Reads return the full array of all committed entries. Use for loop artifacts " +
-					"where each iteration should see the history of prior iterations (e.g. experiment logs).",
-			}),
-		),
 	},
 	{ description: "Compile-time declaration of an artifact's identity, description, and shape." },
 );

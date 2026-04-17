@@ -20,7 +20,6 @@ artifacts:
   - id: debate_log
     description: "Full debate history — arguments, critiques, and verdicts from all rounds."
     shape: { kind: untyped_json }
-    accumulate: true
 steps:
   - kind: action
     id: argue

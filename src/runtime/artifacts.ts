@@ -165,9 +165,7 @@ export class ArtifactStore {
 				return err({ kind: "shape_mismatch", artifactId, reason: shapeResult.error });
 			}
 
-			const finalValue = contract.accumulate
-				? this.appendToAccumulator(artifactId, value, stepId, attempt ?? 1)
-				: value;
+			const finalValue = this.appendToAccumulator(artifactId, value, stepId, attempt ?? 1);
 			patch.push({ id: artifactId, value: finalValue, writerStep: stepId, committedAt });
 		}
 

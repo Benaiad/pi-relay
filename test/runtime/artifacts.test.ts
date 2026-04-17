@@ -52,13 +52,16 @@ const buildStore = () => {
 };
 
 describe("ArtifactStore", () => {
-	it("commits a write and returns it from a snapshot that declares the read", () => {
+	it("commits a write and returns it as an accumulated entry", () => {
 		const store = buildStore();
 		const commit = store.commit(StepId("first"), new Map([[ArtifactId("a"), { value: 42 }]]));
 		expect(isOk(commit)).toBe(true);
 		const snap = store.snapshot([ArtifactId("a")]);
 		expect(snap.has(ArtifactId("a"))).toBe(true);
-		expect(snap.get(ArtifactId("a"))).toEqual({ value: 42 });
+		const entries = snap.get(ArtifactId("a")) as Array<{ index: number; value: unknown }>;
+		expect(entries).toHaveLength(1);
+		expect(entries[0]!.index).toBe(0);
+		expect(entries[0]!.value).toEqual({ value: 42 });
 		expect(snap.ids().map(unwrap)).toEqual(["a"]);
 	});
 
@@ -129,8 +132,10 @@ describe("ArtifactStore", () => {
 		expect(store.has(ArtifactId("a"))).toBe(true);
 		expect(store.has(ArtifactId("b"))).toBe(true);
 		const snap = store.snapshot([ArtifactId("a"), ArtifactId("b")]);
-		expect(snap.get(ArtifactId("a"))).toEqual({ hello: "world" });
-		expect(snap.get(ArtifactId("b"))).toEqual([1, 2, 3]);
+		const aEntries = snap.get(ArtifactId("a")) as Array<{ value: unknown }>;
+		const bEntries = snap.get(ArtifactId("b")) as Array<{ value: unknown }>;
+		expect(aEntries[0]!.value).toEqual({ hello: "world" });
+		expect(bEntries[0]!.value).toEqual([1, 2, 3]);
 	});
 
 	it("returns committed artifacts with writer bookkeeping via all()", () => {
@@ -143,10 +148,10 @@ describe("ArtifactStore", () => {
 		expect(entries[0]!.committedAt).toBeGreaterThan(0);
 	});
 
-	it("accumulates values when artifact has accumulate: true", () => {
+	it("accumulates values across multiple commits", () => {
 		const plan: PlanDraftDoc = {
 			task: "t",
-			artifacts: [{ id: "log", description: "log", shape: { kind: "untyped_json" }, accumulate: true }],
+			artifacts: [{ id: "log", description: "log", shape: { kind: "untyped_json" } }],
 			steps: [
 				{
 					kind: "action",

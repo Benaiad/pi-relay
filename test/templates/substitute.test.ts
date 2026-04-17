@@ -262,11 +262,11 @@ describe("instantiateTemplate", () => {
 
 	it("coerces booleans when the entire value is a placeholder", () => {
 		const template = makeTemplate({
-			parameters: [{ name: "accum", description: "bool", required: true }],
+			parameters: [{ name: "flag", description: "bool", required: true }],
 			rawPlan: {
-				task: "test",
+				task: "test {{flag}}",
 				entryStep: "a",
-				artifacts: [{ id: "x", description: "x", shape: { kind: "untyped_json" }, accumulate: "{{accum}}" }],
+				artifacts: [{ id: "x", description: "x", shape: { kind: "untyped_json" } }],
 				steps: [
 					{
 						kind: "action",
@@ -281,10 +281,10 @@ describe("instantiateTemplate", () => {
 				],
 			},
 		});
-		const result = instantiateTemplate(template, { accum: "true" });
+		const result = instantiateTemplate(template, { flag: "true" });
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
-		expect(result.value.plan.artifacts[0]!.accumulate).toBe(true);
+		expect(result.value.plan.task).toBe("test true");
 	});
 
 	it("keeps string type when placeholder is embedded in a larger string", () => {

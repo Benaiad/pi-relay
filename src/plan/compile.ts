@@ -261,7 +261,6 @@ const buildArtifacts = (
 			id,
 			description: c.description,
 			shape: c.shape,
-			accumulate: c.accumulate === true,
 		});
 	}
 
