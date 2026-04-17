@@ -133,6 +133,27 @@ This is simpler than full YAML serialization and covers the shapes
 relay artifacts actually use. Edge cases (deeply nested objects, special
 characters) fall back to JSON code fences.
 
+## Actor self-identification
+
+Currently the task prompt does not tell the actor its own name or step
+ID. The system prompt describes the role ("You are a coding worker")
+but doesn't use the relay-level identifiers. When the model sees
+attributed entries like `[2] by critic (step: counter)`, it can't
+reliably distinguish its own prior entries from another actor's.
+
+Fix: add an identity line at the top of the task prompt:
+
+```
+You are: philosopher (step: argue)
+
+Task: ...
+```
+
+This is a one-line addition to `buildTaskPrompt`. The engine already
+has `actor.name` and `step.id`. The actor can then match attributed
+artifact entries to itself ("that's my prior round") vs others
+("that's the critic's response").
+
 ## Impact on templates
 
 No template changes required. The artifact contract stays the same —
