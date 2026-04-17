@@ -135,24 +135,30 @@ characters) fall back to JSON code fences.
 
 ## Actor self-identification
 
-Currently the task prompt does not tell the actor its own name or step
-ID. The system prompt describes the role ("You are a coding worker")
-but doesn't use the relay-level identifiers. When the model sees
-attributed entries like `[2] by critic (step: counter)`, it can't
-reliably distinguish its own prior entries from another actor's.
+Currently the actor knows its role from the system prompt ("You are a
+coding worker") but is never told its relay-level identity — actor
+name and step ID. When the model sees attributed entries like
+`[2] by critic (step: counter)`, it can't reliably distinguish its
+own prior entries from another actor's.
 
-Fix: add an identity line at the top of the task prompt:
+The identity is injected implicitly by `buildTaskPrompt` in
+`engine.ts` — no actor file or template changes. The engine already
+has `actor.name` and `step.id`. It adds the identity at the top of
+the task prompt, before the instruction:
 
 ```
 You are: philosopher (step: argue)
 
-Task: ...
+Task: Review the opponent's position and counter it...
+
+## Input artifacts
+...
 ```
 
-This is a one-line addition to `buildTaskPrompt`. The engine already
-has `actor.name` and `step.id`. The actor can then match attributed
-artifact entries to itself ("that's my prior round") vs others
-("that's the critic's response").
+The identity goes in the task prompt, not the system prompt, because
+it's step-specific. The same actor can run different steps with
+different step IDs — the system prompt is the actor's persona (stable),
+the task prompt is relay's per-step context (varies).
 
 ## Impact on templates
 
