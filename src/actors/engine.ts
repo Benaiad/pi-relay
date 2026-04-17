@@ -31,9 +31,11 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { Message } from "@mariozechner/pi-ai";
 import { withFileMutationQueue } from "@mariozechner/pi-coding-agent";
-import type { ArtifactId as ArtifactIdType } from "../plan/ids.js";
+import type { ArtifactId as ArtifactIdType, StepId } from "../plan/ids.js";
 import { ArtifactId, RouteId, unwrap } from "../plan/ids.js";
+import { isAccumulatedEntryArray } from "../runtime/accumulated-entry.js";
 import { buildCompletionInstruction, parseCompletion } from "./complete-step.js";
+import { renderValue } from "./render-value.js";
 import {
 	type ActionOutcome,
 	type ActionRequest,
@@ -70,6 +72,9 @@ const runAction = async (request: ActionRequest): Promise<ActionOutcome> => {
 		artifacts,
 		artifactContracts,
 		request.priorAttempts,
+		actor.name,
+		step.id,
+		request.stepActorResolver,
 	);
 
 	let tmpDir: string | null = null;
@@ -189,8 +194,11 @@ const buildTaskPrompt = (
 	artifacts: ActionRequest["artifacts"],
 	contracts: ReadonlyMap<ArtifactIdType, { description: string }>,
 	priorAttempts: ActionRequest["priorAttempts"],
+	actorName: string,
+	stepId: StepId,
+	stepActorResolver?: (stepId: StepId) => string | undefined,
 ): string => {
-	const lines: string[] = [`Task: ${instruction}`];
+	const lines: string[] = [`You are: ${actorName} (step: ${unwrap(stepId)})`, "", `Task: ${instruction}`];
 
 	// When this is a re-entry of a back-edge, tell the actor what it did
 	// before. Without this, every attempt looks to the actor like its first
@@ -227,12 +235,12 @@ const buildTaskPrompt = (
 		for (const id of reads) {
 			if (!artifacts.has(id)) continue;
 			const contract = contracts.get(id);
-			const descSuffix = contract?.description ? ` (${contract.description})` : "";
+			const desc = contract?.description ?? "";
 			const value = artifacts.get(id);
-			inputs.push(`- ${unwrap(id)}${descSuffix}:\n${fenceJson(value)}`);
+			inputs.push(renderArtifact(unwrap(id), desc, value, stepActorResolver));
 		}
 		if (inputs.length > 0) {
-			lines.push("## Input artifacts (current values)", "", inputs.join("\n\n"));
+			lines.push("## Input artifacts", "", inputs.join("\n\n"));
 		}
 	}
 
@@ -247,12 +255,26 @@ const buildTaskPrompt = (
 	return lines.join("\n\n");
 };
 
-const fenceJson = (value: unknown): string => {
-	try {
-		return ["```json", JSON.stringify(value, null, 2), "```"].join("\n");
-	} catch {
-		return "```\n<unserializable>\n```";
+const renderArtifact = (
+	id: string,
+	description: string,
+	value: unknown,
+	stepActorResolver?: (stepId: StepId) => string | undefined,
+): string => {
+	const descSuffix = description ? ` (${description})` : "";
+
+	if (isAccumulatedEntryArray(value)) {
+		const header = `### ${id}${descSuffix} — ${value.length} ${value.length === 1 ? "entry" : "entries"}`;
+		const entries = value.map((entry) => {
+			const actor = stepActorResolver?.(entry.stepId) ?? unwrap(entry.stepId);
+			const attemptSuffix = entry.attempt > 1 ? `, attempt ${entry.attempt}` : "";
+			const attribution = `[${entry.index + 1}] by ${actor} (step: ${unwrap(entry.stepId)}${attemptSuffix}):`;
+			return `${attribution}\n${renderValue(entry.value, 1)}`;
+		});
+		return `${header}\n\n${entries.join("\n\n")}`;
 	}
+
+	return `### ${id}${descSuffix}\n\n${renderValue(value, 0)}`;
 };
 
 // ============================================================================

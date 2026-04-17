@@ -167,17 +167,33 @@ describe("ArtifactStore", () => {
 		const store = new ArtifactStore(result.value, () => ++tick);
 
 		store.commit(StepId("step"), new Map([[ArtifactId("log"), { tried: "sieve" }]]));
-		expect(store.snapshot([ArtifactId("log")]).get(ArtifactId("log"))).toEqual([{ tried: "sieve" }]);
+		const snap1 = store.snapshot([ArtifactId("log")]).get(ArtifactId("log")) as Array<{
+			index: number;
+			stepId: unknown;
+			value: unknown;
+		}>;
+		expect(snap1).toHaveLength(1);
+		expect(snap1[0]!.index).toBe(0);
+		expect(snap1[0]!.value).toEqual({ tried: "sieve" });
+		expect(unwrap(snap1[0]!.stepId as ReturnType<typeof StepId>)).toBe("step");
 
 		store.commit(StepId("step"), new Map([[ArtifactId("log"), { tried: "bitwise" }]]));
-		expect(store.snapshot([ArtifactId("log")]).get(ArtifactId("log"))).toEqual([
-			{ tried: "sieve" },
-			{ tried: "bitwise" },
-		]);
+		const snap2 = store.snapshot([ArtifactId("log")]).get(ArtifactId("log")) as Array<{
+			index: number;
+			value: unknown;
+		}>;
+		expect(snap2).toHaveLength(2);
+		expect(snap2[0]!.value).toEqual({ tried: "sieve" });
+		expect(snap2[1]!.value).toEqual({ tried: "bitwise" });
+		expect(snap2[1]!.index).toBe(1);
 
 		store.commit(StepId("step"), new Map([[ArtifactId("log"), { tried: "wheel" }]]));
-		const snap = store.snapshot([ArtifactId("log")]);
-		expect(snap.get(ArtifactId("log"))).toEqual([{ tried: "sieve" }, { tried: "bitwise" }, { tried: "wheel" }]);
+		const snap3 = store.snapshot([ArtifactId("log")]).get(ArtifactId("log")) as Array<{
+			index: number;
+			value: unknown;
+		}>;
+		expect(snap3).toHaveLength(3);
+		expect(snap3.map((e) => e.value)).toEqual([{ tried: "sieve" }, { tried: "bitwise" }, { tried: "wheel" }]);
 	});
 
 	it("formatContractViolation produces a useful message for each variant", () => {

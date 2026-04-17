@@ -294,6 +294,10 @@ export class Scheduler {
 			cwd: this.cwd,
 			signal: this.signal,
 			priorAttempts,
+			stepActorResolver: (sid) => {
+				const s = this.program.steps.get(sid);
+				return s?.kind === "action" ? unwrap(s.actor) : undefined;
+			},
 			onProgress: (progress) => {
 				this.emit({
 					kind: "action_progress",
@@ -349,7 +353,8 @@ export class Scheduler {
 		writes: ReadonlyMap<ArtifactId, unknown>,
 		usage: ActorUsage,
 	): void {
-		const commitResult = this.artifactStore.commit(step.id, writes);
+		const currentAttempt = (this.state.steps.get(step.id)?.attempts ?? 0) + 1;
+		const commitResult = this.artifactStore.commit(step.id, writes, currentAttempt);
 		if (!commitResult.ok) {
 			this.emit({
 				kind: "artifact_rejected",

@@ -50,5 +50,4 @@ export type CompileError =
 			readonly kind: "unsupported_context_policy";
 			readonly stepId: StepId;
 			readonly policy: ContextPolicy;
-	  }
-;
+	  };

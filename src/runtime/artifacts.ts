@@ -28,6 +28,7 @@ import { unwrap } from "../plan/ids.js";
 import type { Program } from "../plan/program.js";
 import { err, ok, type Result } from "../plan/result.js";
 import type { ArtifactContract } from "../plan/types.js";
+import type { AccumulatedEntry } from "./accumulated-entry.js";
 
 /**
  * Frozen view of a subset of committed artifacts.
@@ -139,7 +140,7 @@ export class ArtifactStore {
 	 * artifact's shape. If any write is invalid, none are applied and the
 	 * store returns the first violation encountered.
 	 */
-	commit(stepId: StepId, writes: ReadonlyMap<ArtifactId, unknown>): Result<void, ContractViolation> {
+	commit(stepId: StepId, writes: ReadonlyMap<ArtifactId, unknown>, attempt?: number): Result<void, ContractViolation> {
 		const patch: StoredArtifact[] = [];
 		const committedAt = this.clock();
 
@@ -164,7 +165,9 @@ export class ArtifactStore {
 				return err({ kind: "shape_mismatch", artifactId, reason: shapeResult.error });
 			}
 
-			const finalValue = contract.accumulate ? this.appendToAccumulator(artifactId, value) : value;
+			const finalValue = contract.accumulate
+				? this.appendToAccumulator(artifactId, value, stepId, attempt ?? 1)
+				: value;
 			patch.push({ id: artifactId, value: finalValue, writerStep: stepId, committedAt });
 		}
 
@@ -184,9 +187,16 @@ export class ArtifactStore {
 		return this.committed.has(id);
 	}
 
-	private appendToAccumulator(id: ArtifactId, value: unknown): unknown[] {
+	private appendToAccumulator(id: ArtifactId, value: unknown, stepId: StepId, attempt: number): AccumulatedEntry[] {
 		const existing = this.committed.get(id);
-		const prior = existing !== undefined && Array.isArray(existing.value) ? existing.value : [];
-		return [...prior, value];
+		const prior: AccumulatedEntry[] = existing !== undefined && Array.isArray(existing.value) ? existing.value : [];
+		const entry: AccumulatedEntry = {
+			index: prior.length,
+			stepId,
+			attempt,
+			value,
+			committedAt: this.clock(),
+		};
+		return [...prior, entry];
 	}
 }

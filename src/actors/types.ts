@@ -123,6 +123,8 @@ export interface ActionRequest {
 	readonly onProgress?: (event: ActorProgressEvent) => void;
 	/** Empty on the first activation; populated on re-entries via a back-edge. */
 	readonly priorAttempts: readonly PriorAttempt[];
+	/** Resolves a step ID to its actor name — for attributed artifact rendering. */
+	readonly stepActorResolver?: (stepId: StepId) => string | undefined;
 }
 
 /**
