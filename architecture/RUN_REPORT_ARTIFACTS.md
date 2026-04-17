@@ -17,7 +17,7 @@ that step committed.
 
 Before:
 ```
-✓ diagnose — worker
+step: diagnose, actor: worker
   → read src/auth/login.ts
   "Found the root cause: encodeURIComponent converts + to %2B"
 
@@ -26,7 +26,7 @@ Produced: diagnosis, fix_notes
 
 After:
 ```
-✓ diagnose — worker
+step: diagnose, actor: worker
   → read src/auth/login.ts
   "Found the root cause: encodeURIComponent converts + to %2B"
 
@@ -41,7 +41,7 @@ After:
 ```
 Relay run: SUCCESS — Debate: Should we migrate to GraphQL?
 
-✓ argue — advocate
+step: argue, actor: advocate
   → read src/api/users.ts
   → grep /fields/ in src/api/
   "GraphQL eliminates overfetching — our users endpoint returns 40
@@ -51,7 +51,7 @@ Relay run: SUCCESS — Debate: Should we migrate to GraphQL?
     role: advocate
     argument: GraphQL solves the overfetching problem...
 
-✓ challenge — critic
+step: challenge, actor: critic
   → read src/api/users.ts
   "The overfetching argument is valid but the migration cost is
    understated."
@@ -60,7 +60,7 @@ Relay run: SUCCESS — Debate: Should we migrate to GraphQL?
     role: critic
     critique: Migration cost is understated...
 
-✓ evaluate — judge → resolved
+step: evaluate, actor: judge → resolved
   "The motion fails — retain YAML-like rendering."
 
   artifact debate_log [3]:
@@ -72,6 +72,20 @@ Relay run: SUCCESS — Debate: Should we migrate to GraphQL?
 Produced: debate_log
 Total: 6 turns · $0.12
 ```
+
+## Step headers
+
+Use explicit labels instead of glyphs. The planner is a model — it
+needs parseable text, not visual icons.
+
+```
+step: diagnose, actor: worker
+step: verify, check
+step: done, terminal: success
+```
+
+No `✓`/`✗`/`⏳`. Status is conveyed by routes and failure reasons
+below each step.
 
 ## Rules
 
