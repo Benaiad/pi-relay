@@ -75,6 +75,7 @@ const runAction = async (request: ActionRequest): Promise<ActionOutcome> => {
 		actor.name,
 		step.id,
 		request.stepActorResolver,
+		request.priorCheckResult,
 	);
 
 	let tmpDir: string | null = null;
@@ -197,8 +198,21 @@ const buildTaskPrompt = (
 	actorName: string,
 	stepId: StepId,
 	stepActorResolver?: (stepId: StepId) => string | undefined,
+	priorCheckResult?: ActionRequest["priorCheckResult"],
 ): string => {
-	const lines: string[] = [`You are: ${actorName} (step: ${unwrap(stepId)})`, "", `Task: ${instruction}`];
+	const lines: string[] = [`You are: ${actorName} (step: ${unwrap(stepId)})`];
+
+	if (priorCheckResult) {
+		lines.push(
+			"",
+			"## Prior check result",
+			"",
+			`step: ${unwrap(priorCheckResult.stepId)} ${priorCheckResult.outcome}`,
+			`  ${priorCheckResult.description}`,
+		);
+	}
+
+	lines.push("", `Task: ${instruction}`);
 
 	// When this is a re-entry of a back-edge, tell the actor what it did
 	// before. Without this, every attempt looks to the actor like its first

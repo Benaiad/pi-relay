@@ -727,3 +727,173 @@ describe("Scheduler — terminal routes", () => {
 		expect(decided.status).toBe("succeeded");
 	});
 });
+
+describe("Scheduler — check result forwarding", () => {
+	it("passes the prior check result to the next action step on failure", async () => {
+		let capturedCheckResult: ActionRequest["priorCheckResult"] | undefined;
+		const plan: PlanDraftDoc = {
+			task: "Implement then verify, retry on failure.",
+			artifacts: [],
+			steps: [
+				{
+					kind: "action",
+					id: "implement",
+					actor: "worker",
+					instruction: "implement",
+					reads: [],
+					writes: [],
+					routes: [{ route: "done", to: "verify" }],
+				},
+				{
+					kind: "check",
+					id: "verify",
+					check: { kind: "command_exits_zero", command: 'node -e "process.exit(1)"' },
+					onPass: "done",
+					onFail: "fix",
+				},
+				{
+					kind: "action",
+					id: "fix",
+					actor: "worker",
+					instruction: "fix the issue",
+					reads: [],
+					writes: [],
+					routes: [{ route: "done", to: "done" }],
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+			],
+			entryStep: "implement",
+		};
+		const engine = new ScriptedActorEngine(
+			new Map([
+				["implement", [completed("done")]],
+				[
+					"fix",
+					[
+						(request) => {
+							capturedCheckResult = request.priorCheckResult;
+							return {
+								kind: "completed",
+								route: RouteId("done"),
+								writes: new Map(),
+								usage: fakeUsage(),
+								transcript: [],
+							};
+						},
+					],
+				],
+			]),
+		);
+		const { scheduler } = buildScheduler(plan, engine);
+		await scheduler.run();
+		expect(capturedCheckResult).toBeDefined();
+		expect(capturedCheckResult!.outcome).toBe("failed");
+		expect(capturedCheckResult!.description).toContain("node");
+		expect(unwrap(capturedCheckResult!.stepId)).toBe("verify");
+	});
+
+	it("passes the prior check result on success", async () => {
+		let capturedCheckResult: ActionRequest["priorCheckResult"] | undefined;
+		const plan: PlanDraftDoc = {
+			task: "Check then act.",
+			artifacts: [],
+			steps: [
+				{
+					kind: "check",
+					id: "pre-check",
+					check: { kind: "command_exits_zero", command: 'node -e "process.exit(0)"' },
+					onPass: "act",
+					onFail: "fail",
+				},
+				{
+					kind: "action",
+					id: "act",
+					actor: "worker",
+					instruction: "do work",
+					reads: [],
+					writes: [],
+					routes: [{ route: "done", to: "done" }],
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ kind: "terminal", id: "fail", outcome: "failure", summary: "failed" },
+			],
+			entryStep: "pre-check",
+		};
+		const engine = new ScriptedActorEngine(
+			new Map([
+				[
+					"act",
+					[
+						(request) => {
+							capturedCheckResult = request.priorCheckResult;
+							return {
+								kind: "completed",
+								route: RouteId("done"),
+								writes: new Map(),
+								usage: fakeUsage(),
+								transcript: [],
+							};
+						},
+					],
+				],
+			]),
+		);
+		const { scheduler } = buildScheduler(plan, engine);
+		await scheduler.run();
+		expect(capturedCheckResult).toBeDefined();
+		expect(capturedCheckResult!.outcome).toBe("passed");
+	});
+
+	it("does not pass check result when action follows another action", async () => {
+		let capturedCheckResult: ActionRequest["priorCheckResult"] | undefined;
+		const plan: PlanDraftDoc = {
+			task: "Two actions in sequence.",
+			artifacts: [],
+			steps: [
+				{
+					kind: "action",
+					id: "first",
+					actor: "worker",
+					instruction: "first",
+					reads: [],
+					writes: [],
+					routes: [{ route: "done", to: "second" }],
+				},
+				{
+					kind: "action",
+					id: "second",
+					actor: "worker",
+					instruction: "second",
+					reads: [],
+					writes: [],
+					routes: [{ route: "done", to: "done" }],
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+			],
+			entryStep: "first",
+		};
+		const engine = new ScriptedActorEngine(
+			new Map([
+				["first", [completed("done")]],
+				[
+					"second",
+					[
+						(request) => {
+							capturedCheckResult = request.priorCheckResult;
+							return {
+								kind: "completed",
+								route: RouteId("done"),
+								writes: new Map(),
+								usage: fakeUsage(),
+								transcript: [],
+							};
+						},
+					],
+				],
+			]),
+		);
+		const { scheduler } = buildScheduler(plan, engine);
+		await scheduler.run();
+		expect(capturedCheckResult).toBeUndefined();
+	});
+});

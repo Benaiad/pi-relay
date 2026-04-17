@@ -39,12 +39,13 @@ import type {
 	ActorEngine,
 	ActorUsage,
 	PriorAttempt,
+	PriorCheckResult,
 } from "../actors/types.js";
 import { emptyUsage } from "../actors/types.js";
 import type { ActorId, ArtifactId, RouteId, StepId } from "../plan/ids.js";
 import { edgeKey, RouteId as makeRouteId, unwrap } from "../plan/ids.js";
 import type { Program } from "../plan/program.js";
-import type { ActionStep, CheckStep, Step, TerminalStep } from "../plan/types.js";
+import type { ActionStep, CheckSpec, CheckStep, Step, TerminalStep } from "../plan/types.js";
 import { ArtifactStore } from "./artifacts.js";
 import { AuditLog } from "./audit.js";
 import { runCheck } from "./checks.js";
@@ -59,6 +60,15 @@ import {
 
 const DEFAULT_CLOCK = () => Date.now();
 const DEFAULT_RETRY_MAX_ATTEMPTS = 1;
+
+const describeCheck = (spec: CheckSpec): string => {
+	switch (spec.kind) {
+		case "command_exits_zero":
+			return `command: ${spec.command}`;
+		case "file_exists":
+			return `file: ${spec.path}`;
+	}
+};
 const DEFAULT_MAX_RUNS = 10;
 const PRIOR_ATTEMPT_NARRATION_LIMIT = 240;
 const FAILURE_ROUTE_CANDIDATES = ["failure", "error"] as const;
@@ -140,6 +150,7 @@ export class Scheduler {
 	private readyQueue: StepId[] = [];
 	private handlers: SchedulerEventHandler[] = [];
 	private hasRun = false;
+	private lastCheckResult: PriorCheckResult | undefined;
 
 	constructor(config: SchedulerConfig) {
 		this.program = config.program;
@@ -286,6 +297,9 @@ export class Scheduler {
 		this.emit({ kind: "step_started", at: this.clock(), stepId: step.id, attempt });
 
 		const snapshot = this.artifactStore.snapshot(step.reads);
+		const priorCheckResult = this.lastCheckResult;
+		this.lastCheckResult = undefined;
+
 		const request: ActionRequest = {
 			step,
 			actor,
@@ -294,6 +308,7 @@ export class Scheduler {
 			cwd: this.cwd,
 			signal: this.signal,
 			priorAttempts,
+			priorCheckResult,
 			stepActorResolver: (sid) => {
 				const s = this.program.steps.get(sid);
 				return s?.kind === "action" ? unwrap(s.actor) : undefined;
@@ -382,10 +397,14 @@ export class Scheduler {
 		this.emit({ kind: "step_started", at: this.clock(), stepId: step.id, attempt });
 
 		const outcome = await runCheck(step.check, { cwd: this.cwd, signal: this.signal });
+		const description = describeCheck(step.check);
+
 		if (outcome.kind === "pass") {
+			this.lastCheckResult = { stepId: step.id, outcome: "passed", description };
 			this.emit({ kind: "check_passed", at: this.clock(), stepId: step.id });
 			this.followRoute(step.id, makeRouteId("pass"));
 		} else {
+			this.lastCheckResult = { stepId: step.id, outcome: "failed", description };
 			this.emit({ kind: "check_failed", at: this.clock(), stepId: step.id, reason: outcome.reason });
 			this.followRoute(step.id, makeRouteId("fail"));
 		}

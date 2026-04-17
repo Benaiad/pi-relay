@@ -125,6 +125,14 @@ export interface ActionRequest {
 	readonly priorAttempts: readonly PriorAttempt[];
 	/** Resolves a step ID to its actor name — for attributed artifact rendering. */
 	readonly stepActorResolver?: (stepId: StepId) => string | undefined;
+	/** Set when this action step was preceded by a check step. */
+	readonly priorCheckResult?: PriorCheckResult;
+}
+
+export interface PriorCheckResult {
+	readonly stepId: StepId;
+	readonly outcome: "passed" | "failed";
+	readonly description: string;
 }
 
 /**
