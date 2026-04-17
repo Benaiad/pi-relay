@@ -2,7 +2,7 @@
 
 **Plan. Execute. Verify.**
 
-A [pi](https://pi.dev/) extension that breaks complex tasks into multi-step workflows with deterministic verification gates. The model writes code through isolated agent subprocesses. Shell commands — tests, linters, type checkers — decide if the work is acceptable. The model doesn't get a vote on verification.
+Finite state machine workflows for [pi](https://pi.dev/). Agents act, Relay verify.
 
 ```bash
 pi install https://github.com/benaiad/pi-relay
