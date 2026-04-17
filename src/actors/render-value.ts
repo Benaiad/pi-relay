@@ -103,10 +103,4 @@ const isPrimitive = (value: unknown): boolean =>
 	typeof value === "number" ||
 	typeof value === "boolean";
 
-const inlineJson = (value: unknown): string => {
-	try {
-		return JSON.stringify(value);
-	} catch {
-		return "<unserializable>";
-	}
-};
+const inlineJson = (value: unknown): string => JSON.stringify(value);
