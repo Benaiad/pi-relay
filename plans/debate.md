@@ -34,8 +34,11 @@ steps:
       critic's latest objections and the judge's guidance on what to
       focus on.
 
-      Write your argument to the debate_log artifact as:
-      { "role": "advocate", "argument": "..." }
+      Write a SHORT structured summary to the debate_log artifact.
+      Keep it under 200 words — key claims only, not the full argument.
+      The full argument goes in your narration text (before the
+      completion tag), not in the artifact.
+      Format: { "role": "advocate", "claims": ["claim 1", "claim 2"] }
     reads: [debate_log]
     writes: [debate_log]
     routes: [{ route: done, to: challenge }]
@@ -50,8 +53,10 @@ steps:
       Read the debate log. Challenge the advocate's latest argument.
       Find weaknesses, hidden assumptions, and failure modes.
 
-      Write your critique to the debate_log artifact as:
-      { "role": "critic", "critique": "..." }
+      Write a SHORT structured summary to the debate_log artifact.
+      Keep it under 200 words — key objections only, not the full
+      critique. The full critique goes in your narration text.
+      Format: { "role": "critic", "objections": ["objection 1", "objection 2"] }
     reads: [debate_log]
     writes: [debate_log]
     routes: [{ route: done, to: evaluate }]
@@ -65,9 +70,11 @@ steps:
       Read the full debate log. Evaluate the latest round of arguments.
       Decide: is the question resolved, or does it need another round?
 
-      Write your verdict to the debate_log artifact as:
-      - If resolved: { "role": "judge", "verdict": "resolved", "conclusion": "...", "prevailing_side": "advocate" or "critic" }
-      - If unresolved: { "role": "judge", "verdict": "unresolved", "focus": "what the next round should address" }
+      Write a SHORT verdict to the debate_log artifact.
+      Keep it under 100 words. The full reasoning goes in your
+      narration text.
+      - If resolved: { "role": "judge", "verdict": "resolved", "conclusion": "one sentence", "prevailing_side": "advocate" or "critic" }
+      - If unresolved: { "role": "judge", "verdict": "unresolved", "focus": "what to address next" }
     reads: [debate_log]
     writes: [debate_log]
     routes:
