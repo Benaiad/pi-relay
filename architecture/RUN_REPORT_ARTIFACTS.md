@@ -1,158 +1,100 @@
-# Run Report: Artifacts Inline with Timeline
+# Run Report: Add Artifact Values Inline
 
 ## Problem
 
 When a relay run finishes, the planner receives a text report to
-narrate the result to the user. Currently the report shows tool call
-logs (`→ read`, `→ edit`) and a one-line narration per step, but
-artifact values — the actual substance of what was produced — are
-invisible. The planner can't tell the user what the debate concluded,
-what the diagnosis found, or what the experiment tried.
+narrate the result to the user. The report currently shows tool calls,
+narration, and routes — but artifact values are missing. The planner
+sees `Produced: debate_log` but never the debate content itself.
 
-## What the planner should see
+## Change
 
-A chronological timeline where each step shows its narration AND the
-artifacts it committed, inline:
+Add artifact values inline after each step, keeping everything else
+as-is. The report gains one new section per step: the artifact values
+that step committed.
+
+## What the planner sees (before → after)
+
+Before:
+```
+✓ diagnose — worker
+  → read src/auth/login.ts
+  "Found the root cause: encodeURIComponent converts + to %2B"
+
+Produced: diagnosis, fix_notes
+```
+
+After:
+```
+✓ diagnose — worker
+  → read src/auth/login.ts
+  "Found the root cause: encodeURIComponent converts + to %2B"
+
+  artifact diagnosis:
+    root_cause: encodeURIComponent converts + to %2B
+    file: src/auth/login.ts
+    fix: add decodeURIComponent before the query
+```
+
+## Full example: debate
 
 ```
-Relay run: SUCCESS — Debate: Should we use TOON?
+Relay run: SUCCESS — Debate: Should we migrate to GraphQL?
 
 ✓ argue — advocate
-  "TOON is better because it uses 40% fewer tokens..."
+  → read src/api/users.ts
+  → grep /fields/ in src/api/
+  "GraphQL eliminates overfetching — our users endpoint returns 40
+   fields when the mobile app needs 5."
 
-  → debate_log [1]:
+  artifact debate_log [1]:
     role: advocate
-    argument: TOON is better because...
+    argument: GraphQL solves the overfetching problem...
 
 ✓ challenge — critic
-  "The advocate's case collapses under scrutiny..."
+  → read src/api/users.ts
+  "The overfetching argument is valid but the migration cost is
+   understated."
 
-  → debate_log [2]:
+  artifact debate_log [2]:
     role: critic
-    critique: The advocate's case collapses...
+    critique: Migration cost is understated...
 
 ✓ evaluate — judge → resolved
-  "The motion fails — retain YAML-like rendering"
+  "The motion fails — retain YAML-like rendering."
 
-  → debate_log [3]:
+  artifact debate_log [3]:
     role: judge
     verdict: resolved
-    conclusion: Retain YAML-like rendering
+    conclusion: REST with sparse fieldsets solves overfetching
     prevailing_side: critic
 
+Produced: debate_log
 Total: 6 turns · $0.12
 ```
 
-The planner reads top-to-bottom and gets the full story in order.
-No separate artifacts section. No cap on entries. No dropped
-narration.
+## Rules
 
-## Design principles
+1. **Keep everything that's there today.** Tool calls, narration,
+   routes, failure reasons, usage — unchanged.
+2. **Add artifact values after the narration.** Each artifact the step
+   committed is rendered inline using the YAML-like renderer.
+3. **Accumulated artifacts show per-step entries.** Each entry appears
+   under the step that produced it, with `[N]` index. The timeline
+   IS the chronological order.
+4. **No cap.** Show all entries. The planner needs the full picture.
+5. **Non-accumulated artifacts** show the value without an index.
 
-1. **Timeline-first.** The report reads as a chronological story.
-   Each step appears in execution order, same as the TUI.
-2. **Artifacts inline.** Each step's committed artifact entries appear
-   directly under that step, not in a batch at the end.
-3. **Narration kept.** The actor's narration carries context the
-   artifact value doesn't — why it made the choice, what it
-   considered, what it rejected.
-4. **No cap on entries.** Show everything. The planner needs the full
-   picture. Context window management is the model's concern.
-5. **Tool calls dropped from the report.** `→ read`, `→ edit`,
-   `→ grep` are debugging detail. The planner doesn't need to know
-   which files were read to narrate the result. Tool calls remain
-   visible in the TUI's expanded view (Ctrl+O).
+## Implementation
 
-## Per-step report block
-
-Each step in the timeline produces a block:
-
-```
-<icon> <stepId> — <actor> [retry tag] [non-generic route]
-
-  "<narration>"
-
-  → <artifactId> [entry index for accumulated]:
-    <rendered value>
-```
-
-- **Icon**: ✓ success, ✗ failure, ⏳ open
-- **Actor**: only for action steps
-- **Retry tag**: `(retry)` or `(retry N)` when attempt > 1
-- **Route**: shown only when non-generic (not "done", "next", etc.)
-- **Narration**: the actor's final text output, quoted, always present
-  for action steps
-- **Artifact entries**: each artifact this step committed, rendered
-  with the YAML-like renderer. For accumulated artifacts, show the
-  entry index (`[1]`, `[2]`). For non-accumulated, just the value.
-- **Failure reason**: shown for failed steps (check failures, engine
-  errors, no completion)
-
-Check steps show their command and pass/fail result. Terminal steps
-show their summary.
-
-## Accumulated artifact rendering
-
-For accumulated artifacts, each step writes one entry. That entry
-appears under the step that wrote it in the timeline. The full
-accumulated array is never shown as a batch — it's distributed
-across the timeline entries, which IS the chronological order.
-
-This means the planner sees the debate unfold step by step, not as
-a dump of the final array.
-
-## What the report builder needs
-
-Currently `buildRunReport` receives `RelayRunState` and `AuditLog`.
-It produces `RunReport` with `ArtifactSummary` containing only
-`{artifactId, writerStep, description}` — no values.
-
-To render artifact values inline, the report builder needs access to
-the committed artifact values. Two options:
-
-**Option A: Pass the ArtifactStore to buildRunReport.**
-The report builder calls `store.snapshot()` to get values and pairs
-them with timeline entries by matching `stepId`.
-
-**Option B: Include values in ArtifactSummary.**
-The caller (scheduler/execute) reads the committed values from the
-store and passes them into the report.
-
-Option A is simpler — the store already has everything indexed. The
-report builder can look up which artifacts a step committed by
-checking the store's entries.
-
-For accumulated artifacts, the store holds `AccumulatedEntry[]`.
-The report builder walks the array and distributes entries to the
-timeline steps that produced them (matching by `stepId`).
-
-## Non-accumulated artifacts
-
-For non-accumulated artifacts, the value appears under the single
-step that wrote it:
-
-```
-✓ diagnose — worker
-  "Found the bug — subtract uses + instead of -"
-
-  → diagnosis:
-    root_cause: subtract function uses + instead of -
-    file: src/math.js
-    line: 6
-    fix: change return a + b to return a - b
-```
-
-Same format as accumulated entries, just without the `[N]` index.
-
-## Implementation scope
-
-1. Pass `ArtifactStore` to `buildRunReport` (or to
-   `renderRunReportText` directly).
-2. For each timeline entry, look up which artifacts the step committed
-   and render their values inline.
-3. For accumulated artifacts, distribute entries to the timeline step
-   that produced each one (match by `AccumulatedEntry.stepId`).
-4. Drop tool call rendering from the text report.
-5. Keep narration for all action steps.
-6. Use `renderValue` for artifact values.
-7. Update tests.
+1. Pass `ArtifactStore` to `renderRunReportText`.
+2. For each timeline entry (action step), look up which artifacts
+   the step committed. For accumulated artifacts, find entries
+   matching the step's `stepId`. For non-accumulated, check if
+   the step is the artifact's writer.
+3. Render each artifact value using `renderValue` from
+   `render-value.ts`, prefixed with `artifact <id>:` (or
+   `artifact <id> [N]:` for accumulated).
+4. Resolve actor names for accumulated entry attribution using
+   the program's step definitions.
+5. Update tests.
