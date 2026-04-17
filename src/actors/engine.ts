@@ -85,7 +85,7 @@ const runAction = async (request: ActionRequest): Promise<ActionOutcome> => {
 		tmpDir = written.dir;
 		tmpPromptPath = written.filePath;
 
-		const args: string[] = ["--mode", "json", "-p", "--no-session"];
+		const args: string[] = ["--mode", "json", "-p", "--no-session", "--no-extensions"];
 		if (actor.model) args.push("--model", actor.model);
 		if (actor.thinking) args.push("--thinking", actor.thinking);
 		if (actor.tools && actor.tools.length > 0) args.push("--tools", actor.tools.join(","));
