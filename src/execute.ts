@@ -152,7 +152,7 @@ export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<
 		const finalState = scheduler.getState();
 		const finalTimeline = buildAttemptTimeline(scheduler.getAudit().entries());
 		return {
-			content: [{ type: "text", text: renderRunReportText(report) }],
+			content: [{ type: "text", text: renderRunReportText(report, artifactStore) }],
 			details: { kind: "state", state: finalState, attemptTimeline: finalTimeline },
 		};
 	} finally {
