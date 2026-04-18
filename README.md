@@ -25,14 +25,133 @@ Type `/relay` to browse installed actors and templates.
 
 Use `/relay` to browse installed actors and templates.
 
-## Templates
+## Included templates
 
-Four templates ship with the extension:
+Five templates ship with the extension. Each implements a different workflow topology — from a single gate to multi-round adversarial loops. The model picks the right one via `replay`, or builds a custom plan with `relay`.
 
-- **verified-edit**(task, verify) — implement then verify. One step, one gate.
-- **bug-fix**(bug, verify) — diagnose → fix → verify. Diagnosis artifact forces structured thinking before code changes.
-- **reviewed-edit**(task, criteria, verify) — implement → spec review → quality review → fix loop → verify. Reviewers run in fresh contexts.
-- **multi-gate**(task, gate1–3, gate1–3_name) — implement → three sequential gates with per-gate failure reporting.
+### verified-edit
+
+The simplest useful topology: do the work, then prove it didn't break anything.
+
+```
+implement ──→ verify ──→ done
+                │
+                ╰──→ failed
+```
+
+**Parameters:** `task`, `verify`
+
+```
+Use replay with the verified-edit template:
+  task: Add input validation to the signup handler in src/api/signup.ts
+  verify: npm test
+```
+
+### bug-fix
+
+Diagnosis before code changes. The worker writes a structured root-cause analysis, then reads it back when fixing. No "let me just try something."
+
+```
+diagnose ──→ fix ──→ verify ──→ done
+              │        │
+              │        ╰──→ failed
+              │
+          (reads diagnosis
+           artifact)
+```
+
+**Parameters:** `bug`, `verify`
+
+```
+Use replay with the bug-fix template:
+  bug: Login returns 500 when email contains a + character
+  verify: npm test -- --grep auth
+```
+
+### reviewed-edit
+
+Two-pass review with a fix loop. Spec compliance first, code quality second. Reviewers run in fresh contexts — no memory of the implementation reasoning, so they evaluate the code as-is.
+
+```
+implement ──→ spec review ──→ quality review ──→ verify ──→ done
+                   │                │               │
+                   │                │               ╰──→ failed
+                   │                │
+                   ╰───→ fix ←──────╯
+                         │
+                         ╰──→ (back to spec review)
+```
+
+**Parameters:** `task`, `criteria`, `verify`
+
+```
+Use replay with the reviewed-edit template:
+  task: Add rate limiting to the /api/upload endpoint
+  criteria: Returns 429 after 10 requests per minute per IP. Includes Retry-After header.
+  verify: npm test && npm run lint
+```
+
+### multi-gate
+
+Three sequential verification gates with per-gate failure reporting. Use instead of `verified-edit` when you need to know exactly which gate failed — a compound `lint && tsc && test` command hides which step broke.
+
+```
+implement ──→ gate 1 ──→ gate 2 ──→ gate 3 ──→ done
+                │           │          │
+                ╰→ fail 1   ╰→ fail 2  ╰→ fail 3
+```
+
+**Parameters:** `task`, `gate1`, `gate1_name`, `gate2`, `gate2_name`, `gate3`, `gate3_name`
+
+```
+Use replay with the multi-gate template:
+  task: Refactor the config parser to use Zod schemas
+  gate1: npm run lint
+  gate1_name: lint
+  gate2: npx tsc --noEmit
+  gate2_name: typecheck
+  gate3: npm test
+  gate3_name: test
+```
+
+### debate
+
+Structured adversarial debate between three actors. The advocate defends a position, the critic attacks it, and the judge decides whether the question is resolved or needs another round. The loop runs up to `max_rounds` iterations.
+
+```
+         ╭──────────────────────────╮
+         │                          │
+argue ──→ challenge ──→ evaluate ──→ done
+  │                        │
+  ╰────────────────────────╯
+       (if unresolved)
+```
+
+**Parameters:** `topic`, `position`, `max_rounds`
+
+```
+Use replay with the debate template:
+  topic: Should we migrate from REST to GraphQL for the users API?
+  position: Yes — GraphQL eliminates overfetching and simplifies the mobile client.
+  max_rounds: 3
+```
+
+### autoresearch
+
+An autonomous optimization loop. The agent modifies code, the runtime benchmarks it, a deterministic gate keeps improvements and reverts regressions. Included as an example in [`examples/autoresearch/`](examples/autoresearch/) — see its README for setup.
+
+```
+         ╭──────────────────────────────────────╮
+         │                                      │
+experiment ──→ benchmark ──→ evaluate ──→ experiment
+                  │              │
+                  ╰→ recover ────╯
+                  (crash recovery)
+```
+
+**Parameters:** `target`, `goal`, `benchmark`, `evaluate`, `recover`, `max_experiments`
+
+## Custom templates
 
 Templates live in `~/.pi/agent/relay/plans/` (user scope) or `<project>/.pi/relay/plans/` (project scope). Write your own:
 
@@ -79,10 +198,13 @@ Check commands run through pi's shell backend (respects `shellPath` in settings,
 
 ## Actors
 
-Actors define the roles that execute plan steps. Two ship with the extension:
+Actors define the roles that execute plan steps. Five ship with the extension:
 
 - **worker** — implements changes (read, edit, write, grep, find, ls, bash)
 - **reviewer** — reviews against criteria, read-only (read, grep, find, ls, bash)
+- **advocate** — argues a position in a debate (read, grep, find, ls)
+- **critic** — challenges arguments in a debate (read, grep, find, ls)
+- **judge** — evaluates debate rounds and delivers verdicts (read, grep, find, ls)
 
 Actors live in `~/.pi/agent/relay/actors/` (user scope) or `<project>/.pi/relay/actors/` (project scope). Write your own:
 
@@ -99,10 +221,6 @@ data exposure.
 ```
 
 Edits to actor system prompts take effect on the next execution. Adding or removing actors requires `/reload`.
-
-## Autoresearch
-
-An autonomous optimization loop is included as an example. The agent modifies code, the runtime benchmarks it, a deterministic gate keeps improvements and reverts regressions. See [`examples/autoresearch/`](examples/autoresearch/).
 
 ## Plan review
 
