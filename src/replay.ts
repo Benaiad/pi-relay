@@ -15,8 +15,8 @@ import { Text } from "@mariozechner/pi-tui";
 import { type Static, Type } from "@sinclair/typebox";
 import { discoverActors } from "./actors/discovery.js";
 import { executePlan } from "./execute.js";
-import type { RelayDetails } from "./index.js";
-import { renderRelayResult } from "./index.js";
+import type { RelayDetails, RelayRenderState } from "./index.js";
+import { manageElapsedTimer, renderRelayResult } from "./index.js";
 import { discoverPlanTemplates } from "./templates/discovery.js";
 import { formatTemplateError } from "./templates/errors.js";
 import { instantiateTemplate } from "./templates/substitute.js";
@@ -39,7 +39,7 @@ type ReplayParams = Static<typeof ReplayParamsSchema>;
 export const registerReplayTool = (pi: ExtensionAPI, templates: readonly PlanTemplate[]): void => {
 	const description = buildReplayToolDescription(templates);
 
-	pi.registerTool<typeof ReplayParamsSchema, RelayDetails>({
+	pi.registerTool<typeof ReplayParamsSchema, RelayDetails, RelayRenderState>({
 		name: "replay",
 		label: "Replay",
 		description,
@@ -89,6 +89,7 @@ export const registerReplayTool = (pi: ExtensionAPI, templates: readonly PlanTem
 		},
 
 		renderResult(result, options, theme, context) {
+			manageElapsedTimer(options, context.state, context.invalidate);
 			return renderRelayResult(result, options, theme, context);
 		},
 	});

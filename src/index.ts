@@ -19,12 +19,19 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { DynamicBorder, type ExtensionAPI, getAgentDir, getMarkdownTheme } from "@mariozechner/pi-coding-agent";
+import {
+	DynamicBorder,
+	type ExtensionAPI,
+	getAgentDir,
+	getMarkdownTheme,
+	type ToolRenderResultOptions,
+} from "@mariozechner/pi-coding-agent";
 import { Container, Markdown, matchesKey, Text } from "@mariozechner/pi-tui";
 import { discoverActors } from "./actors/discovery.js";
 import type { ActorConfig } from "./actors/types.js";
 import { executePlan } from "./execute.js";
 import { PlanDraftSchema } from "./plan/draft.js";
+import type { StepId } from "./plan/ids.js";
 import { renderPlanPreview } from "./render/plan-preview.js";
 import { renderCancelled, renderCompileFailure, renderRefined, renderRunResult } from "./render/run-result.js";
 import { registerReplayTool } from "./replay.js";
@@ -47,7 +54,12 @@ export type RelayDetails =
 			readonly kind: "state";
 			readonly state: RelayRunState;
 			readonly attemptTimeline: readonly AttemptTimelineEntry[];
+			readonly checkOutput?: ReadonlyMap<StepId, string>;
 	  };
+
+export type RelayRenderState = {
+	interval: NodeJS.Timeout | undefined;
+};
 
 export default function (pi: ExtensionAPI): void {
 	seedBundledFiles();
@@ -62,7 +74,7 @@ export default function (pi: ExtensionAPI): void {
 
 	const relayDescription = buildToolDescription(loadDiscovery.actors);
 
-	pi.registerTool<typeof PlanDraftSchema, RelayDetails>({
+	pi.registerTool<typeof PlanDraftSchema, RelayDetails, RelayRenderState>({
 		name: "relay",
 		label: "Relay",
 		description: relayDescription,
@@ -78,6 +90,7 @@ export default function (pi: ExtensionAPI): void {
 		},
 
 		renderResult(result, options, theme, context) {
+			manageElapsedTimer(options, context.state, context.invalidate);
 			return renderRelayResult(result, options, theme, context);
 		},
 	});
@@ -118,6 +131,22 @@ export default function (pi: ExtensionAPI): void {
 // Shared result renderer (used by both relay and replay)
 // ============================================================================
 
+export const manageElapsedTimer = (
+	options: ToolRenderResultOptions,
+	state: RelayRenderState,
+	invalidate: () => void,
+): void => {
+	if (options.isPartial && !state.interval) {
+		state.interval = setInterval(() => invalidate(), 1000);
+	}
+	if (!options.isPartial) {
+		if (state.interval) {
+			clearInterval(state.interval);
+			state.interval = undefined;
+		}
+	}
+};
+
 export const renderRelayResult = (
 	result: { details?: RelayDetails; content: Array<{ type: string; text?: string }> },
 	options: { expanded: boolean },
@@ -126,7 +155,14 @@ export const renderRelayResult = (
 ): ReturnType<typeof renderRunResult> => {
 	const details = result.details;
 	if (details?.kind === "state") {
-		return renderRunResult(details.state, details.attemptTimeline, theme, options.expanded, context.lastComponent);
+		return renderRunResult(
+			details.state,
+			details.attemptTimeline,
+			theme,
+			options.expanded,
+			context.lastComponent,
+			details.checkOutput,
+		);
 	}
 	if (details?.kind === "compile_failed") {
 		return renderCompileFailure(details.message, theme, context.lastComponent);

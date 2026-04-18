@@ -18,9 +18,10 @@ import type { RelayDetails } from "./index.js";
 import { compile } from "./plan/compile.js";
 import { formatCompileError } from "./plan/compile-error-format.js";
 import type { PlanDraftDoc } from "./plan/draft.js";
-import { ActorId } from "./plan/ids.js";
+import { ActorId, type StepId } from "./plan/ids.js";
 import { ArtifactStore } from "./runtime/artifacts.js";
 import { AuditLog } from "./runtime/audit.js";
+import type { RelayRunState } from "./runtime/events.js";
 import { buildAttemptTimeline, buildRunReport, renderRunReportText } from "./runtime/run-report.js";
 import { Scheduler } from "./runtime/scheduler.js";
 
@@ -139,13 +140,15 @@ export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<
 		const auditLog = scheduler.getAudit();
 		const attemptTimeline = buildAttemptTimeline(auditLog.entries());
 		const report = buildRunReport(state, auditLog);
+		const checkOutput = buildCheckOutputSnapshot(scheduler, state);
 		onUpdate({
 			content: [{ type: "text", text: renderRunReportText(report) }],
-			details: { kind: "state", state, attemptTimeline },
+			details: { kind: "state", state, attemptTimeline, checkOutput },
 		});
 	};
 
-	const subscription = scheduler.subscribe(() => emitUpdate(false));
+	const eventSub = scheduler.subscribe(() => emitUpdate(false));
+	const outputSub = scheduler.subscribeOutput(() => emitUpdate(false));
 	try {
 		const report = await scheduler.run();
 		emitUpdate(true);
@@ -156,7 +159,8 @@ export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<
 			details: { kind: "state", state: finalState, attemptTimeline: finalTimeline },
 		};
 	} finally {
-		subscription.unsubscribe();
+		eventSub.unsubscribe();
+		outputSub.unsubscribe();
 	}
 };
 
@@ -257,4 +261,22 @@ export const buildSelectTitle = (plan: PlanDraftDoc, impact: PlanImpact): string
 	parts.push(...bullets);
 
 	return `Relay plan · ${parts.join(" · ")}`;
+};
+
+// ============================================================================
+// Check output snapshot
+// ============================================================================
+
+const buildCheckOutputSnapshot = (
+	scheduler: Scheduler,
+	state: RelayRunState,
+): ReadonlyMap<StepId, string> | undefined => {
+	let result: Map<StepId, string> | undefined;
+	for (const stepId of state.currentlyRunning) {
+		const output = scheduler.getCheckOutput(stepId);
+		if (output === undefined) continue;
+		result ??= new Map();
+		result.set(stepId, output);
+	}
+	return result;
 };

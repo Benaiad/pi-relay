@@ -23,8 +23,8 @@
  * because Markdown rendering genuinely wants its own component.
  */
 
-import { getMarkdownTheme, keyHint, type Theme } from "@mariozechner/pi-coding-agent";
-import { type Component, Container, Markdown, Spacer, Text } from "@mariozechner/pi-tui";
+import { getMarkdownTheme, keyHint, type Theme, truncateToVisualLines } from "@mariozechner/pi-coding-agent";
+import { type Component, Container, Markdown, Spacer, Text, truncateToWidth } from "@mariozechner/pi-tui";
 import { stripCompletionTag } from "../actors/complete-step.js";
 import type { TranscriptItem } from "../actors/types.js";
 import type { StepId } from "../plan/ids.js";
@@ -37,6 +37,7 @@ import { iconFor, phaseLabel, runIcon, type StatusIcon } from "./icons.js";
 import { formatUsageStats } from "./usage.js";
 
 const EXPANDED_TRANSCRIPT_LIMIT = 15;
+const CHECK_OUTPUT_PREVIEW_LINES = 5;
 const ERROR_REASON_TRUNCATE = 800;
 
 export const renderRunResult = (
@@ -45,10 +46,11 @@ export const renderRunResult = (
 	theme: Theme,
 	expanded: boolean,
 	lastComponent: Component | undefined,
+	checkOutput?: ReadonlyMap<StepId, string>,
 ): Component => {
-	if (expanded) return renderExpanded(state, timeline, theme);
+	if (expanded) return renderExpanded(state, timeline, theme, checkOutput);
 	const text = (lastComponent as Text | undefined) ?? new Text("", 0, 0);
-	text.setText(formatCollapsed(state, theme));
+	text.setText(formatCollapsed(state, theme, checkOutput));
 	return text;
 };
 
@@ -127,10 +129,10 @@ const wrapReason = (
 // Collapsed — 3 rows max
 // ============================================================================
 
-const formatCollapsed = (state: RelayRunState, theme: Theme): string => {
+const formatCollapsed = (state: RelayRunState, theme: Theme, checkOutput?: ReadonlyMap<StepId, string>): string => {
 	const lines: string[] = [];
 	lines.push(buildHeader(state, theme));
-	lines.push(`  ${buildProgressLine(state, theme)}`);
+	lines.push(`  ${buildProgressLine(state, theme, checkOutput)}`);
 
 	const footer = buildFooter(state, theme);
 	if (footer.length > 0) lines.push(`  ${footer}`);
@@ -153,9 +155,9 @@ const buildHeader = (state: RelayRunState, theme: Theme): string => {
 	);
 };
 
-const buildProgressLine = (state: RelayRunState, theme: Theme): string => {
+const buildProgressLine = (state: RelayRunState, theme: Theme, checkOutput?: ReadonlyMap<StepId, string>): string => {
 	const strip = buildGlyphStrip(state, theme);
-	const detail = buildProgressDetail(state, theme);
+	const detail = buildProgressDetail(state, theme, checkOutput);
 	return `${strip}  ${detail}`;
 };
 
@@ -170,7 +172,7 @@ const buildGlyphStrip = (state: RelayRunState, theme: Theme): string => {
 	return glyphs.join("");
 };
 
-const buildProgressDetail = (state: RelayRunState, theme: Theme): string => {
+const buildProgressDetail = (state: RelayRunState, theme: Theme, checkOutput?: ReadonlyMap<StepId, string>): string => {
 	const total = state.program.stepOrder.length;
 	const done = countStatus(state, ["succeeded"]);
 	const skipped = countStatus(state, ["skipped"]);
@@ -192,7 +194,7 @@ const buildProgressDetail = (state: RelayRunState, theme: Theme): string => {
 			const prefix = theme.fg("muted", `${done}/${total} done`);
 			if (!active) return prefix;
 			const activeName = theme.fg("accent", unwrap(active.stepId));
-			const activity = describeActiveStep(active.step, active.runtime, theme);
+			const activity = describeActiveStep(active.step, active.runtime, theme, checkOutput?.get(active.stepId));
 			const activityText = activity ? ` · ${activity}` : "";
 			return `${prefix} · ${activeName}${activityText}`;
 		}
@@ -245,7 +247,12 @@ const buildFooter = (state: RelayRunState, theme: Theme): string => {
 // Expanded — chronological Container with one block per attempt
 // ============================================================================
 
-const renderExpanded = (state: RelayRunState, timeline: readonly AttemptTimelineEntry[], theme: Theme): Component => {
+const renderExpanded = (
+	state: RelayRunState,
+	timeline: readonly AttemptTimelineEntry[],
+	theme: Theme,
+	checkOutput?: ReadonlyMap<StepId, string>,
+): Component => {
 	const container = new Container();
 	const mdTheme = getMarkdownTheme();
 
@@ -262,7 +269,7 @@ const renderExpanded = (state: RelayRunState, timeline: readonly AttemptTimeline
 		const step = state.program.steps.get(entry.stepId);
 		if (!step) continue;
 		container.addChild(new Spacer(1));
-		appendAttemptBlock(container, entry.stepId, step, entry.attempt, theme, mdTheme);
+		appendAttemptBlock(container, entry.stepId, step, entry.attempt, theme, mdTheme, checkOutput?.get(entry.stepId));
 	}
 
 	// Skipped steps are not in the timeline (they never ran). Surface them
@@ -296,6 +303,7 @@ const appendAttemptBlock = (
 	attempt: AttemptSummary,
 	theme: Theme,
 	mdTheme: ReturnType<typeof getMarkdownTheme>,
+	liveCheckOutput?: string,
 ): void => {
 	const icon = iconForAttemptOutcome(attempt.outcome, step);
 	const id = unwrap(stepId);
@@ -326,9 +334,10 @@ const appendAttemptBlock = (
 		// lines for compactness.
 		renderActionTranscript(container, attempt.transcript, theme, mdTheme);
 	} else if (step.kind === "check") {
-		// Check body: render the check as a `$ command` or `File exists:`
-		// line, matching how bash tool renders itself.
 		container.addChild(new Text(`  ${theme.fg("toolOutput", describeCheckInline(step))}`, 0, 0));
+		if (liveCheckOutput && liveCheckOutput.length > 0) {
+			appendCheckOutputPreview(container, liveCheckOutput, theme);
+		}
 	} else if (step.kind === "terminal") {
 		// Terminal body: the full summary prose. The icon already conveys
 		// success vs failure; no need for a kind label or truncation.
@@ -442,6 +451,29 @@ const renderActionTranscript = (
 	}
 };
 
+const appendCheckOutputPreview = (container: Container, output: string, theme: Theme): void => {
+	const styledOutput = output
+		.split("\n")
+		.map((line) => theme.fg("toolOutput", line))
+		.join("\n");
+
+	container.addChild({
+		render: (width: number) => {
+			const preview = truncateToVisualLines(styledOutput, CHECK_OUTPUT_PREVIEW_LINES, width);
+			const lines: string[] = [""];
+			if (preview.skippedCount > 0) {
+				const hint =
+					theme.fg("muted", `... (${preview.skippedCount} earlier lines,`) +
+					` ${keyHint("app.tools.expand", "to expand")})`;
+				lines.push(truncateToWidth(hint, width, "..."));
+			}
+			lines.push(...preview.visualLines);
+			return lines;
+		},
+		invalidate: () => {},
+	});
+};
+
 const GENERIC_ROUTE_NAMES = new Set(["done", "next", "continue", "ok", "success", "pass"]);
 
 const describeCheckInline = (step: Extract<Step, { kind: "check" }>): string => {
@@ -498,8 +530,12 @@ const findFailedStep = (state: RelayRunState): { stepId: StepId; runtime: StepRu
 	return null;
 };
 
-const describeActiveStep = (step: Step, runtime: StepRuntimeState, theme: Theme): string => {
-	if (step.kind === "check") return theme.fg("dim", describeCheck(step));
+const describeActiveStep = (step: Step, runtime: StepRuntimeState, theme: Theme, liveCheckOutput?: string): string => {
+	if (step.kind === "check") {
+		const lastLine = lastNonEmptyLine(liveCheckOutput);
+		if (lastLine) return theme.fg("toolOutput", truncate(lastLine, 80));
+		return theme.fg("dim", describeCheck(step));
+	}
 	if (step.kind === "terminal") return theme.fg("dim", `[${step.outcome}]`);
 	const lastCall = [...runtime.transcript]
 		.reverse()
@@ -538,4 +574,14 @@ const describeCheck = (step: Extract<Step, { kind: "check" }>): string => {
 		case "command_exits_zero":
 			return `command_exits_zero: ${step.check.command}`;
 	}
+};
+
+const lastNonEmptyLine = (text: string | undefined): string | undefined => {
+	if (!text) return undefined;
+	const lines = text.split("\n");
+	for (let i = lines.length - 1; i >= 0; i -= 1) {
+		const line = lines[i]?.trim();
+		if (line && line.length > 0) return line;
+	}
+	return undefined;
 };

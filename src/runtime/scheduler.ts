@@ -60,6 +60,7 @@ import {
 
 const DEFAULT_CLOCK = () => Date.now();
 const DEFAULT_RETRY_MAX_ATTEMPTS = 1;
+const MAX_CHECK_DISPLAY_BUFFER = 32 * 1024;
 
 const describeCheck = (spec: CheckSpec): string => {
 	switch (spec.kind) {
@@ -149,6 +150,9 @@ export class Scheduler {
 	private state: RelayRunState;
 	private readyQueue: StepId[] = [];
 	private handlers: SchedulerEventHandler[] = [];
+	private outputHandlers: Array<() => void> = [];
+	private checkOutputChunks = new Map<StepId, string[]>();
+	private checkOutputLens = new Map<StepId, number>();
 	private hasRun = false;
 	private lastCheckResult: PriorCheckResult | undefined;
 
@@ -171,6 +175,21 @@ export class Scheduler {
 				this.handlers = this.handlers.filter((h) => h !== handler);
 			},
 		};
+	}
+
+	subscribeOutput(handler: () => void): SchedulerSubscription {
+		this.outputHandlers.push(handler);
+		return {
+			unsubscribe: () => {
+				this.outputHandlers = this.outputHandlers.filter((h) => h !== handler);
+			},
+		};
+	}
+
+	getCheckOutput(stepId: StepId): string | undefined {
+		const chunks = this.checkOutputChunks.get(stepId);
+		if (!chunks || chunks.length === 0) return undefined;
+		return chunks.join("");
 	}
 
 	getAudit(): AuditLog {
@@ -242,6 +261,16 @@ export class Scheduler {
 				handler(event);
 			} catch {
 				// Subscribers are best-effort; a throwing renderer must not kill the scheduler.
+			}
+		}
+	}
+
+	private notifyOutputHandlers(): void {
+		for (const handler of this.outputHandlers) {
+			try {
+				handler();
+			} catch {
+				// Best-effort, same as event handlers.
 			}
 		}
 	}
@@ -396,7 +425,24 @@ export class Scheduler {
 		const attempt = (this.state.steps.get(step.id)?.attempts ?? 0) + 1;
 		this.emit({ kind: "step_started", at: this.clock(), stepId: step.id, attempt });
 
-		const outcome = await runCheck(step.check, { cwd: this.cwd, signal: this.signal });
+		this.checkOutputChunks.set(step.id, []);
+		this.checkOutputLens.set(step.id, 0);
+
+		const onOutput = (text: string) => {
+			const chunks = this.checkOutputChunks.get(step.id);
+			if (!chunks) return;
+			chunks.push(text);
+			let len = (this.checkOutputLens.get(step.id) ?? 0) + text.length;
+			while (len > MAX_CHECK_DISPLAY_BUFFER && chunks.length > 1) {
+				len -= chunks.shift()!.length;
+			}
+			this.checkOutputLens.set(step.id, len);
+			this.notifyOutputHandlers();
+		};
+
+		const outcome = await runCheck(step.check, { cwd: this.cwd, signal: this.signal }, onOutput);
+		this.checkOutputChunks.delete(step.id);
+		this.checkOutputLens.delete(step.id);
 		const description = describeCheck(step.check);
 
 		if (outcome.kind === "pass") {

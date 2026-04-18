@@ -37,12 +37,18 @@ export interface CheckContext {
 
 export type CheckOutcome = { readonly kind: "pass" } | { readonly kind: "fail"; readonly reason: string };
 
-export const runCheck = async (spec: CheckSpec, ctx: CheckContext): Promise<CheckOutcome> => {
+export type CheckOutputCallback = (text: string) => void;
+
+export const runCheck = async (
+	spec: CheckSpec,
+	ctx: CheckContext,
+	onOutput?: CheckOutputCallback,
+): Promise<CheckOutcome> => {
 	switch (spec.kind) {
 		case "file_exists":
 			return runFileExists(spec, ctx);
 		case "command_exits_zero":
-			return runCommandExitsZero(spec, ctx);
+			return runCommandExitsZero(spec, ctx, onOutput);
 	}
 };
 
@@ -62,6 +68,7 @@ const runFileExists = async (
 const runCommandExitsZero = async (
 	spec: Extract<CheckSpec, { kind: "command_exits_zero" }>,
 	ctx: CheckContext,
+	onOutput?: CheckOutputCallback,
 ): Promise<CheckOutcome> => {
 	const timeoutMs = spec.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
 	const cwd = spec.cwd ? (path.isAbsolute(spec.cwd) ? spec.cwd : path.resolve(ctx.cwd, spec.cwd)) : ctx.cwd;
@@ -76,6 +83,7 @@ const runCommandExitsZero = async (
 		while (chunksLen > MAX_OUTPUT_BUFFER && chunks.length > 1) {
 			chunksLen -= chunks.shift()!.length;
 		}
+		onOutput?.(text);
 	};
 
 	const drainOutput = (): string => chunks.join("");
