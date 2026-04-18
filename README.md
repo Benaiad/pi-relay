@@ -54,8 +54,8 @@ Diagnosis before code changes. The worker writes a structured root-cause analysi
 
 ```mermaid
 graph LR
-    diagnose["diagnose\n(worker)"] -- "writes diagnosis" --> fix["fix\n(worker)"]
-    fix -- "reads diagnosis" --> verify{verify}
+    diagnose["diagnose\n(worker)"] --> fix["fix\n(worker)"]
+    fix --> verify{verify}
     verify -- pass --> done([done])
     verify -- fail --> failed([failed])
 ```
