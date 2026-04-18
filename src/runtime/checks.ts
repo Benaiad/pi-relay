@@ -10,22 +10,24 @@
  *
  *   - `file_exists`        — pass iff the path exists on the filesystem
  *   - `command_exits_zero` — pass iff the command runs and exits 0 within the
- *                            timeout; stdout/stderr are captured for the
- *                            failure reason so the model can see why
+ *                            timeout; output is captured for the failure
+ *                            reason so the model can see why
  *
  * Checks never call an LLM, never read or write artifacts, and always
- * terminate within their declared timeout. If a check's timeout fires, the
- * process is killed (SIGTERM then SIGKILL after 1 second) and the check
- * fails with a timeout reason.
+ * terminate within their declared timeout. Command execution delegates to
+ * Pi's `createLocalBashOperations()` for process tree cleanup, cross-platform
+ * shell resolution, and abort handling.
  */
 
-import { spawn } from "node:child_process";
 import { access, constants } from "node:fs/promises";
 import * as path from "node:path";
+import { createLocalBashOperations } from "@mariozechner/pi-coding-agent";
 import type { CheckSpec } from "../plan/types.js";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 60_000;
 const COMMAND_OUTPUT_REASON_LIMIT = 800;
+
+const ops = createLocalBashOperations();
 
 export interface CheckContext {
 	readonly cwd: string;
@@ -56,101 +58,43 @@ const runFileExists = async (
 	}
 };
 
-const runCommandExitsZero = (
+const runCommandExitsZero = async (
 	spec: Extract<CheckSpec, { kind: "command_exits_zero" }>,
 	ctx: CheckContext,
 ): Promise<CheckOutcome> => {
 	const timeoutMs = spec.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
 	const cwd = spec.cwd ? (path.isAbsolute(spec.cwd) ? spec.cwd : path.resolve(ctx.cwd, spec.cwd)) : ctx.cwd;
 
-	return new Promise((resolve) => {
-		let stdout = "";
-		let stderr = "";
-		let settled = false;
-		const settle = (outcome: CheckOutcome) => {
-			if (settled) return;
-			settled = true;
-			resolve(outcome);
-		};
+	let output = "";
+	const onData = (data: Buffer) => {
+		output += data.toString();
+	};
 
-		const proc = spawn(spec.command, [], {
-			cwd,
-			shell: true,
-			stdio: ["ignore", "pipe", "pipe"],
+	try {
+		const { exitCode } = await ops.exec(spec.command, cwd, {
+			onData,
+			signal: ctx.signal,
+			timeout: timeoutMs / 1000,
 		});
 
-		const softTimer = setTimeout(() => {
-			proc.kill("SIGTERM");
-			const hardTimer = setTimeout(() => {
-				if (!proc.killed) proc.kill("SIGKILL");
-			}, 1000);
-			hardTimer.unref?.();
-			settle({
-				kind: "fail",
-				reason: `command timed out after ${timeoutMs}ms: ${spec.command}`,
-			});
-		}, timeoutMs);
-		softTimer.unref?.();
-
-		const onAbort = () => {
-			proc.kill("SIGTERM");
-			settle({ kind: "fail", reason: "check aborted" });
-		};
-		if (ctx.signal) {
-			if (ctx.signal.aborted) {
-				onAbort();
-				return;
-			}
-			ctx.signal.addEventListener("abort", onAbort, { once: true });
+		if (exitCode === 0) return { kind: "pass" };
+		return { kind: "fail", reason: formatCommandFailure(spec.command, exitCode, output) };
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		if (message === "aborted") {
+			return { kind: "fail", reason: "check aborted" };
 		}
-
-		proc.stdout.on("data", (chunk: Buffer) => {
-			stdout += chunk.toString();
-		});
-		proc.stderr.on("data", (chunk: Buffer) => {
-			stderr += chunk.toString();
-		});
-
-		proc.on("error", (error) => {
-			clearTimeout(softTimer);
-			ctx.signal?.removeEventListener("abort", onAbort);
-			settle({
-				kind: "fail",
-				reason: `failed to spawn ${spec.command}: ${error instanceof Error ? error.message : String(error)}`,
-			});
-		});
-
-		proc.on("close", (code, signal) => {
-			clearTimeout(softTimer);
-			ctx.signal?.removeEventListener("abort", onAbort);
-			if (code === 0) {
-				settle({ kind: "pass" });
-				return;
-			}
-			settle({
-				kind: "fail",
-				reason: formatCommandFailure(spec.command, code, signal, stdout, stderr),
-			});
-		});
-	});
+		if (message.startsWith("timeout:")) {
+			return { kind: "fail", reason: `command timed out after ${timeoutMs}ms: ${spec.command}` };
+		}
+		return { kind: "fail", reason: `failed to spawn ${spec.command}: ${message}` };
+	}
 };
 
-const formatCommandFailure = (
-	command: string,
-	code: number | null,
-	signal: NodeJS.Signals | null,
-	stdout: string,
-	stderr: string,
-): string => {
-	const status = signal ? `killed by signal ${signal}` : `exited with code ${code ?? "unknown"}`;
-	const prefix = `${command} ${status}`;
-	const combined = [
-		stderr.length > 0 ? `stderr: ${truncateOutput(stderr)}` : null,
-		stdout.length > 0 ? `stdout: ${truncateOutput(stdout)}` : null,
-	]
-		.filter((x): x is string => x !== null)
-		.join(" | ");
-	return combined.length > 0 ? `${prefix}; ${combined}` : prefix;
+const formatCommandFailure = (command: string, code: number | null, output: string): string => {
+	const prefix = `${command} exited with code ${code ?? "unknown"}`;
+	const trimmed = truncateOutput(output);
+	return trimmed.length > 0 ? `${prefix}; output: ${trimmed}` : prefix;
 };
 
 const truncateOutput = (text: string): string => {
