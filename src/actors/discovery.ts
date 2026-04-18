@@ -1,10 +1,14 @@
 /**
  * Actor discovery from disk.
  *
- * Scans two directories for markdown files with YAML frontmatter:
+ * Scans up to three directories for markdown files with YAML frontmatter,
+ * merged in ascending priority:
  *
- *   - `~/.pi/agent/relay-actors/`  (user scope — always scanned unless scope="project")
- *   - `<cwd>/.pi/relay-actors/`    (project scope — scanned only when scope="project" or "both")
+ *   1. `<package-root>/actors/`           (bundled — ships with the extension, read-only)
+ *   2. `~/.pi/agent/pi-relay/actors/`     (user scope — user overrides and custom actors)
+ *   3. `<cwd>/.pi/pi-relay/actors/`       (project scope — repo-controlled actors)
+ *
+ * Higher-priority sources shadow lower-priority sources by name.
  *
  * Project scope is opt-in because project-local actors are repo-controlled
  * and may instruct the model to read files, run commands, etc. The `relay`
@@ -12,36 +16,39 @@
  * project-local, matching subagent's behavior.
  *
  * Discovery is fresh on every invocation. Editing an actor `.md` file is
- * picked up on the next call without restarting pi. This mirrors subagent's
- * `agents.ts` convention.
+ * picked up on the next call without restarting pi.
  */
 
-import * as fs from "node:fs";
-import * as path from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { getAgentDir, parseFrontmatter } from "@mariozechner/pi-coding-agent";
 import type { ActorRegistry } from "../plan/compile.js";
 import { ActorId, unwrap } from "../plan/ids.js";
 import type { ActorConfig, ActorDiscovery, ActorScope, ActorSource, ThinkingLevel } from "./types.js";
 
-const ACTORS_SUBDIR = "relay/actors";
+const RELAY_SUBDIR = "pi-relay/actors";
 
 export interface DiscoveryOptions {
-	/** Override the user-scope directory (used by tests). Defaults to `<getAgentDir()>/relay-actors`. */
+	/** Override the user-scope directory (used by tests). */
 	readonly userDir?: string;
+	/** Package-root actors directory. When set, bundled actors are included at lowest priority. */
+	readonly bundledDir?: string;
 }
 
 export const discoverActors = (cwd: string, scope: ActorScope, options: DiscoveryOptions = {}): ActorDiscovery => {
-	const userDir = options.userDir ?? path.join(getAgentDir(), ACTORS_SUBDIR);
-	const projectDir = findNearestProjectActorsDir(cwd);
+	const userDir = options.userDir ?? join(getAgentDir(), RELAY_SUBDIR);
+	const projectDir = findProjectDir(cwd);
 
 	const wantsUser = scope === "user" || scope === "both";
 	const wantsProject = (scope === "project" || scope === "both") && projectDir !== null;
 
+	const bundledActors = options.bundledDir ? loadActorsFromDir(options.bundledDir, "bundled") : [];
 	const userActors = wantsUser ? loadActorsFromDir(userDir, "user") : [];
 	const projectActors = wantsProject && projectDir ? loadActorsFromDir(projectDir, "project") : [];
 
-	// Project actors override user actors of the same name in "both" mode.
+	// Merge in ascending priority: bundled < user < project.
 	const merged = new Map<string, ActorConfig>();
+	for (const actor of bundledActors) merged.set(actor.name, actor);
 	for (const actor of userActors) merged.set(actor.name, actor);
 	for (const actor of projectActors) merged.set(actor.name, actor);
 
@@ -54,8 +61,6 @@ export const discoverActors = (cwd: string, scope: ActorScope, options: Discover
 
 /**
  * Adapt an `ActorDiscovery` into the `ActorRegistry` shape the compiler wants.
- *
- * Stays a thin wrapper — the compiler only needs `has` and `names`.
  */
 export const actorRegistryFromDiscovery = (discovery: ActorDiscovery): ActorRegistry => {
 	const nameSet = new Set(discovery.actors.map((a) => a.name));
@@ -76,12 +81,12 @@ export const formatActorList = (actors: readonly ActorConfig[]): string => {
 // Internal helpers
 // ============================================================================
 
-const findNearestProjectActorsDir = (cwd: string): string | null => {
+const findProjectDir = (cwd: string): string | null => {
 	let current = cwd;
 	for (;;) {
-		const candidate = path.join(current, ".pi", ACTORS_SUBDIR);
+		const candidate = join(current, ".pi", RELAY_SUBDIR);
 		if (isDirectory(candidate)) return candidate;
-		const parent = path.dirname(current);
+		const parent = dirname(current);
 		if (parent === current) return null;
 		current = parent;
 	}
@@ -89,18 +94,18 @@ const findNearestProjectActorsDir = (cwd: string): string | null => {
 
 const isDirectory = (p: string): boolean => {
 	try {
-		return fs.statSync(p).isDirectory();
+		return statSync(p).isDirectory();
 	} catch {
 		return false;
 	}
 };
 
 const loadActorsFromDir = (dir: string, source: ActorSource): ActorConfig[] => {
-	if (!fs.existsSync(dir)) return [];
+	if (!existsSync(dir)) return [];
 
-	let entries: fs.Dirent[];
+	let entries: import("node:fs").Dirent[];
 	try {
-		entries = fs.readdirSync(dir, { withFileTypes: true });
+		entries = readdirSync(dir, { withFileTypes: true });
 	} catch {
 		return [];
 	}
@@ -108,9 +113,21 @@ const loadActorsFromDir = (dir: string, source: ActorSource): ActorConfig[] => {
 	const actors: ActorConfig[] = [];
 	for (const entry of entries) {
 		if (!entry.name.endsWith(".md")) continue;
-		if (!entry.isFile() && !entry.isSymbolicLink()) continue;
 
-		const filePath = path.join(dir, entry.name);
+		const filePath = join(dir, entry.name);
+
+		// Resolve symlinks to check the actual target type
+		let isFile = entry.isFile();
+		if (entry.isSymbolicLink()) {
+			try {
+				isFile = statSync(filePath).isFile();
+			} catch {
+				// Broken symlink — skip
+				continue;
+			}
+		}
+		if (!isFile) continue;
+
 		const parsed = parseActorFile(filePath, source);
 		if (parsed !== null) actors.push(parsed);
 	}
@@ -120,7 +137,7 @@ const loadActorsFromDir = (dir: string, source: ActorSource): ActorConfig[] => {
 const parseActorFile = (filePath: string, source: ActorSource): ActorConfig | null => {
 	let content: string;
 	try {
-		content = fs.readFileSync(filePath, "utf-8");
+		content = readFileSync(filePath, "utf-8");
 	} catch {
 		return null;
 	}

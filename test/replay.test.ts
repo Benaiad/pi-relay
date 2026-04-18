@@ -35,7 +35,7 @@ describe("buildReplayToolDescription", () => {
 	it("shows a not-installed message when no templates exist", () => {
 		const desc = buildReplayToolDescription([]);
 		expect(desc).toContain("NO PLANS ARE CURRENTLY INSTALLED");
-		expect(desc).toContain("~/.pi/agent/relay/plans/");
+		expect(desc).toContain("~/.pi/agent/pi-relay/plans/");
 	});
 
 	it("lists multiple templates", () => {

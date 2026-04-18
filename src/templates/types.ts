@@ -5,11 +5,13 @@
  * file with YAML frontmatter. The frontmatter declares identity and
  * parameters; the body is the plan in YAML with `{{param}}` placeholders.
  *
- * Templates are discovered from `~/.pi/agent/relay/plans/` (user scope) and
- * `<cwd>/.pi/relay/plans/` (project scope), mirroring actor discovery.
+ * Templates are discovered from three tiers (ascending priority):
+ *   1. `<package-root>/plans/` (bundled)
+ *   2. `~/.pi/agent/pi-relay/plans/` (user scope)
+ *   3. `<cwd>/.pi/pi-relay/plans/` (project scope)
  */
 
-export type TemplateSource = "user" | "project";
+export type TemplateSource = "bundled" | "user" | "project";
 
 export interface TemplateParameter {
 	readonly name: string;

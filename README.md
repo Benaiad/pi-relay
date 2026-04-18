@@ -8,6 +8,17 @@ Finite state machine workflows for [pi](https://pi.dev/). Agents act, Relay veri
 pi install https://github.com/benaiad/pi-relay
 ```
 
+Or install manually:
+
+```bash
+# Copy
+cp -r . ~/.pi/agent/extensions/pi-relay/
+cd ~/.pi/agent/extensions/pi-relay && npm install --omit=dev
+
+# Or symlink (changes take effect immediately)
+ln -s "$(pwd)" ~/.pi/agent/extensions/pi-relay
+```
+
 Two tools are added to pi:
 
 - **`relay`** — the model builds a plan from scratch: steps, actors, artifacts, verification gates.
@@ -160,7 +171,12 @@ graph LR
 
 ## Custom templates
 
-Templates live in `~/.pi/agent/relay/plans/` (user scope) or `<project>/.pi/relay/plans/` (project scope). Write your own:
+The five bundled templates work out of the box. To add your own or override a bundled one, place `.md` files in:
+
+- **User scope:** `~/.pi/agent/pi-relay/plans/` — available in all projects
+- **Project scope:** `<project>/.pi/pi-relay/plans/` — available only in that project
+
+A custom template with the same `name:` as a bundled one shadows it. Project scope shadows user scope. Example:
 
 ```markdown
 ---
@@ -213,7 +229,12 @@ Actors define the roles that execute plan steps. Five ship with the extension:
 - **critic** — challenges arguments in a debate (read, grep, find, ls)
 - **judge** — evaluates debate rounds and delivers verdicts (read, grep, find, ls)
 
-Actors live in `~/.pi/agent/relay/actors/` (user scope) or `<project>/.pi/relay/actors/` (project scope). Write your own:
+To add custom actors or override a bundled one, place `.md` files in:
+
+- **User scope:** `~/.pi/agent/pi-relay/actors/` — available in all projects
+- **Project scope:** `<project>/.pi/pi-relay/actors/` — available only in that project
+
+Same shadowing rules as templates. Example:
 
 ```markdown
 ---

@@ -47,7 +47,7 @@ export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<
 		const message = formatCompileError(compileResult.error);
 		const actorList =
 			discovery.actors.length === 0
-				? "(none — drop actor markdown files into ~/.pi/agent/relay/actors/)"
+				? "(none — drop actor markdown files into ~/.pi/agent/pi-relay/actors/)"
 				: discovery.actors.map((a) => a.name).join(", ");
 		return {
 			content: [

@@ -16,13 +16,12 @@
  * execution without reloading.
  */
 
-import * as fs from "node:fs";
-import * as path from "node:path";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	DynamicBorder,
 	type ExtensionAPI,
-	getAgentDir,
 	getMarkdownTheme,
 	type ToolRenderResultOptions,
 } from "@mariozechner/pi-coding-agent";
@@ -62,12 +61,17 @@ export type RelayRenderState = {
 };
 
 export default function (pi: ExtensionAPI): void {
-	seedBundledFiles();
+	const packageRoot = findPackageRoot(dirname(fileURLToPath(import.meta.url)));
+	const bundledActorsDir = packageRoot ? join(packageRoot, "actors") : undefined;
+	const bundledPlansDir = packageRoot ? join(packageRoot, "plans") : undefined;
 
-	const loadDiscovery = discoverActors(process.cwd(), "user");
+	const loadDiscovery = discoverActors(process.cwd(), "user", { bundledDir: bundledActorsDir });
 	const actorNames = new Set(loadDiscovery.actors.map((a) => a.name));
 
-	const templateDiscovery = discoverPlanTemplates(process.cwd(), "user", { actorNames });
+	const templateDiscovery = discoverPlanTemplates(process.cwd(), "user", {
+		actorNames,
+		bundledDir: bundledPlansDir,
+	});
 	for (const warning of templateDiscovery.warnings) {
 		console.error(`[relay] Template "${warning.templateName}": ${warning.message} (${warning.filePath})`);
 	}
@@ -81,7 +85,7 @@ export default function (pi: ExtensionAPI): void {
 		parameters: PlanDraftSchema,
 
 		async execute(_toolCallId, plan, signal, onUpdate, ctx) {
-			const discovery = discoverActors(ctx.cwd, "user");
+			const discovery = discoverActors(ctx.cwd, "user", { bundledDir: bundledActorsDir });
 			return executePlan({ plan, discovery, signal, onUpdate, ctx, toolName: "Relay" });
 		},
 
@@ -95,15 +99,21 @@ export default function (pi: ExtensionAPI): void {
 		},
 	});
 
-	registerReplayTool(pi, templateDiscovery.templates);
+	registerReplayTool(pi, templateDiscovery.templates, {
+		actorsDir: bundledActorsDir,
+		plansDir: bundledPlansDir,
+	});
 
 	pi.registerCommand("relay", {
 		description: "Show available relay actors and plan templates",
 		async handler(_args, ctx) {
 			if (!ctx.hasUI) return;
-			const discovery = discoverActors(ctx.cwd, "user");
+			const discovery = discoverActors(ctx.cwd, "user", { bundledDir: bundledActorsDir });
 			const actorNameSet = new Set(discovery.actors.map((a) => a.name));
-			const templates = discoverPlanTemplates(ctx.cwd, "user", { actorNames: actorNameSet });
+			const templates = discoverPlanTemplates(ctx.cwd, "user", {
+				actorNames: actorNameSet,
+				bundledDir: bundledPlansDir,
+			});
 			const md = formatRelayOverview(discovery.actors, templates.templates);
 
 			await ctx.ui.custom((_tui, theme, _kb, done) => {
@@ -177,58 +187,29 @@ export const renderRelayResult = (
 };
 
 // ============================================================================
-// Auto-seed bundled actors and plans
+// Package root resolution
 // ============================================================================
 
-const seedBundledFiles = (): void => {
-	const packageRoot = findPackageRoot(path.dirname(fileURLToPath(import.meta.url)));
-	if (!packageRoot) return;
-	const agentDir = getAgentDir();
-
-	seedDir(path.join(packageRoot, "actors"), path.join(agentDir, "relay", "actors"));
-	seedDir(path.join(packageRoot, "plans"), path.join(agentDir, "relay", "plans"));
-};
-
 const findPackageRoot = (startDir: string): string | null => {
-	let dir = fs.realpathSync(startDir);
+	let dir: string;
+	try {
+		dir = realpathSync(startDir);
+	} catch {
+		return null;
+	}
 	for (;;) {
-		if (fs.existsSync(path.join(dir, "package.json"))) {
+		const pkgPath = join(dir, "package.json");
+		if (existsSync(pkgPath)) {
 			try {
-				const pkg = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf-8"));
+				const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
 				if (pkg.pi?.extensions) return dir;
 			} catch {
 				// Not our package.json, keep walking
 			}
 		}
-		const parent = path.dirname(dir);
+		const parent = dirname(dir);
 		if (parent === dir) return null;
 		dir = parent;
-	}
-};
-
-const seedDir = (sourceDir: string, targetDir: string): void => {
-	if (!fs.existsSync(sourceDir)) return;
-
-	let entries: fs.Dirent[];
-	try {
-		entries = fs.readdirSync(sourceDir, { withFileTypes: true });
-	} catch {
-		return;
-	}
-
-	const mdFiles = entries.filter((e) => e.name.endsWith(".md") && (e.isFile() || e.isSymbolicLink()));
-	if (mdFiles.length === 0) return;
-
-	fs.mkdirSync(targetDir, { recursive: true });
-
-	for (const entry of mdFiles) {
-		const targetPath = path.join(targetDir, entry.name);
-		if (fs.existsSync(targetPath)) continue;
-		try {
-			fs.copyFileSync(path.join(sourceDir, entry.name), targetPath);
-		} catch {
-			// Best-effort — don't fail extension load if a copy fails.
-		}
 	}
 };
 
@@ -242,7 +223,7 @@ const formatRelayOverview = (actors: readonly ActorConfig[], templates: readonly
 	lines.push("## Actors");
 	lines.push("");
 	if (actors.length === 0) {
-		lines.push("*None installed.* Add `.md` files to `~/.pi/agent/relay/actors/`");
+		lines.push("*None installed.* Add `.md` files to `~/.pi/agent/pi-relay/actors/`");
 	} else {
 		for (const a of actors) {
 			const tools = a.tools ? a.tools.join(", ") : "default tool set";
@@ -257,7 +238,7 @@ const formatRelayOverview = (actors: readonly ActorConfig[], templates: readonly
 	lines.push("## Plan Templates");
 	lines.push("");
 	if (templates.length === 0) {
-		lines.push("*None installed.* Add `.md` files to `~/.pi/agent/relay/plans/`");
+		lines.push("*None installed.* Add `.md` files to `~/.pi/agent/pi-relay/plans/`");
 	} else {
 		for (const t of templates) {
 			const sig =
@@ -297,7 +278,7 @@ export const buildToolDescription = (actors: readonly ActorConfig[]): string => 
 			staticPart,
 			"",
 			"NO ACTORS ARE CURRENTLY INSTALLED. Drop actor markdown files into",
-			"~/.pi/agent/relay/actors/ and run /reload to enable this tool.",
+			"~/.pi/agent/pi-relay/actors/ and run /reload to enable this tool.",
 		].join("\n");
 	}
 

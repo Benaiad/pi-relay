@@ -36,7 +36,16 @@ const ReplayParamsSchema = Type.Object({
 
 type ReplayParams = Static<typeof ReplayParamsSchema>;
 
-export const registerReplayTool = (pi: ExtensionAPI, templates: readonly PlanTemplate[]): void => {
+export interface ReplayBundledDirs {
+	readonly actorsDir?: string;
+	readonly plansDir?: string;
+}
+
+export const registerReplayTool = (
+	pi: ExtensionAPI,
+	templates: readonly PlanTemplate[],
+	bundled: ReplayBundledDirs = {},
+): void => {
 	const description = buildReplayToolDescription(templates);
 
 	pi.registerTool<typeof ReplayParamsSchema, RelayDetails, RelayRenderState>({
@@ -46,9 +55,12 @@ export const registerReplayTool = (pi: ExtensionAPI, templates: readonly PlanTem
 		parameters: ReplayParamsSchema,
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
-			const actorDiscovery = discoverActors(ctx.cwd, "user");
+			const actorDiscovery = discoverActors(ctx.cwd, "user", { bundledDir: bundled.actorsDir });
 			const actorNames = new Set(actorDiscovery.actors.map((a) => a.name));
-			const templateDiscovery = discoverPlanTemplates(ctx.cwd, "user", { actorNames });
+			const templateDiscovery = discoverPlanTemplates(ctx.cwd, "user", {
+				actorNames,
+				bundledDir: bundled.plansDir,
+			});
 
 			const template = templateDiscovery.templates.find((t) => t.name === params.name);
 			if (!template) {
@@ -118,7 +130,7 @@ export const buildReplayToolDescription = (templates: readonly PlanTemplate[]): 
 			staticPart,
 			"",
 			"NO PLANS ARE CURRENTLY INSTALLED. Drop plan markdown files into",
-			"~/.pi/agent/relay/plans/ and run /reload to enable this tool.",
+			"~/.pi/agent/pi-relay/plans/ and run /reload to enable this tool.",
 		].join("\n");
 	}
 

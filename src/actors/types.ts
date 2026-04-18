@@ -19,7 +19,7 @@ import type { ArtifactSnapshot } from "../runtime/artifacts.js";
 
 export type ActorScope = "user" | "project" | "both";
 
-export type ActorSource = "user" | "project";
+export type ActorSource = "bundled" | "user" | "project";
 
 export type { ThinkingLevel };
 

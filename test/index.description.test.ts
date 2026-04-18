@@ -63,7 +63,7 @@ describe("buildToolDescription", () => {
 	it("emits a not-installed message with zero actors", () => {
 		const text = buildToolDescription([]);
 		expect(text).toContain("NO ACTORS ARE CURRENTLY INSTALLED");
-		expect(text).toContain("~/.pi/agent/relay/actors/");
+		expect(text).toContain("~/.pi/agent/pi-relay/actors/");
 		expect(text).toContain("/reload");
 	});
 });

@@ -1,10 +1,14 @@
 /**
  * Template discovery from disk.
  *
- * Scans two directories for markdown files with YAML frontmatter:
+ * Scans up to three directories for markdown files with YAML frontmatter,
+ * merged in ascending priority:
  *
- *   - `~/.pi/agent/relay/plans/`  (user scope)
- *   - `<cwd>/.pi/relay/plans/`    (project scope)
+ *   1. `<package-root>/plans/`            (bundled — ships with the extension, read-only)
+ *   2. `~/.pi/agent/pi-relay/plans/`      (user scope — user overrides and custom plans)
+ *   3. `<cwd>/.pi/pi-relay/plans/`        (project scope — repo-controlled plans)
+ *
+ * Higher-priority sources shadow lower-priority sources by name.
  *
  * The body of each file is parsed as YAML into a plain JS object that
  * becomes the template's `rawPlan`. The raw plan is NOT validated against
@@ -16,17 +20,18 @@
  * picked up on the next call without restarting pi.
  */
 
-import * as fs from "node:fs";
-import * as path from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { getAgentDir, parseFrontmatter } from "@mariozechner/pi-coding-agent";
 import { parse as parseYaml } from "yaml";
 import type { ActorScope } from "../actors/types.js";
 import type { PlanTemplate, TemplateDiscovery, TemplateParameter, TemplateSource, TemplateWarning } from "./types.js";
 
-const PLANS_SUBDIR = "relay/plans";
+const RELAY_SUBDIR = "pi-relay/plans";
 
 export interface TemplateDiscoveryOptions {
 	readonly userDir?: string;
+	readonly bundledDir?: string;
 	readonly actorNames?: ReadonlySet<string>;
 }
 
@@ -35,17 +40,20 @@ export const discoverPlanTemplates = (
 	scope: ActorScope,
 	options: TemplateDiscoveryOptions = {},
 ): TemplateDiscovery => {
-	const userDir = options.userDir ?? path.join(getAgentDir(), PLANS_SUBDIR);
-	const projectDir = findNearestProjectPlansDir(cwd);
+	const userDir = options.userDir ?? join(getAgentDir(), RELAY_SUBDIR);
+	const projectDir = findProjectDir(cwd);
 	const warnings: TemplateWarning[] = [];
 
 	const wantsUser = scope === "user" || scope === "both";
 	const wantsProject = (scope === "project" || scope === "both") && projectDir !== null;
 
+	const bundledTemplates = options.bundledDir ? loadTemplatesFromDir(options.bundledDir, "bundled", warnings) : [];
 	const userTemplates = wantsUser ? loadTemplatesFromDir(userDir, "user", warnings) : [];
 	const projectTemplates = wantsProject && projectDir ? loadTemplatesFromDir(projectDir, "project", warnings) : [];
 
+	// Merge in ascending priority: bundled < user < project.
 	const merged = new Map<string, PlanTemplate>();
+	for (const t of bundledTemplates) merged.set(t.name, t);
 	for (const t of userTemplates) merged.set(t.name, t);
 	for (const t of projectTemplates) merged.set(t.name, t);
 
@@ -67,12 +75,12 @@ export const discoverPlanTemplates = (
 // Internal helpers
 // ============================================================================
 
-const findNearestProjectPlansDir = (cwd: string): string | null => {
+const findProjectDir = (cwd: string): string | null => {
 	let current = cwd;
 	for (;;) {
-		const candidate = path.join(current, ".pi", PLANS_SUBDIR);
+		const candidate = join(current, ".pi", RELAY_SUBDIR);
 		if (isDirectory(candidate)) return candidate;
-		const parent = path.dirname(current);
+		const parent = dirname(current);
 		if (parent === current) return null;
 		current = parent;
 	}
@@ -80,18 +88,18 @@ const findNearestProjectPlansDir = (cwd: string): string | null => {
 
 const isDirectory = (p: string): boolean => {
 	try {
-		return fs.statSync(p).isDirectory();
+		return statSync(p).isDirectory();
 	} catch {
 		return false;
 	}
 };
 
 const loadTemplatesFromDir = (dir: string, source: TemplateSource, warnings: TemplateWarning[]): PlanTemplate[] => {
-	if (!fs.existsSync(dir)) return [];
+	if (!existsSync(dir)) return [];
 
-	let entries: fs.Dirent[];
+	let entries: import("node:fs").Dirent[];
 	try {
-		entries = fs.readdirSync(dir, { withFileTypes: true });
+		entries = readdirSync(dir, { withFileTypes: true });
 	} catch {
 		return [];
 	}
@@ -99,9 +107,20 @@ const loadTemplatesFromDir = (dir: string, source: TemplateSource, warnings: Tem
 	const templates: PlanTemplate[] = [];
 	for (const entry of entries) {
 		if (!entry.name.endsWith(".md")) continue;
-		if (!entry.isFile() && !entry.isSymbolicLink()) continue;
 
-		const filePath = path.join(dir, entry.name);
+		const filePath = join(dir, entry.name);
+
+		// Resolve symlinks to check the actual target type
+		let isFile = entry.isFile();
+		if (entry.isSymbolicLink()) {
+			try {
+				isFile = statSync(filePath).isFile();
+			} catch {
+				continue;
+			}
+		}
+		if (!isFile) continue;
+
 		const parsed = parseTemplateFile(filePath, source, warnings);
 		if (parsed !== null) templates.push(parsed);
 	}
@@ -117,7 +136,7 @@ const parseTemplateFile = (
 ): PlanTemplate | null => {
 	let content: string;
 	try {
-		content = fs.readFileSync(filePath, "utf-8");
+		content = readFileSync(filePath, "utf-8");
 	} catch {
 		return null;
 	}

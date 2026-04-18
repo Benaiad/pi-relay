@@ -117,15 +117,18 @@ steps:
 
 describe("discoverPlanTemplates", () => {
 	let tmp = "";
+	let bundledDir = "";
 	let userDir = "";
 	let projectRoot = "";
 	let projectDir = "";
 
 	beforeEach(async () => {
 		tmp = await mkdtemp(path.join(os.tmpdir(), "pi-relay-templates-"));
-		userDir = path.join(tmp, "user-pi", "agent", "relay", "plans");
+		bundledDir = path.join(tmp, "bundled-plans");
+		userDir = path.join(tmp, "user-pi", "agent", "pi-relay", "plans");
 		projectRoot = path.join(tmp, "proj");
-		projectDir = path.join(projectRoot, ".pi", "relay", "plans");
+		projectDir = path.join(projectRoot, ".pi", "pi-relay", "plans");
+		await mkdir(bundledDir, { recursive: true });
 		await mkdir(userDir, { recursive: true });
 		await mkdir(projectDir, { recursive: true });
 	});
@@ -234,5 +237,48 @@ describe("discoverPlanTemplates", () => {
 		const actorNames = new Set(["reviewer"]);
 		const disc = discoverPlanTemplates(projectRoot, "user", { userDir, actorNames });
 		expect(disc.warnings).toHaveLength(0);
+	});
+
+	it("loads bundled templates from bundledDir", async () => {
+		await writeFile(path.join(bundledDir, "refactor.md"), VALID_TEMPLATE);
+		const disc = discoverPlanTemplates(projectRoot, "user", { userDir: "/no/user/dir", bundledDir });
+		expect(disc.templates).toHaveLength(1);
+		expect(disc.templates[0]!.name).toBe("refactor");
+		expect(disc.templates[0]!.source).toBe("bundled");
+	});
+
+	it("user templates shadow bundled templates of the same name", async () => {
+		await writeFile(path.join(bundledDir, "refactor.md"), VALID_TEMPLATE);
+		const userVersion = VALID_TEMPLATE.replace("Rename a symbol across a module.", "User override");
+		await writeFile(path.join(userDir, "refactor.md"), userVersion);
+		const disc = discoverPlanTemplates(projectRoot, "user", { userDir, bundledDir });
+		expect(disc.templates).toHaveLength(1);
+		expect(disc.templates[0]!.description).toBe("User override");
+		expect(disc.templates[0]!.source).toBe("user");
+	});
+
+	it("project templates shadow bundled templates of the same name", async () => {
+		await writeFile(path.join(bundledDir, "refactor.md"), VALID_TEMPLATE);
+		const projectVersion = VALID_TEMPLATE.replace("Rename a symbol across a module.", "Project override");
+		await writeFile(path.join(projectDir, "refactor.md"), projectVersion);
+		const disc = discoverPlanTemplates(projectRoot, "both", { userDir: "/no/user/dir", bundledDir });
+		expect(disc.templates).toHaveLength(1);
+		expect(disc.templates[0]!.description).toBe("Project override");
+		expect(disc.templates[0]!.source).toBe("project");
+	});
+
+	it("merges all three tiers with correct priority", async () => {
+		await writeFile(path.join(bundledDir, "refactor.md"), VALID_TEMPLATE);
+		await writeFile(path.join(bundledDir, "lint-all.md"), NO_PARAMS_TEMPLATE);
+		const userVersion = VALID_TEMPLATE.replace("Rename a symbol across a module.", "User refactor");
+		await writeFile(path.join(userDir, "refactor.md"), userVersion);
+		const projectVersion = VALID_TEMPLATE.replace("Rename a symbol across a module.", "Project refactor");
+		await writeFile(path.join(projectDir, "refactor.md"), projectVersion);
+		const disc = discoverPlanTemplates(projectRoot, "both", { userDir, bundledDir });
+		const byName = new Map(disc.templates.map((t) => [t.name, t]));
+		expect(byName.get("refactor")!.description).toBe("Project refactor");
+		expect(byName.get("refactor")!.source).toBe("project");
+		expect(byName.get("lint-all")!.description).toBe("Run the linter on the whole project.");
+		expect(byName.get("lint-all")!.source).toBe("bundled");
 	});
 });

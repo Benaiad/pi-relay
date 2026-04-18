@@ -31,15 +31,18 @@ Just a markdown file that should be skipped.
 
 describe("discoverActors", () => {
 	let tmp = "";
+	let bundledDir = "";
 	let userDir = "";
 	let projectRoot = "";
 	let projectDir = "";
 
 	beforeEach(async () => {
 		tmp = await mkdtemp(path.join(os.tmpdir(), "pi-relay-actors-"));
-		userDir = path.join(tmp, "user-pi", "agent", "relay", "actors");
+		bundledDir = path.join(tmp, "bundled-actors");
+		userDir = path.join(tmp, "user-pi", "agent", "pi-relay", "actors");
 		projectRoot = path.join(tmp, "proj");
-		projectDir = path.join(projectRoot, ".pi", "relay", "actors");
+		projectDir = path.join(projectRoot, ".pi", "pi-relay", "actors");
+		await mkdir(bundledDir, { recursive: true });
 		await mkdir(userDir, { recursive: true });
 		await mkdir(projectDir, { recursive: true });
 	});
@@ -137,6 +140,85 @@ Project-specific worker prompt.
 		expect(formatted).toContain("worker");
 		expect(formatted).toContain("scout");
 		expect(formatted).toContain("(user)");
+	});
+
+	it("loads bundled actors from bundledDir", async () => {
+		await writeFile(path.join(bundledDir, "worker.md"), ACTOR_WORKER);
+		const discovery = discoverActors(projectRoot, "user", { userDir: "/no/user/dir", bundledDir });
+		expect(discovery.actors).toHaveLength(1);
+		expect(discovery.actors[0]!.name).toBe("worker");
+		expect(discovery.actors[0]!.source).toBe("bundled");
+	});
+
+	it("user actors shadow bundled actors of the same name", async () => {
+		await writeFile(path.join(bundledDir, "worker.md"), ACTOR_WORKER);
+		await writeFile(
+			path.join(userDir, "worker.md"),
+			`---
+name: worker
+description: User override
+tools: read
+---
+
+Custom worker.
+`,
+		);
+		const discovery = discoverActors(projectRoot, "user", { userDir, bundledDir });
+		const worker = discovery.actors.find((a) => a.name === "worker")!;
+		expect(worker.description).toBe("User override");
+		expect(worker.source).toBe("user");
+	});
+
+	it("project actors shadow bundled actors of the same name", async () => {
+		await writeFile(path.join(bundledDir, "worker.md"), ACTOR_WORKER);
+		await writeFile(
+			path.join(projectDir, "worker.md"),
+			`---
+name: worker
+description: Project override
+tools: read
+---
+
+Project worker.
+`,
+		);
+		const discovery = discoverActors(projectRoot, "both", { userDir: "/no/user/dir", bundledDir });
+		const worker = discovery.actors.find((a) => a.name === "worker")!;
+		expect(worker.description).toBe("Project override");
+		expect(worker.source).toBe("project");
+	});
+
+	it("merges all three tiers with correct priority", async () => {
+		await writeFile(path.join(bundledDir, "worker.md"), ACTOR_WORKER);
+		await writeFile(path.join(bundledDir, "scout.md"), ACTOR_SCOUT);
+		await writeFile(
+			path.join(userDir, "worker.md"),
+			`---
+name: worker
+description: User worker
+tools: read
+---
+
+User worker prompt.
+`,
+		);
+		await writeFile(
+			path.join(projectDir, "worker.md"),
+			`---
+name: worker
+description: Project worker
+tools: bash
+---
+
+Project worker prompt.
+`,
+		);
+		const discovery = discoverActors(projectRoot, "both", { userDir, bundledDir });
+		const byName = new Map(discovery.actors.map((a) => [a.name, a]));
+		expect(byName.get("worker")!.description).toBe("Project worker");
+		expect(byName.get("worker")!.source).toBe("project");
+		expect(byName.get("scout")!.description).toBe("Reconnaissance over a codebase");
+		expect(byName.get("scout")!.source).toBe("bundled");
 	});
 });
 

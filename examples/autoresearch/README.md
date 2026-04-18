@@ -22,11 +22,11 @@ to make it available via the `replay` tool:
 
 ```bash
 # Global (available in all projects)
-cp autoresearch.md ~/.pi/agent/relay/plans/
+cp autoresearch.md ~/.pi/agent/pi-relay/plans/
 
 # Or project-local (available only in the current project)
-mkdir -p .pi/relay/plans
-cp autoresearch.md .pi/relay/plans/
+mkdir -p .pi/pi-relay/plans
+cp autoresearch.md .pi/pi-relay/plans/
 ```
 
 Then `/reload` in pi.
