@@ -26,6 +26,7 @@ import type { CheckSpec } from "../plan/types.js";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 60_000;
 const COMMAND_OUTPUT_REASON_LIMIT = 800;
+const MAX_OUTPUT_BUFFER = COMMAND_OUTPUT_REASON_LIMIT * 4;
 
 const ops = createLocalBashOperations();
 
@@ -65,10 +66,19 @@ const runCommandExitsZero = async (
 	const timeoutMs = spec.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
 	const cwd = spec.cwd ? (path.isAbsolute(spec.cwd) ? spec.cwd : path.resolve(ctx.cwd, spec.cwd)) : ctx.cwd;
 
-	let output = "";
+	const chunks: string[] = [];
+	let chunksLen = 0;
+
 	const onData = (data: Buffer) => {
-		output += data.toString();
+		const text = data.toString();
+		chunks.push(text);
+		chunksLen += text.length;
+		while (chunksLen > MAX_OUTPUT_BUFFER && chunks.length > 1) {
+			chunksLen -= chunks.shift()!.length;
+		}
 	};
+
+	const drainOutput = (): string => chunks.join("");
 
 	try {
 		const { exitCode } = await ops.exec(spec.command, cwd, {
@@ -78,14 +88,16 @@ const runCommandExitsZero = async (
 		});
 
 		if (exitCode === 0) return { kind: "pass" };
-		return { kind: "fail", reason: formatCommandFailure(spec.command, exitCode, output) };
+		return { kind: "fail", reason: formatCommandFailure(spec.command, exitCode, drainOutput()) };
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
+		const captured = truncateOutput(drainOutput());
+		const outputSuffix = captured.length > 0 ? `; output: ${captured}` : "";
 		if (message === "aborted") {
-			return { kind: "fail", reason: "check aborted" };
+			return { kind: "fail", reason: `check aborted${outputSuffix}` };
 		}
 		if (message.startsWith("timeout:")) {
-			return { kind: "fail", reason: `command timed out after ${timeoutMs}ms: ${spec.command}` };
+			return { kind: "fail", reason: `command timed out after ${timeoutMs}ms: ${spec.command}${outputSuffix}` };
 		}
 		return { kind: "fail", reason: `failed to spawn ${spec.command}: ${message}` };
 	}

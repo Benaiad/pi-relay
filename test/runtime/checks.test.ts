@@ -81,6 +81,22 @@ describe("runCheck (command_exits_zero)", () => {
 		}
 	});
 
+	it("includes output produced before the timeout in the failure reason", async () => {
+		const outcome = await runCheck(
+			{
+				kind: "command_exits_zero",
+				command: "node -e \"process.stdout.write('partial progress'); setTimeout(() => process.exit(0), 5000)\"",
+				timeoutMs: 200,
+			},
+			{ cwd: process.cwd() },
+		);
+		expect(outcome.kind).toBe("fail");
+		if (outcome.kind === "fail") {
+			expect(outcome.reason).toMatch(/timed out/i);
+			expect(outcome.reason).toContain("partial progress");
+		}
+	});
+
 	it("fails when the abort signal fires mid-run", async () => {
 		const ctl = new AbortController();
 		const promise = runCheck(
@@ -94,6 +110,25 @@ describe("runCheck (command_exits_zero)", () => {
 		setTimeout(() => ctl.abort(), 50);
 		const outcome = await promise;
 		expect(outcome.kind).toBe("fail");
+	});
+
+	it("includes output produced before abort in the failure reason", async () => {
+		const ctl = new AbortController();
+		const promise = runCheck(
+			{
+				kind: "command_exits_zero",
+				command: "node -e \"process.stdout.write('working...'); setTimeout(() => process.exit(0), 5000)\"",
+				timeoutMs: 10_000,
+			},
+			{ cwd: process.cwd(), signal: ctl.signal },
+		);
+		setTimeout(() => ctl.abort(), 200);
+		const outcome = await promise;
+		expect(outcome.kind).toBe("fail");
+		if (outcome.kind === "fail") {
+			expect(outcome.reason).toContain("aborted");
+			expect(outcome.reason).toContain("working...");
+		}
 	});
 
 	it("supports compound shell commands", async () => {
