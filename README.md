@@ -75,7 +75,7 @@ steps:
     summary: Verification failed.
 ```
 
-Check commands run through the platform shell (`/bin/sh` on Unix, `cmd.exe` on Windows). Integer and boolean parameters are coerced automatically.
+Check commands run through pi's shell backend (respects `shellPath` in settings, defaults to `/bin/bash` on Unix, Git Bash on Windows). Integer and boolean parameters are coerced automatically.
 
 ## Actors
 
