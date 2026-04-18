@@ -21,10 +21,9 @@ import type { ActorUsage, TranscriptItem } from "../actors/types.js";
 import { emptyUsage } from "../actors/types.js";
 import type { ArtifactId, PlanId, RouteId, StepId } from "../plan/ids.js";
 import { unwrap } from "../plan/ids.js";
-import type { Program } from "../plan/program.js";
 import type { Step, TerminalOutcome } from "../plan/types.js";
 import { formatToolCall, plainTheme } from "../render/format.js";
-import { type AccumulatedEntry, isAccumulatedEntryArray } from "./accumulated-entry.js";
+import { isAccumulatedEntryArray } from "./accumulated-entry.js";
 import type { ArtifactStore } from "./artifacts.js";
 import type { AuditLog } from "./audit.js";
 import type { RelayEvent, RelayRunState, RunPhase, StepStatus } from "./events.js";
@@ -443,7 +442,7 @@ export const renderRunReportText = (report: RunReport, artifactStore?: ArtifactS
 		if (!step) continue;
 		lines.push("");
 		const artifacts = stepArtifacts.get(`${unwrap(entry.stepId)}:${entry.attempt.attemptNumber}`) ?? [];
-		for (const line of formatTimelineEntry(step, entry.attempt, artifacts, report)) lines.push(line);
+		for (const line of formatTimelineEntry(step, entry.attempt, artifacts)) lines.push(line);
 	}
 
 	const skippedSteps = report.steps.filter((s) => s.status === "skipped");
@@ -478,7 +477,6 @@ const formatTimelineEntry = (
 	step: StepSummary,
 	attempt: AttemptSummary,
 	artifacts: readonly StepArtifactEntry[],
-	report: RunReport,
 ): string[] => {
 	const stepId = unwrap(step.stepId);
 	const lines: string[] = [];
