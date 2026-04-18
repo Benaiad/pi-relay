@@ -33,10 +33,11 @@ Five templates ship with the extension. Each implements a different workflow top
 
 The simplest useful topology: do the work, then prove it didn't break anything.
 
-```
-implement ──→ verify ──→ done
-                │
-                ╰──→ failed
+```mermaid
+graph LR
+    implement["implement\n(worker)"] --> verify{verify}
+    verify -- pass --> done([done])
+    verify -- fail --> failed([failed])
 ```
 
 **Parameters:** `task`, `verify`
@@ -49,15 +50,14 @@ Use replay with the verified-edit template:
 
 ### bug-fix
 
-Diagnosis before code changes. The worker writes a structured root-cause analysis, then reads it back when fixing. No "let me just try something."
+Diagnosis before code changes. The worker writes a structured root-cause analysis to an artifact, then reads it back when fixing. No "let me just try something."
 
-```
-diagnose ──→ fix ──→ verify ──→ done
-              │        │
-              │        ╰──→ failed
-              │
-          (reads diagnosis
-           artifact)
+```mermaid
+graph LR
+    diagnose["diagnose\n(worker)"] -- "writes diagnosis" --> fix["fix\n(worker)"]
+    fix -- "reads diagnosis" --> verify{verify}
+    verify -- pass --> done([done])
+    verify -- fail --> failed([failed])
 ```
 
 **Parameters:** `bug`, `verify`
@@ -72,14 +72,16 @@ Use replay with the bug-fix template:
 
 Two-pass review with a fix loop. Spec compliance first, code quality second. Reviewers run in fresh contexts — no memory of the implementation reasoning, so they evaluate the code as-is.
 
-```
-implement ──→ spec review ──→ quality review ──→ verify ──→ done
-                   │                │               │
-                   │                │               ╰──→ failed
-                   │                │
-                   ╰───→ fix ←──────╯
-                         │
-                         ╰──→ (back to spec review)
+```mermaid
+graph LR
+    implement["implement\n(worker)"] --> spec["spec review\n(reviewer)"]
+    spec -- approved --> quality["quality review\n(reviewer)"]
+    spec -- changes requested --> fix["fix\n(worker)"]
+    quality -- approved --> verify{verify}
+    quality -- changes requested --> fix
+    fix --> spec
+    verify -- pass --> done([done])
+    verify -- fail --> failed([failed])
 ```
 
 **Parameters:** `task`, `criteria`, `verify`
@@ -95,10 +97,15 @@ Use replay with the reviewed-edit template:
 
 Three sequential verification gates with per-gate failure reporting. Use instead of `verified-edit` when you need to know exactly which gate failed — a compound `lint && tsc && test` command hides which step broke.
 
-```
-implement ──→ gate 1 ──→ gate 2 ──→ gate 3 ──→ done
-                │           │          │
-                ╰→ fail 1   ╰→ fail 2  ╰→ fail 3
+```mermaid
+graph LR
+    implement["implement\n(worker)"] --> g1{gate 1}
+    g1 -- pass --> g2{gate 2}
+    g1 -- fail --> f1([fail 1])
+    g2 -- pass --> g3{gate 3}
+    g2 -- fail --> f2([fail 2])
+    g3 -- pass --> done([done])
+    g3 -- fail --> f3([fail 3])
 ```
 
 **Parameters:** `task`, `gate1`, `gate1_name`, `gate2`, `gate2_name`, `gate3`, `gate3_name`
@@ -118,13 +125,12 @@ Use replay with the multi-gate template:
 
 Structured adversarial debate between three actors. The advocate defends a position, the critic attacks it, and the judge decides whether the question is resolved or needs another round. The loop runs up to `max_rounds` iterations.
 
-```
-         ╭──────────────────────────╮
-         │                          │
-argue ──→ challenge ──→ evaluate ──→ done
-  │                        │
-  ╰────────────────────────╯
-       (if unresolved)
+```mermaid
+graph LR
+    argue["argue\n(advocate)"] --> challenge["challenge\n(critic)"]
+    challenge --> evaluate["evaluate\n(judge)"]
+    evaluate -- unresolved --> argue
+    evaluate -- resolved --> done([done])
 ```
 
 **Parameters:** `topic`, `position`, `max_rounds`
@@ -140,13 +146,14 @@ Use replay with the debate template:
 
 An autonomous optimization loop. The agent modifies code, the runtime benchmarks it, a deterministic gate keeps improvements and reverts regressions. Included as an example in [`examples/autoresearch/`](examples/autoresearch/) — see its README for setup.
 
-```
-         ╭──────────────────────────────────────╮
-         │                                      │
-experiment ──→ benchmark ──→ evaluate ──→ experiment
-                  │              │
-                  ╰→ recover ────╯
-                  (crash recovery)
+```mermaid
+graph LR
+    experiment["experiment\n(worker)"] --> benchmark{benchmark}
+    benchmark -- pass --> evaluate{evaluate}
+    benchmark -- fail --> recover{recover}
+    evaluate -- improved --> experiment
+    evaluate -- no improvement --> experiment
+    recover --> experiment
 ```
 
 **Parameters:** `target`, `goal`, `benchmark`, `evaluate`, `recover`, `max_experiments`
