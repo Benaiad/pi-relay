@@ -22,12 +22,13 @@ import { fileURLToPath } from "node:url";
 import {
 	DynamicBorder,
 	type ExtensionAPI,
-	getMarkdownTheme,
+	getSettingsListTheme,
 	type ToolRenderResultOptions,
 } from "@mariozechner/pi-coding-agent";
-import { Container, Markdown, matchesKey, Text } from "@mariozechner/pi-tui";
+import { Container, type SettingItem, SettingsList, Text } from "@mariozechner/pi-tui";
 import { discoverActors } from "./actors/discovery.js";
 import type { ActorConfig } from "./actors/types.js";
+import { filterActors, filterPlans, loadRelayConfig, type RelayConfig, saveRelayConfig } from "./config.js";
 import { executePlan } from "./execute.js";
 import { PlanDraftSchema } from "./plan/draft.js";
 import type { StepId } from "./plan/ids.js";
@@ -65,18 +66,21 @@ export default function (pi: ExtensionAPI): void {
 	const bundledActorsDir = packageRoot ? join(packageRoot, "actors") : undefined;
 	const bundledPlansDir = packageRoot ? join(packageRoot, "plans") : undefined;
 
+	const loadConfig = loadRelayConfig();
 	const loadDiscovery = discoverActors(process.cwd(), "user", { bundledDir: bundledActorsDir });
+	const enabledActors = filterActors(loadDiscovery.actors, loadConfig);
 	const actorNames = new Set(loadDiscovery.actors.map((a) => a.name));
 
 	const templateDiscovery = discoverPlanTemplates(process.cwd(), "user", {
 		actorNames,
 		bundledDir: bundledPlansDir,
 	});
+	const enabledTemplates = filterPlans(templateDiscovery.templates, loadConfig);
 	for (const warning of templateDiscovery.warnings) {
 		console.error(`[relay] Template "${warning.templateName}": ${warning.message} (${warning.filePath})`);
 	}
 
-	const relayDescription = buildToolDescription(loadDiscovery.actors);
+	const relayDescription = buildToolDescription(enabledActors);
 
 	pi.registerTool<typeof PlanDraftSchema, RelayDetails, RelayRenderState>({
 		name: "relay",
@@ -85,7 +89,9 @@ export default function (pi: ExtensionAPI): void {
 		parameters: PlanDraftSchema,
 
 		async execute(_toolCallId, plan, signal, onUpdate, ctx) {
-			const discovery = discoverActors(ctx.cwd, "user", { bundledDir: bundledActorsDir });
+			const config = loadRelayConfig();
+			const fullDiscovery = discoverActors(ctx.cwd, "user", { bundledDir: bundledActorsDir });
+			const discovery = { ...fullDiscovery, actors: filterActors(fullDiscovery.actors, config) };
 			return executePlan({ plan, discovery, signal, onUpdate, ctx, toolName: "Relay" });
 		},
 
@@ -99,38 +105,49 @@ export default function (pi: ExtensionAPI): void {
 		},
 	});
 
-	registerReplayTool(pi, templateDiscovery.templates, {
+	registerReplayTool(pi, enabledTemplates, {
 		actorsDir: bundledActorsDir,
 		plansDir: bundledPlansDir,
 	});
 
 	pi.registerCommand("relay", {
-		description: "Show available relay actors and plan templates",
+		description: "Manage relay actors and plan templates",
 		async handler(_args, ctx) {
 			if (!ctx.hasUI) return;
+
+			const config = loadRelayConfig();
 			const discovery = discoverActors(ctx.cwd, "user", { bundledDir: bundledActorsDir });
 			const actorNameSet = new Set(discovery.actors.map((a) => a.name));
 			const templates = discoverPlanTemplates(ctx.cwd, "user", {
 				actorNames: actorNameSet,
 				bundledDir: bundledPlansDir,
 			});
-			const md = formatRelayOverview(discovery.actors, templates.templates);
 
 			await ctx.ui.custom((_tui, theme, _kb, done) => {
+				const items = buildSettingsItems(discovery.actors, templates.templates, config);
 				const container = new Container();
 				const border = new DynamicBorder((s: string) => theme.fg("accent", s));
 				container.addChild(border);
 				container.addChild(new Text(theme.fg("accent", theme.bold("Relay")), 1, 0));
-				container.addChild(new Markdown(md, 1, 1, getMarkdownTheme()));
+
+				let currentConfig = config;
+				const settingsList = new SettingsList(
+					items,
+					14,
+					getSettingsListTheme(),
+					(id, newValue) => {
+						currentConfig = applyToggle(currentConfig, id, newValue === "enabled");
+						saveRelayConfig(currentConfig);
+					},
+					() => done(undefined),
+				);
+				container.addChild(settingsList);
 				container.addChild(border);
+
 				return {
 					render: (width: number) => container.render(width),
 					invalidate: () => container.invalidate(),
-					handleInput: (data: string) => {
-						if (matchesKey(data, "enter") || matchesKey(data, "escape")) {
-							done(undefined);
-						}
-					},
+					handleInput: (data: string) => settingsList.handleInput(data),
 				};
 			});
 		},
@@ -214,45 +231,68 @@ const findPackageRoot = (startDir: string): string | null => {
 };
 
 // ============================================================================
-// /relay command
+// /relay command helpers
 // ============================================================================
 
-const formatRelayOverview = (actors: readonly ActorConfig[], templates: readonly PlanTemplate[]): string => {
-	const lines: string[] = [];
+const buildSettingsItems = (
+	actors: readonly ActorConfig[],
+	templates: readonly PlanTemplate[],
+	config: RelayConfig,
+): SettingItem[] => {
+	const items: SettingItem[] = [];
 
-	lines.push("## Actors");
-	lines.push("");
-	if (actors.length === 0) {
-		lines.push("*None installed.* Add `.md` files to `~/.pi/agent/pi-relay/actors/`");
-	} else {
-		for (const a of actors) {
-			const tools = a.tools ? a.tools.join(", ") : "default tool set";
-			const model = a.model ? `, model: \`${a.model}\`` : "";
-			const thinking = a.thinking ? `, thinking: ${a.thinking}` : "";
-			lines.push(`**${a.name}** — ${a.description}`);
-			lines.push(`  tools: ${tools}${model}${thinking}`);
-			lines.push("");
-		}
+	for (const a of actors) {
+		const tools = a.tools ? a.tools.join(", ") : "default tool set";
+		items.push({
+			id: `actor:${a.name}`,
+			label: `${a.name} (${a.source})`,
+			description: `${a.description} — tools: ${tools}`,
+			currentValue: config.disabledActors.has(a.name) ? "disabled" : "enabled",
+			values: ["enabled", "disabled"],
+		});
 	}
 
-	lines.push("## Plan Templates");
-	lines.push("");
-	if (templates.length === 0) {
-		lines.push("*None installed.* Add `.md` files to `~/.pi/agent/pi-relay/plans/`");
-	} else {
-		for (const t of templates) {
-			const sig =
-				t.parameters.length > 0 ? t.parameters.map((p) => (p.required ? p.name : `${p.name}?`)).join(", ") : "";
-			lines.push(`**${t.name}**(${sig}) — ${t.description}`);
-			for (const p of t.parameters) {
-				const req = p.required ? "" : ", optional";
-				lines.push(`- \`${p.name}\`: ${p.description}${req}`);
-			}
-			lines.push("");
-		}
+	// Section header — no values, so Space/Enter does nothing
+	items.push({
+		id: "_separator",
+		label: "── Plan Templates ──",
+		currentValue: "",
+	});
+
+	for (const t of templates) {
+		const sig =
+			t.parameters.length > 0 ? t.parameters.map((p) => (p.required ? p.name : `${p.name}?`)).join(", ") : "";
+		items.push({
+			id: `plan:${t.name}`,
+			label: `${t.name} (${t.source})`,
+			description: `${t.description}${sig ? ` — params: ${sig}` : ""}`,
+			currentValue: config.disabledPlans.has(t.name) ? "disabled" : "enabled",
+			values: ["enabled", "disabled"],
+		});
 	}
 
-	return lines.join("\n");
+	return items;
+};
+
+const applyToggle = (config: RelayConfig, id: string, enabled: boolean): RelayConfig => {
+	const [kind, name] = id.split(":", 2);
+	if (!kind || !name) return config;
+
+	if (kind === "actor") {
+		const next = new Set(config.disabledActors);
+		if (enabled) next.delete(name);
+		else next.add(name);
+		return { ...config, disabledActors: next };
+	}
+
+	if (kind === "plan") {
+		const next = new Set(config.disabledPlans);
+		if (enabled) next.delete(name);
+		else next.add(name);
+		return { ...config, disabledPlans: next };
+	}
+
+	return config;
 };
 
 // ============================================================================

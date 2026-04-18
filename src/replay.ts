@@ -14,6 +14,7 @@ import type { ExtensionAPI, Theme } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { type Static, Type } from "@sinclair/typebox";
 import { discoverActors } from "./actors/discovery.js";
+import { filterActors, filterPlans, loadRelayConfig } from "./config.js";
 import { executePlan } from "./execute.js";
 import type { RelayDetails, RelayRenderState } from "./index.js";
 import { manageElapsedTimer, renderRelayResult } from "./index.js";
@@ -55,19 +56,22 @@ export const registerReplayTool = (
 		parameters: ReplayParamsSchema,
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
-			const actorDiscovery = discoverActors(ctx.cwd, "user", { bundledDir: bundled.actorsDir });
+			const config = loadRelayConfig();
+			const fullActorDiscovery = discoverActors(ctx.cwd, "user", { bundledDir: bundled.actorsDir });
+			const actorDiscovery = { ...fullActorDiscovery, actors: filterActors(fullActorDiscovery.actors, config) };
 			const actorNames = new Set(actorDiscovery.actors.map((a) => a.name));
 			const templateDiscovery = discoverPlanTemplates(ctx.cwd, "user", {
 				actorNames,
 				bundledDir: bundled.plansDir,
 			});
+			const enabledTemplates = filterPlans(templateDiscovery.templates, config);
 
-			const template = templateDiscovery.templates.find((t) => t.name === params.name);
+			const template = enabledTemplates.find((t) => t.name === params.name);
 			if (!template) {
 				const message = formatTemplateError({
 					kind: "missing_template",
 					name: params.name,
-					available: templateDiscovery.templates.map((t) => t.name),
+					available: enabledTemplates.map((t) => t.name),
 				});
 				return {
 					content: [{ type: "text", text: `Replay failed: ${message}` }],
