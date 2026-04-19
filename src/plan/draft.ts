@@ -121,7 +121,7 @@ const VerifyCommandStepSchema = Type.Object(
       minLength: 1,
       description:
         "Shell command to run, e.g. 'npm test' or 'cargo test && cargo clippy'. " +
-        "Executed through the platform shell (sh on Unix, cmd.exe on Windows).",
+        "Executed via bash.",
     }),
     timeoutMs: Type.Optional(
       Type.Integer({
