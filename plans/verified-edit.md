@@ -25,7 +25,7 @@ steps:
       Write a summary of your changes to the change_notes artifact.
     reads: []
     writes: [change_notes]
-    routes: [{ route: done, to: verify }]
+    routes: { done: verify }
     retry: { maxAttempts: 2 }
   - kind: verify_command
     id: verify

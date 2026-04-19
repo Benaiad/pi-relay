@@ -16,10 +16,10 @@
 			"instruction": "Add a boolean feature flag called 'rollout_v2' to src/users/flags.ts (default false). Wire it into the canonical feature registry in src/features/registry.ts. Update src/users/service.ts to read the flag and branch on it for the new rollout path. Record what you changed in implementation-notes as { files: [{ path, change }] }.",
 			"reads": [],
 			"writes": ["implementation-notes"],
-			"routes": [
-				{ "route": "done", "to": "run-tests" },
-				{ "route": "failure", "to": "failed" }
-			],
+			"routes": {
+				"done": "run-tests",
+				"failure": "failed"
+			},
 			"retry": { "maxAttempts": 2 }
 		},
 		{

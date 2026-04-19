@@ -46,7 +46,7 @@ const basicPlan: PlanDraftDoc = {
       instruction: "Write requirements.",
       reads: [],
       writes: ["requirements"],
-      routes: [{ route: "next", to: "implement" }],
+      routes: { next: "implement" },
     },
     {
       kind: "action",
@@ -55,7 +55,7 @@ const basicPlan: PlanDraftDoc = {
       instruction: "Apply the requirements.",
       reads: ["requirements"],
       writes: ["notes"],
-      routes: [{ route: "done", to: "done" }],
+      routes: { done: "done" },
       retry: { maxAttempts: 2 },
     },
     {
@@ -154,7 +154,7 @@ describe("compile", () => {
     const bad: PlanDraftDoc = {
       ...basicPlan,
       steps: [
-        { ...planStep, routes: [{ route: "next", to: "nowhere" }] },
+        { ...planStep, routes: { next: "nowhere" } },
         ...basicPlan.steps.slice(1),
       ],
     };
@@ -264,7 +264,7 @@ describe("compile", () => {
           instruction: "Write a spec.",
           reads: [],
           writes: ["spec"],
-          routes: [{ route: "ready", to: "verify" }],
+          routes: { ready: "verify" },
         },
         {
           kind: "verify_files_exist",

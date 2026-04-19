@@ -164,10 +164,12 @@ const brandAction = (
   instruction: doc.instruction,
   reads: doc.reads.map((r) => ArtifactId(r)),
   writes: doc.writes.map((w) => ArtifactId(w)),
-  routes: doc.routes.map((edge) => ({
-    route: RouteId(edge.route),
-    to: StepId(edge.to),
-  })),
+  routes: new Map(
+    Object.entries(doc.routes).map(([route, to]) => [
+      RouteId(route),
+      StepId(to),
+    ]),
+  ),
   retry: doc.retry,
   maxRuns: doc.maxRuns,
   contextPolicy: doc.contextPolicy,
@@ -235,17 +237,17 @@ const buildEdges = (
   for (const step of steps.values()) {
     switch (step.kind) {
       case "action":
-        for (const edge of step.routes) {
-          if (!steps.has(edge.to)) {
+        for (const [route, target] of step.routes) {
+          if (!steps.has(target)) {
             return err({
               kind: "missing_route_target",
               from: step.id,
-              route: edge.route,
-              target: edge.to,
+              route,
+              target,
               availableSteps: stepOrder,
             });
           }
-          edges.set(edgeKey(step.id, edge.route), edge.to);
+          edges.set(edgeKey(step.id, route), target);
         }
         break;
 

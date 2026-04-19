@@ -35,7 +35,7 @@ steps:
       Write a summary of your changes to the notes artifact.
     reads: []
     writes: [notes]
-    routes: [{ route: done, to: spec_review }]
+    routes: { done: spec_review }
   - kind: action
     id: spec_review
     actor: reviewer
@@ -54,8 +54,8 @@ steps:
     reads: [notes]
     writes: [spec_verdict]
     routes:
-      - { route: approved, to: quality_review }
-      - { route: changes_requested, to: fix }
+      approved: quality_review
+      changes_requested: fix
   - kind: action
     id: quality_review
     actor: reviewer
@@ -77,8 +77,8 @@ steps:
     reads: [notes]
     writes: [quality_verdict]
     routes:
-      - { route: approved, to: verify }
-      - { route: changes_requested, to: fix }
+      approved: verify
+      changes_requested: fix
   - kind: action
     id: fix
     actor: worker
@@ -88,7 +88,7 @@ steps:
       Update the notes artifact with what you fixed.
     reads: [spec_verdict, quality_verdict]
     writes: [notes]
-    routes: [{ route: done, to: spec_review }]
+    routes: { done: spec_review }
     retry: { maxAttempts: 3 }
   - kind: verify_command
     id: verify

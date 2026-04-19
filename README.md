@@ -201,7 +201,7 @@ steps:
     instruction: "{{task}}"
     reads: []
     writes: []
-    routes: [{ route: done, to: verify }]
+    routes: { done: verify }
   - kind: verify_command
     id: verify
     command: "{{verify}}"

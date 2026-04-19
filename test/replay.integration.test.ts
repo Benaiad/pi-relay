@@ -61,7 +61,7 @@ class SimpleActorEngine implements ActorEngine {
     for (const w of request.step.writes) {
       writes.set(w, { result: "done" });
     }
-    const route = request.step.routes[0]?.route;
+    const route = [...request.step.routes.keys()][0];
     if (!route) {
       return {
         kind: "no_completion",
@@ -108,7 +108,7 @@ steps:
     instruction: "Rename {{old_name}} to {{new_name}} in {{module}}"
     reads: []
     writes: [notes]
-    routes: [{ route: done, to: verify }]
+    routes: { done: verify }
   - kind: verify_command
     id: verify
     command: echo ok

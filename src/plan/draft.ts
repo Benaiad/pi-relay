@@ -22,21 +22,6 @@ const IdField = (description: string) =>
     pattern: "^[a-zA-Z0-9_.:-]+$",
   });
 
-const RouteEdgeSchema = Type.Object(
-  {
-    route: IdField(
-      "Route name emitted by the source step, e.g. 'success', 'failure', 'retry'.",
-    ),
-    to: IdField(
-      "StepId the runtime transitions to when this route is emitted.",
-    ),
-  },
-  {
-    description:
-      "An outgoing edge from a step: when the step emits `route`, the runtime transitions to `to`.",
-  },
-);
-
 const RetryPolicySchema = Type.Object(
   {
     maxAttempts: Type.Integer({
@@ -94,11 +79,19 @@ const ActionStepSchema = Type.Object(
       description:
         "Artifacts this step is allowed to produce. Each artifact has at most one writing step.",
     }),
-    routes: Type.Array(RouteEdgeSchema, {
-      minItems: 1,
-      description:
-        "Outgoing edges. The actor must emit exactly one of these routes on successful completion.",
-    }),
+    routes: Type.Record(
+      Type.String({
+        minLength: 1,
+        maxLength: 128,
+        pattern: "^[a-zA-Z0-9_.:-]+$",
+      }),
+      IdField("StepId the runtime transitions to when this route is emitted."),
+      {
+        minProperties: 1,
+        description:
+          "Map of route names to target step IDs. The actor must emit exactly one of these route names on completion.",
+      },
+    ),
     retry: Type.Optional(RetryPolicySchema),
     maxRuns: Type.Optional(
       Type.Integer({

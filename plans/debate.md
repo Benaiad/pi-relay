@@ -40,7 +40,7 @@ steps:
       Format: { "role": "advocate", "claims": ["claim 1", "claim 2"] }
     reads: [debate_log]
     writes: [debate_log]
-    routes: [{ route: done, to: challenge }]
+    routes: { done: challenge }
     maxRuns: "{{max_rounds}}"
   - kind: action
     id: challenge
@@ -58,7 +58,7 @@ steps:
       Format: { "role": "critic", "objections": ["objection 1", "objection 2"] }
     reads: [debate_log]
     writes: [debate_log]
-    routes: [{ route: done, to: evaluate }]
+    routes: { done: evaluate }
     maxRuns: "{{max_rounds}}"
   - kind: action
     id: evaluate
@@ -77,8 +77,8 @@ steps:
     reads: [debate_log]
     writes: [debate_log]
     routes:
-      - { route: resolved, to: done }
-      - { route: unresolved, to: argue }
+      resolved: done
+      unresolved: argue
     maxRuns: "{{max_rounds}}"
   - kind: terminal
     id: done

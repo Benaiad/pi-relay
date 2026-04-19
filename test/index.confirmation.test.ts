@@ -35,7 +35,7 @@ const readOnlyPlan: PlanDraftDoc = {
       instruction: "Read the parser and describe its responsibilities.",
       reads: [],
       writes: ["summary"],
-      routes: [{ route: "done", to: "end" }],
+      routes: { done: "end" },
     },
     { kind: "terminal", id: "end", outcome: "success", summary: "described" },
   ],
@@ -56,7 +56,7 @@ const mutatingPlan: PlanDraftDoc = {
       instruction: "Add the flag.",
       reads: [],
       writes: ["notes"],
-      routes: [{ route: "done", to: "verify" }],
+      routes: { done: "verify" },
     },
     {
       kind: "verify_command",

@@ -28,7 +28,7 @@ steps:
     instruction: "Rename {{old_name}} to {{new_name}} in {{module}}"
     reads: []
     writes: []
-    routes: [{ route: done, to: success }]
+    routes: { done: success }
   - kind: terminal
     id: success
     outcome: success

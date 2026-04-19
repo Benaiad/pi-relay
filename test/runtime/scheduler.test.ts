@@ -140,7 +140,7 @@ const linearPlan: PlanDraftDoc = {
       instruction: "Produce the note.",
       reads: [],
       writes: ["note"],
-      routes: [{ route: "next", to: "end" }],
+      routes: { next: "end" },
     },
     { kind: "terminal", id: "end", outcome: "success", summary: "All good." },
   ],
@@ -301,10 +301,10 @@ describe("Scheduler — retries", () => {
           instruction: "Might fail.",
           reads: [],
           writes: [],
-          routes: [
-            { route: "success", to: "good" },
-            { route: "failure", to: "bad" },
-          ],
+          routes: {
+            success: "good",
+            failure: "bad",
+          },
           retry: { maxAttempts: 2 },
         },
         { kind: "terminal", id: "good", outcome: "success", summary: "ok" },
@@ -391,7 +391,7 @@ describe("Scheduler — artifact contract violations", () => {
           instruction: "Write a.",
           reads: [],
           writes: ["a"],
-          routes: [{ route: "next", to: "second" }],
+          routes: { next: "second" },
           retry: { maxAttempts: 2 },
         },
         {
@@ -401,7 +401,7 @@ describe("Scheduler — artifact contract violations", () => {
           instruction: "Write b.",
           reads: ["a"],
           writes: ["b"],
-          routes: [{ route: "done", to: "end" }],
+          routes: { done: "end" },
         },
         { kind: "terminal", id: "end", outcome: "success", summary: "ok" },
       ],
@@ -437,7 +437,7 @@ describe("Scheduler — terminal routes", () => {
           instruction: "decide",
           reads: [],
           writes: [],
-          routes: [{ route: "fail", to: "bad" }],
+          routes: { fail: "bad" },
         },
         {
           kind: "terminal",
@@ -473,7 +473,7 @@ describe("Scheduler — terminal routes", () => {
           instruction: "create",
           reads: [],
           writes: ["notes"],
-          routes: [{ route: "done", to: "review" }],
+          routes: { done: "review" },
         },
         {
           kind: "action",
@@ -482,10 +482,10 @@ describe("Scheduler — terminal routes", () => {
           instruction: "review",
           reads: ["notes"],
           writes: ["verdict"],
-          routes: [
-            { route: "accepted", to: "done" },
-            { route: "changes_requested", to: "fix" },
-          ],
+          routes: {
+            accepted: "done",
+            changes_requested: "fix",
+          },
         },
         {
           kind: "action",
@@ -494,7 +494,7 @@ describe("Scheduler — terminal routes", () => {
           instruction: "fix",
           reads: ["verdict"],
           writes: ["notes"],
-          routes: [{ route: "done", to: "review" }],
+          routes: { done: "review" },
         },
         {
           kind: "terminal",
@@ -558,7 +558,7 @@ describe("Scheduler — terminal routes", () => {
           instruction: "create",
           reads: [],
           writes: ["notes"],
-          routes: [{ route: "done", to: "review" }],
+          routes: { done: "review" },
         },
         {
           kind: "action",
@@ -567,10 +567,10 @@ describe("Scheduler — terminal routes", () => {
           instruction: "review",
           reads: ["notes"],
           writes: ["verdict"],
-          routes: [
-            { route: "accepted", to: "done" },
-            { route: "changes_requested", to: "fix" },
-          ],
+          routes: {
+            accepted: "done",
+            changes_requested: "fix",
+          },
         },
         {
           kind: "action",
@@ -579,7 +579,7 @@ describe("Scheduler — terminal routes", () => {
           instruction: "fix",
           reads: ["verdict"],
           writes: ["notes"],
-          routes: [{ route: "done", to: "review" }],
+          routes: { done: "review" },
         },
         {
           kind: "terminal",
@@ -637,7 +637,7 @@ describe("Scheduler — terminal routes", () => {
           instruction: "create",
           reads: [],
           writes: ["notes"],
-          routes: [{ route: "done", to: "review" }],
+          routes: { done: "review" },
         },
         {
           kind: "action",
@@ -646,10 +646,10 @@ describe("Scheduler — terminal routes", () => {
           instruction: "review",
           reads: ["notes"],
           writes: ["verdict"],
-          routes: [
-            { route: "accepted", to: "done" },
-            { route: "changes_requested", to: "fix" },
-          ],
+          routes: {
+            accepted: "done",
+            changes_requested: "fix",
+          },
         },
         {
           kind: "action",
@@ -658,7 +658,7 @@ describe("Scheduler — terminal routes", () => {
           instruction: "fix",
           reads: ["verdict"],
           writes: ["notes"],
-          routes: [{ route: "done", to: "review" }],
+          routes: { done: "review" },
         },
         {
           kind: "terminal",
@@ -712,7 +712,7 @@ describe("Scheduler — terminal routes", () => {
           instruction: "create",
           reads: [],
           writes: ["notes"],
-          routes: [{ route: "done", to: "review" }],
+          routes: { done: "review" },
         },
         {
           kind: "action",
@@ -721,10 +721,10 @@ describe("Scheduler — terminal routes", () => {
           instruction: "review",
           reads: ["notes"],
           writes: ["verdict"],
-          routes: [
-            { route: "accepted", to: "done" },
-            { route: "changes_requested", to: "fix" },
-          ],
+          routes: {
+            accepted: "done",
+            changes_requested: "fix",
+          },
         },
         {
           kind: "action",
@@ -733,7 +733,7 @@ describe("Scheduler — terminal routes", () => {
           instruction: "fix",
           reads: ["verdict", "notes"],
           writes: ["notes"],
-          routes: [{ route: "done", to: "review" }],
+          routes: { done: "review" },
         },
         {
           kind: "terminal",
@@ -781,7 +781,7 @@ describe("Scheduler — terminal routes", () => {
           instruction: "a",
           reads: [],
           writes: ["state"],
-          routes: [{ route: "next", to: "b" }],
+          routes: { next: "b" },
           maxRuns: 3,
         },
         {
@@ -791,7 +791,7 @@ describe("Scheduler — terminal routes", () => {
           instruction: "b",
           reads: ["state"],
           writes: [],
-          routes: [{ route: "again", to: "a" }],
+          routes: { again: "a" },
           maxRuns: 3,
         },
         { kind: "terminal", id: "never", outcome: "success", summary: "never" },
@@ -826,10 +826,10 @@ describe("Scheduler — terminal routes", () => {
           instruction: "decide",
           reads: [],
           writes: [],
-          routes: [
-            { route: "good", to: "success_terminal" },
-            { route: "bad", to: "failure_terminal" },
-          ],
+          routes: {
+            good: "success_terminal",
+            bad: "failure_terminal",
+          },
         },
         {
           kind: "terminal",
@@ -875,7 +875,7 @@ describe("Scheduler — check result forwarding", () => {
           instruction: "implement",
           reads: [],
           writes: [],
-          routes: [{ route: "done", to: "verify" }],
+          routes: { done: "verify" },
         },
         {
           kind: "verify_command",
@@ -891,7 +891,7 @@ describe("Scheduler — check result forwarding", () => {
           instruction: "fix the issue",
           reads: [],
           writes: [],
-          routes: [{ route: "done", to: "done" }],
+          routes: { done: "done" },
         },
         { kind: "terminal", id: "done", outcome: "success", summary: "ok" },
       ],
@@ -945,7 +945,7 @@ describe("Scheduler — check result forwarding", () => {
           instruction: "do work",
           reads: [],
           writes: [],
-          routes: [{ route: "done", to: "done" }],
+          routes: { done: "done" },
         },
         { kind: "terminal", id: "done", outcome: "success", summary: "ok" },
         { kind: "terminal", id: "fail", outcome: "failure", summary: "failed" },
@@ -990,7 +990,7 @@ describe("Scheduler — check result forwarding", () => {
           instruction: "first",
           reads: [],
           writes: [],
-          routes: [{ route: "done", to: "second" }],
+          routes: { done: "second" },
         },
         {
           kind: "action",
@@ -999,7 +999,7 @@ describe("Scheduler — check result forwarding", () => {
           instruction: "second",
           reads: [],
           writes: [],
-          routes: [{ route: "done", to: "done" }],
+          routes: { done: "done" },
         },
         { kind: "terminal", id: "done", outcome: "success", summary: "ok" },
       ],

@@ -65,7 +65,7 @@ const runAction = async (request: ActionRequest): Promise<ActionOutcome> => {
     request;
 
   const systemPromptText = buildSystemPrompt(actor.systemPrompt, {
-    routes: step.routes.map((r) => r.route),
+    routes: [...step.routes.keys()],
     writableArtifactIds: step.writes,
     artifactContracts,
   });
@@ -151,12 +151,13 @@ const runAction = async (request: ActionRequest): Promise<ActionOutcome> => {
     }
 
     const routeId = RouteId(parsed.value.route);
-    const routeAllowed = step.routes.some((r) => r.route === routeId);
-    if (!routeAllowed) {
+    if (!step.routes.has(routeId)) {
       return {
         kind: "no_completion",
-        reason: `route '${parsed.value.route}' is not one of the allowed routes: ${step.routes
-          .map((r) => unwrap(r.route))
+        reason: `route '${parsed.value.route}' is not one of the allowed routes: ${[
+          ...step.routes.keys(),
+        ]
+          .map(unwrap)
           .join(", ")}`,
         usage: result.usage,
         transcript: result.transcript,

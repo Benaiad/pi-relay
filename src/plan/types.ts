@@ -21,12 +21,6 @@ export interface RetryPolicy {
   readonly backoffMs?: number;
 }
 
-/** A named outgoing edge from a step: "when this step emits route X, go to step Y". */
-export interface RouteEdge {
-  readonly route: RouteId;
-  readonly to: StepId;
-}
-
 /** Shape of an artifact's stored value. MVP only supports untyped JSON. */
 export type ArtifactShape = { readonly kind: "untyped_json" };
 
@@ -60,7 +54,7 @@ export interface ActionStep {
   readonly instruction: string;
   readonly reads: readonly ArtifactId[];
   readonly writes: readonly ArtifactId[];
-  readonly routes: readonly RouteEdge[];
+  readonly routes: ReadonlyMap<RouteId, StepId>;
   readonly retry?: RetryPolicy;
   readonly maxRuns?: number;
   readonly contextPolicy?: ContextPolicy;

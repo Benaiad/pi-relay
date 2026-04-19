@@ -139,11 +139,12 @@ const buildActionBlock = (
   }
 
   if (expanded) {
-    if (step.routes.length === 1) {
-      lines.push(`     ${theme.fg("dim", `→ ${step.routes[0]!.to}`)}`);
-    } else if (step.routes.length > 1) {
-      const branches = step.routes
-        .map((r) => `${r.route} → ${r.to}`)
+    const routeEntries = Object.entries(step.routes);
+    if (routeEntries.length === 1) {
+      lines.push(`     ${theme.fg("dim", `→ ${routeEntries[0]![1]}`)}`);
+    } else if (routeEntries.length > 1) {
+      const branches = routeEntries
+        .map(([route, to]) => `${route} → ${to}`)
         .join(", ");
       lines.push(`     ${theme.fg("dim", `Branches: ${branches}`)}`);
     }

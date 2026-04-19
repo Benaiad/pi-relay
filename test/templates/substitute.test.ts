@@ -22,7 +22,7 @@ const makeTemplate = (overrides: Partial<PlanTemplate> = {}): PlanTemplate => ({
         instruction: "Rename {{symbol}} in {{module}}. Note: {{note}}",
         reads: [],
         writes: [],
-        routes: [{ route: "done", to: "success" }],
+        routes: { done: "success" },
       },
       {
         kind: "terminal",
@@ -139,7 +139,7 @@ describe("instantiateTemplate", () => {
             instruction: "do it",
             reads: [],
             writes: [],
-            routes: [{ route: "done", to: "{{next_step}}" }],
+            routes: { done: "{{next_step}}" },
           },
           {
             kind: "terminal",
@@ -158,7 +158,7 @@ describe("instantiateTemplate", () => {
     if (!result.ok) return;
     const step = result.value.plan.steps[0]!;
     if (step.kind !== "action") throw new Error("expected action");
-    expect(step.routes[0]!.to).toBe("b");
+    expect(Object.values(step.routes)[0]).toBe("b");
   });
 
   it("catches residual placeholders injected via arg values", () => {
@@ -260,7 +260,7 @@ describe("instantiateTemplate", () => {
             instruction: "do it",
             reads: [],
             writes: [],
-            routes: [{ route: "done", to: "b" }],
+            routes: { done: "b" },
             maxRuns: "{{count}}",
           },
           { kind: "terminal", id: "b", outcome: "success", summary: "ok" },
@@ -293,7 +293,7 @@ describe("instantiateTemplate", () => {
             instruction: "do it",
             reads: [],
             writes: ["x"],
-            routes: [{ route: "done", to: "b" }],
+            routes: { done: "b" },
           },
           { kind: "terminal", id: "b", outcome: "success", summary: "ok" },
         ],

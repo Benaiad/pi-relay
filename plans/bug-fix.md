@@ -38,7 +38,7 @@ steps:
       - fix: the minimal change that resolves it
     reads: []
     writes: [diagnosis]
-    routes: [{ route: done, to: fix }]
+    routes: { done: fix }
   - kind: action
     id: fix
     actor: worker
@@ -49,7 +49,7 @@ steps:
       Write a fix_notes artifact summarizing what you changed.
     reads: [diagnosis]
     writes: [fix_notes]
-    routes: [{ route: done, to: verify }]
+    routes: { done: verify }
     retry: { maxAttempts: 2 }
   - kind: verify_command
     id: verify

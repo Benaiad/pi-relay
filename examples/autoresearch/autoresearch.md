@@ -57,7 +57,7 @@ steps:
       { "approach": "what you changed", "rationale": "why this should help" }
     reads: [experiment_log]
     writes: [experiment_log]
-    routes: [{ route: done, to: benchmark }]
+    routes: { done: benchmark }
     maxRuns: "{{max_experiments}}"
   - kind: verify_command
     id: benchmark
