@@ -253,6 +253,8 @@ const buildSettingsItems = (
 ): SettingItem[] => {
 	const items: SettingItem[] = [];
 
+	items.push({ id: "_actors", label: "Actors", currentValue: "" });
+
 	for (const a of actors) {
 		const tools = a.tools ? a.tools.join(", ") : "default tool set";
 		items.push({
@@ -264,12 +266,7 @@ const buildSettingsItems = (
 		});
 	}
 
-	// Section header — no values, so Space/Enter does nothing
-	items.push({
-		id: "_separator",
-		label: "── Plan Templates ──",
-		currentValue: "",
-	});
+	items.push({ id: "_plans", label: "Plans", currentValue: "" });
 
 	for (const t of templates) {
 		const sig =
