@@ -1,8 +1,6 @@
 # pi-relay
 
-**Plan. Execute. Verify.**
-
-Finite state machine workflows for [pi](https://pi.dev/). Agents act, Relay verify.
+Multi-step workflows for [pi](https://pi.dev/) — actors do the work, verification gates decide pass/fail.
 
 ```bash
 pi install https://github.com/benaiad/pi-relay
@@ -19,26 +17,56 @@ cd ~/.pi/agent/extensions/pi-relay && npm install --omit=dev
 ln -s "$(pwd)" ~/.pi/agent/extensions/pi-relay
 ```
 
-Two tools are added to pi:
+Without relay, the assistant handles everything in a single conversation turn. Relay lets it break complex work into a plan with multiple actors, verification gates, and structured routing between steps. The assistant decides when a task needs relay — you just describe what you want.
 
-- **`relay`** — the model builds a plan from scratch: steps, actors, artifacts, verification gates.
-- **`replay`** — the model runs a saved plan template by name with arguments.
+Three things are added to pi:
 
-Type `/relay` to browse installed actors and templates.
+- **`relay` tool** — the assistant builds and executes an ad-hoc plan: steps, actors, artifacts, verification gates.
+- **`replay` tool** — the assistant runs a saved plan template by name with arguments.
+- **`/relay` command** — interactive TUI to browse, enable, and disable actors and templates.
 
 ## How it works
 
-1. The model calls `relay` (ad-hoc plan) or `replay` (saved template) based on the task.
+1. The assistant calls `relay` (ad-hoc plan) or `replay` (saved template) based on the task.
 2. The plan is compiled — actor references, route targets, and artifact contracts are validated.
 3. You review the plan and choose: **Run**, **Refine**, or **Cancel**.
-4. The scheduler executes steps sequentially. Action steps spawn isolated agent subprocesses. Check steps run shell commands and route on exit code — pass or fail, no interpretation.
+4. The scheduler executes steps sequentially. Action steps spawn isolated agent subprocesses. Verify steps run shell commands or check file existence and route on the outcome — pass or fail, no interpretation.
 5. The run report shows what happened: per-step outcomes, tool calls, and actor transcripts. Press `Ctrl+O` to expand the full step-by-step detail.
 
-Use `/relay` to browse installed actors and templates.
+## Core concepts
+
+### Step kinds
+
+A plan is a DAG of steps. Four kinds:
+
+- **`action`** — an actor (LLM agent) runs with a restricted tool set and emits a route on completion.
+- **`verify_command`** — runs a shell command. Pass if exit 0, fail otherwise. Output is captured for the failure reason.
+- **`verify_files_exist`** — checks that all listed paths exist on the filesystem.
+- **`terminal`** — ends the run with a declared outcome: success or failure.
+
+### Routes
+
+Action steps declare a map of route names to target steps:
+
+```yaml
+routes: { done: verify, failure: failed }
+```
+
+The actor chooses which route to emit on completion. Multi-way branching is supported — a judge step might route to `resolved` or `unresolved`, each pointing to a different next step.
+
+Verify steps route via fixed `onPass` / `onFail` fields.
+
+### Artifacts
+
+Structured state passed between steps. Declared at the plan level with an id and description, then read and written by action steps. The runtime enforces that only declared writers commit values. Artifacts accumulate across loop iterations with attribution metadata.
+
+### Back-edges and loops
+
+Routes can point to earlier steps, creating loops. A verify step that fails can route back to an action step, which re-runs with the failure reason in its prompt. The `maxRuns` field on action steps caps iterations to prevent runaway loops.
 
 ## Included templates
 
-Five templates ship with the extension. Each implements a different workflow topology — from a single gate to multi-round adversarial loops. The model picks the right one via `replay`, or builds a custom plan with `relay`.
+Five templates ship with the extension, plus one example. Each implements a different workflow topology — from a single gate to multi-round adversarial loops. The assistant picks the right one via `replay`, or builds a custom plan with `relay`.
 
 ### verified-edit
 
@@ -155,7 +183,7 @@ Use replay with the debate template:
 
 ### autoresearch
 
-An autonomous optimization loop. The agent modifies code, the runtime benchmarks it, a deterministic gate keeps improvements and reverts regressions. Included as an example in [`examples/autoresearch/`](examples/autoresearch/) — see its README for setup.
+An autonomous optimization loop that demonstrates back-edges with `maxRuns` for iteration capping. The agent modifies code, the runtime benchmarks it, a deterministic gate keeps improvements and reverts regressions. Included as an example in [`examples/autoresearch/`](examples/autoresearch/) — see its README for setup.
 
 ```mermaid
 graph LR
@@ -217,11 +245,11 @@ steps:
     summary: Verification failed.
 ```
 
-Check commands run through pi's shell backend (respects `shellPath` in settings, defaults to `/bin/bash` on Unix, Git Bash on Windows). Integer and boolean parameters are coerced automatically.
+Verify commands run through pi's shell backend (respects `shellPath` in settings, defaults to `/bin/bash` on Unix, Git Bash on Windows). Integer and boolean parameters are coerced automatically.
 
 ## Actors
 
-Actors define the roles that execute plan steps. Five ship with the extension:
+Actors define the roles that execute action steps. Five ship with the extension:
 
 - **worker** — implements changes (read, edit, write, grep, find, ls, bash)
 - **reviewer** — reviews against criteria, read-only (read, grep, find, ls, bash)
@@ -248,7 +276,7 @@ any vulnerabilities, focusing on injection, auth bypass, and
 data exposure.
 ```
 
-Edits to actor system prompts take effect on the next execution. Adding or removing actors requires `/reload`.
+Edits to actor system prompts take effect on the next execution. Adding or removing actors requires `/reload`. Use `/relay` to toggle actors on or off — disabling an actor automatically disables templates that use it.
 
 ## Plan review
 
