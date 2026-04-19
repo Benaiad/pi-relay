@@ -89,7 +89,8 @@ const ActionStepSchema = Type.Object(
       {
         minProperties: 1,
         description:
-          "Map of route names to target step IDs. The actor must emit exactly one of these route names on completion.",
+          'Map of route names to target step IDs, e.g. { "done": "next-step", "failure": "handle-error" }. ' +
+          "The actor must emit exactly one of these route names on completion.",
       },
     ),
     retry: Type.Optional(RetryPolicySchema),
