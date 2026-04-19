@@ -29,7 +29,14 @@ import {
 import { Container, type SettingItem, SettingsList, Text } from "@mariozechner/pi-tui";
 import { discoverActors } from "./actors/discovery.js";
 import type { ActorConfig } from "./actors/types.js";
-import { filterActors, filterPlans, loadRelayConfig, type RelayConfig, saveRelayConfig } from "./config.js";
+import {
+	configsEqual,
+	filterActors,
+	filterPlans,
+	loadRelayConfig,
+	type RelayConfig,
+	saveRelayConfig,
+} from "./config.js";
 import { executePlan } from "./execute.js";
 import { PlanDraftSchema } from "./plan/draft.js";
 import type { StepId } from "./plan/ids.js";
@@ -182,12 +189,14 @@ export default function (pi: ExtensionAPI): void {
 				};
 			});
 
-			// Re-register tools with updated descriptions so the model
-			// sees the current enabled/disabled state without /reload.
+			// Re-register tools only if the config actually changed,
+			// to avoid invalidating prompt cache on a no-op open/close.
 			const freshConfig = loadRelayConfig();
-			const freshActors = filterActors(discovery.actors, freshConfig);
-			const freshTemplates = filterPlans(templates.templates, freshConfig);
-			registerTools(freshActors, freshTemplates);
+			if (!configsEqual(config, freshConfig)) {
+				const freshActors = filterActors(discovery.actors, freshConfig);
+				const freshTemplates = filterPlans(templates.templates, freshConfig);
+				registerTools(freshActors, freshTemplates);
+			}
 		},
 	});
 }
