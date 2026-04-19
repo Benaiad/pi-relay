@@ -10,18 +10,21 @@
 import type { ActorId, ArtifactId, RouteId, StepId } from "./ids.js";
 
 /** How an actor's conversation state persists across step invocations within a single run. */
-export type ContextPolicy = "fresh_per_run" | "persist_per_step" | "persist_per_actor";
+export type ContextPolicy =
+  | "fresh_per_run"
+  | "persist_per_step"
+  | "persist_per_actor";
 
 /** Retry policy for an action step. `maxAttempts` of 1 means a single attempt with no retry. */
 export interface RetryPolicy {
-	readonly maxAttempts: number;
-	readonly backoffMs?: number;
+  readonly maxAttempts: number;
+  readonly backoffMs?: number;
 }
 
 /** A named outgoing edge from a step: "when this step emits route X, go to step Y". */
 export interface RouteEdge {
-	readonly route: RouteId;
-	readonly to: StepId;
+  readonly route: RouteId;
+  readonly to: StepId;
 }
 
 /** Shape of an artifact's stored value. MVP only supports untyped JSON. */
@@ -40,26 +43,10 @@ export type ArtifactShape = { readonly kind: "untyped_json" };
  * Readers see the full history as an array of entries.
  */
 export interface ArtifactContract {
-	readonly id: ArtifactId;
-	readonly description: string;
-	readonly shape: ArtifactShape;
+  readonly id: ArtifactId;
+  readonly description: string;
+  readonly shape: ArtifactShape;
 }
-
-/**
- * A deterministic verification step the runtime evaluates itself.
- *
- * MVP supports two kinds: file existence and command-exit-code. Both are
- * pure shell-style checks with no LLM involvement. The check engine routes
- * to `pass` or `fail` based on the outcome.
- */
-export type CheckSpec =
-	| { readonly kind: "file_exists"; readonly path: string }
-	| {
-			readonly kind: "command_exits_zero";
-			readonly command: string;
-			readonly cwd?: string;
-			readonly timeoutMs?: number;
-	  };
 
 /**
  * An action step: an actor (LLM-backed) is asked to do work and emit one of
@@ -67,29 +54,41 @@ export type CheckSpec =
  * committed by the actor via its completion tool call.
  */
 export interface ActionStep {
-	readonly kind: "action";
-	readonly id: StepId;
-	readonly actor: ActorId;
-	readonly instruction: string;
-	readonly reads: readonly ArtifactId[];
-	readonly writes: readonly ArtifactId[];
-	readonly routes: readonly RouteEdge[];
-	readonly retry?: RetryPolicy;
-	readonly maxRuns?: number;
-	readonly contextPolicy?: ContextPolicy;
+  readonly kind: "action";
+  readonly id: StepId;
+  readonly actor: ActorId;
+  readonly instruction: string;
+  readonly reads: readonly ArtifactId[];
+  readonly writes: readonly ArtifactId[];
+  readonly routes: readonly RouteEdge[];
+  readonly retry?: RetryPolicy;
+  readonly maxRuns?: number;
+  readonly contextPolicy?: ContextPolicy;
 }
 
 /**
- * A check step: a `CheckSpec` is evaluated deterministically, and the
- * runtime routes to `onPass` or `onFail` depending on the outcome. Check
- * steps never read or write artifacts and never call an LLM.
+ * A verify step that runs a shell command and routes based on exit code.
+ * Pass iff the command exits 0 within the timeout.
  */
-export interface CheckStep {
-	readonly kind: "check";
-	readonly id: StepId;
-	readonly check: CheckSpec;
-	readonly onPass: StepId;
-	readonly onFail: StepId;
+export interface VerifyCommandStep {
+  readonly kind: "verify_command";
+  readonly id: StepId;
+  readonly command: string;
+  readonly timeoutMs?: number;
+  readonly onPass: StepId;
+  readonly onFail: StepId;
+}
+
+/**
+ * A verify step that checks whether all listed paths exist on the filesystem.
+ * Pass iff every path exists. Failure reason lists which paths are missing.
+ */
+export interface VerifyFilesExistStep {
+  readonly kind: "verify_files_exist";
+  readonly id: StepId;
+  readonly paths: readonly string[];
+  readonly onPass: StepId;
+  readonly onFail: StepId;
 }
 
 /**
@@ -97,16 +96,20 @@ export interface CheckStep {
  * emits `RunFinished` and the scheduler exits its loop.
  */
 export interface TerminalStep {
-	readonly kind: "terminal";
-	readonly id: StepId;
-	readonly outcome: TerminalOutcome;
-	readonly summary: string;
+  readonly kind: "terminal";
+  readonly id: StepId;
+  readonly outcome: TerminalOutcome;
+  readonly summary: string;
 }
 
 export type TerminalOutcome = "success" | "failure";
 
 /** The discriminated union of every step kind. Exhaustive matching is enforced. */
-export type Step = ActionStep | CheckStep | TerminalStep;
+export type Step =
+  | ActionStep
+  | VerifyCommandStep
+  | VerifyFilesExistStep
+  | TerminalStep;
 
 /**
  * A plan as the compiler understands it — branded IDs, frozen arrays.
@@ -116,9 +119,9 @@ export type Step = ActionStep | CheckStep | TerminalStep;
  * structural well-formedness. Real validation lives in `compile()`.
  */
 export interface PlanDraft {
-	readonly task: string;
-	readonly successCriteria?: string;
-	readonly artifacts: readonly ArtifactContract[];
-	readonly steps: readonly Step[];
-	readonly entryStep: StepId;
+  readonly task: string;
+  readonly successCriteria?: string;
+  readonly artifacts: readonly ArtifactContract[];
+  readonly steps: readonly Step[];
+  readonly entryStep: StepId;
 }

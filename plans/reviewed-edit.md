@@ -90,9 +90,9 @@ steps:
     writes: [notes]
     routes: [{ route: done, to: spec_review }]
     retry: { maxAttempts: 3 }
-  - kind: check
+  - kind: verify_command
     id: verify
-    check: { kind: command_exits_zero, command: "{{verify}}" }
+    command: "{{verify}}"
     onPass: done
     onFail: failed
   - kind: terminal

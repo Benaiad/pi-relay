@@ -51,9 +51,9 @@ steps:
     writes: [fix_notes]
     routes: [{ route: done, to: verify }]
     retry: { maxAttempts: 2 }
-  - kind: check
+  - kind: verify_command
     id: verify
-    check: { kind: command_exits_zero, command: "{{verify}}" }
+    command: "{{verify}}"
     onPass: done
     onFail: failed
   - kind: terminal

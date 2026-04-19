@@ -23,13 +23,10 @@
 			"retry": { "maxAttempts": 2 }
 		},
 		{
-			"kind": "check",
+			"kind": "verify_command",
 			"id": "run-tests",
-			"check": {
-				"kind": "command_exits_zero",
-				"command": "npm test",
-				"timeoutMs": 120000
-			},
+			"command": "npm test",
+			"timeoutMs": 120000,
 			"onPass": "done",
 			"onFail": "failed"
 		},

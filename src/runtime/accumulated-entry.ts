@@ -13,17 +13,19 @@
 import type { StepId } from "../plan/ids.js";
 
 export interface AccumulatedEntry {
-	readonly index: number;
-	readonly stepId: StepId;
-	readonly attempt: number;
-	readonly value: unknown;
-	readonly committedAt: number;
+  readonly index: number;
+  readonly stepId: StepId;
+  readonly attempt: number;
+  readonly value: unknown;
+  readonly committedAt: number;
 }
 
-export const isAccumulatedEntryArray = (value: unknown): value is AccumulatedEntry[] =>
-	Array.isArray(value) &&
-	value.length > 0 &&
-	typeof value[0] === "object" &&
-	value[0] !== null &&
-	"stepId" in value[0] &&
-	"index" in value[0];
+export const isAccumulatedEntryArray = (
+  value: unknown,
+): value is AccumulatedEntry[] =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  typeof value[0] === "object" &&
+  value[0] !== null &&
+  "stepId" in value[0] &&
+  "index" in value[0];

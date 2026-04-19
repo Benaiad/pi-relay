@@ -202,9 +202,9 @@ steps:
     reads: []
     writes: []
     routes: [{ route: done, to: verify }]
-  - kind: check
+  - kind: verify_command
     id: verify
-    check: { kind: command_exits_zero, command: "{{verify}}" }
+    command: "{{verify}}"
     onPass: done
     onFail: failed
   - kind: terminal

@@ -43,19 +43,19 @@ steps:
     writes: [change_notes]
     routes: [{ route: done, to: gate1 }]
     retry: { maxAttempts: 2 }
-  - kind: check
+  - kind: verify_command
     id: gate1
-    check: { kind: command_exits_zero, command: "{{gate1}}" }
+    command: "{{gate1}}"
     onPass: gate2
     onFail: gate1_failed
-  - kind: check
+  - kind: verify_command
     id: gate2
-    check: { kind: command_exits_zero, command: "{{gate2}}" }
+    command: "{{gate2}}"
     onPass: gate3
     onFail: gate2_failed
-  - kind: check
+  - kind: verify_command
     id: gate3
-    check: { kind: command_exits_zero, command: "{{gate3}}" }
+    command: "{{gate3}}"
     onPass: done
     onFail: gate3_failed
   - kind: terminal

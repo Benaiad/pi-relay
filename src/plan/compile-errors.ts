@@ -12,42 +12,42 @@ import type { ActorId, ArtifactId, RouteId, StepId } from "./ids.js";
 import type { ContextPolicy } from "./types.js";
 
 export type CompileError =
-	| { readonly kind: "empty_plan" }
-	| { readonly kind: "duplicate_step"; readonly stepId: StepId }
-	| {
-			readonly kind: "missing_entry";
-			readonly entryStep: StepId;
-			readonly availableSteps: readonly StepId[];
-	  }
-	| {
-			readonly kind: "missing_actor";
-			readonly stepId: StepId;
-			readonly actor: ActorId;
-			readonly availableActors: readonly ActorId[];
-	  }
-	| {
-			readonly kind: "missing_route_target";
-			readonly from: StepId;
-			readonly route: RouteId;
-			readonly target: StepId;
-			readonly availableSteps: readonly StepId[];
-	  }
-	| {
-			readonly kind: "duplicate_artifact";
-			readonly artifactId: ArtifactId;
-	  }
-	| {
-			readonly kind: "missing_artifact_contract";
-			readonly artifactId: ArtifactId;
-			readonly stepId: StepId;
-			readonly direction: "read" | "write";
-	  }
-	| {
-			readonly kind: "missing_artifact_producer";
-			readonly artifactId: ArtifactId;
-	  }
-	| {
-			readonly kind: "unsupported_context_policy";
-			readonly stepId: StepId;
-			readonly policy: ContextPolicy;
-	  };
+  | { readonly kind: "empty_plan" }
+  | { readonly kind: "duplicate_step"; readonly stepId: StepId }
+  | {
+      readonly kind: "missing_entry";
+      readonly entryStep: StepId;
+      readonly availableSteps: readonly StepId[];
+    }
+  | {
+      readonly kind: "missing_actor";
+      readonly stepId: StepId;
+      readonly actor: ActorId;
+      readonly availableActors: readonly ActorId[];
+    }
+  | {
+      readonly kind: "missing_route_target";
+      readonly from: StepId;
+      readonly route: RouteId;
+      readonly target: StepId;
+      readonly availableSteps: readonly StepId[];
+    }
+  | {
+      readonly kind: "duplicate_artifact";
+      readonly artifactId: ArtifactId;
+    }
+  | {
+      readonly kind: "missing_artifact_contract";
+      readonly artifactId: ArtifactId;
+      readonly stepId: StepId;
+      readonly direction: "read" | "write";
+    }
+  | {
+      readonly kind: "missing_artifact_producer";
+      readonly artifactId: ArtifactId;
+    }
+  | {
+      readonly kind: "unsupported_context_policy";
+      readonly stepId: StepId;
+      readonly policy: ContextPolicy;
+    };

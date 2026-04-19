@@ -17,45 +17,45 @@ import type { ActorId, ArtifactId, EdgeKey, PlanId, StepId } from "./ids.js";
 import type { ArtifactContract, Step } from "./types.js";
 
 export interface Program {
-	/** Unique identifier for this compiled plan instance. */
-	readonly id: PlanId;
+  /** Unique identifier for this compiled plan instance. */
+  readonly id: PlanId;
 
-	/** Human-readable task description, preserved from the draft. */
-	readonly task: string;
+  /** Human-readable task description, preserved from the draft. */
+  readonly task: string;
 
-	/** Optional success criteria, preserved from the draft. */
-	readonly successCriteria?: string;
+  /** Optional success criteria, preserved from the draft. */
+  readonly successCriteria?: string;
 
-	/** Step where execution begins. Guaranteed to be a key of `steps`. */
-	readonly entryStep: StepId;
+  /** Step where execution begins. Guaranteed to be a key of `steps`. */
+  readonly entryStep: StepId;
 
-	/** All steps indexed by id. */
-	readonly steps: ReadonlyMap<StepId, Step>;
+  /** All steps indexed by id. */
+  readonly steps: ReadonlyMap<StepId, Step>;
 
-	/** Stable insertion order for deterministic display and iteration. */
-	readonly stepOrder: readonly StepId[];
+  /** Stable insertion order for deterministic display and iteration. */
+  readonly stepOrder: readonly StepId[];
 
-	/** Every artifact contract, indexed by id. */
-	readonly artifacts: ReadonlyMap<ArtifactId, ArtifactContract>;
+  /** Every artifact contract, indexed by id. */
+  readonly artifacts: ReadonlyMap<ArtifactId, ArtifactContract>;
 
-	/**
-	 * Edge index: `(fromStep, route)` → `toStep`.
-	 *
-	 * Contains one entry per outgoing edge declared by any action step plus
-	 * two entries per check step (`pass` and `fail`). Terminal steps contribute
-	 * no edges.
-	 */
-	readonly edges: ReadonlyMap<EdgeKey, StepId>;
+  /**
+   * Edge index: `(fromStep, route)` → `toStep`.
+   *
+   * Contains one entry per outgoing edge declared by any action step plus
+   * two entries per check step (`pass` and `fail`). Terminal steps contribute
+   * no edges.
+   */
+  readonly edges: ReadonlyMap<EdgeKey, StepId>;
 
-	/** Primary producer: the first step the compiler sees writing each artifact. Used for attribution. */
-	readonly writers: ReadonlyMap<ArtifactId, StepId>;
+  /** Primary producer: the first step the compiler sees writing each artifact. Used for attribution. */
+  readonly writers: ReadonlyMap<ArtifactId, StepId>;
 
-	/** Every step authorized to commit each artifact. The artifact store checks this on every commit. */
-	readonly allowedWriters: ReadonlyMap<ArtifactId, ReadonlySet<StepId>>;
+  /** Every step authorized to commit each artifact. The artifact store checks this on every commit. */
+  readonly allowedWriters: ReadonlyMap<ArtifactId, ReadonlySet<StepId>>;
 
-	/** Consumer index: which steps declared they read each artifact. */
-	readonly readers: ReadonlyMap<ArtifactId, ReadonlySet<StepId>>;
+  /** Consumer index: which steps declared they read each artifact. */
+  readonly readers: ReadonlyMap<ArtifactId, ReadonlySet<StepId>>;
 
-	/** Every actor referenced by any action step. */
-	readonly actorsReferenced: ReadonlySet<ActorId>;
+  /** Every actor referenced by any action step. */
+  readonly actorsReferenced: ReadonlySet<ActorId>;
 }

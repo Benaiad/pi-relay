@@ -25,21 +25,21 @@ export type { ThinkingLevel };
 
 /** Discovered actor configuration from a `.md` file with YAML frontmatter. */
 export interface ActorConfig {
-	readonly name: string;
-	readonly description: string;
-	readonly tools?: readonly string[];
-	readonly model?: string;
-	readonly thinking?: ThinkingLevel;
-	readonly systemPrompt: string;
-	readonly source: ActorSource;
-	readonly filePath: string;
+  readonly name: string;
+  readonly description: string;
+  readonly tools?: readonly string[];
+  readonly model?: string;
+  readonly thinking?: ThinkingLevel;
+  readonly systemPrompt: string;
+  readonly source: ActorSource;
+  readonly filePath: string;
 }
 
 /** Result of scanning the actor directories. */
 export interface ActorDiscovery {
-	readonly actors: readonly ActorConfig[];
-	readonly projectDir: string | null;
-	readonly userDir: string;
+  readonly actors: readonly ActorConfig[];
+  readonly projectDir: string | null;
+  readonly userDir: string;
 }
 
 /**
@@ -48,36 +48,40 @@ export interface ActorDiscovery {
  * Matches the shape subagent uses so the renderer can share formatters.
  */
 export interface ActorUsage {
-	readonly input: number;
-	readonly output: number;
-	readonly cacheRead: number;
-	readonly cacheWrite: number;
-	readonly cost: number;
-	readonly contextTokens: number;
-	readonly turns: number;
+  readonly input: number;
+  readonly output: number;
+  readonly cacheRead: number;
+  readonly cacheWrite: number;
+  readonly cost: number;
+  readonly contextTokens: number;
+  readonly turns: number;
 }
 
 export const emptyUsage = (): ActorUsage => ({
-	input: 0,
-	output: 0,
-	cacheRead: 0,
-	cacheWrite: 0,
-	cost: 0,
-	contextTokens: 0,
-	turns: 0,
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  cost: 0,
+  contextTokens: 0,
+  turns: 0,
 });
 
 /** One entry in the actor's transcript, surfaced for UI display and audit. */
 export type TranscriptItem =
-	| { readonly kind: "text"; readonly text: string }
-	| { readonly kind: "tool_call"; readonly toolName: string; readonly args: Record<string, unknown> };
+  | { readonly kind: "text"; readonly text: string }
+  | {
+      readonly kind: "tool_call";
+      readonly toolName: string;
+      readonly args: Record<string, unknown>;
+    };
 
 /** Progress event emitted mid-run so the renderer can show live tool calls. */
 export interface ActorProgressEvent {
-	readonly stepId: StepId;
-	readonly actor: ActorId;
-	readonly item: TranscriptItem;
-	readonly usage: ActorUsage;
+  readonly stepId: StepId;
+  readonly actor: ActorId;
+  readonly item: TranscriptItem;
+  readonly usage: ActorUsage;
 }
 
 /**
@@ -96,13 +100,13 @@ export interface ActorProgressEvent {
  * names used. Full per-event detail stays in the report.
  */
 export interface PriorAttempt {
-	readonly attemptNumber: number;
-	/** Short human-readable outcome label, e.g. "route: changes_requested" or "no_completion: missing tag". */
-	readonly outcomeLabel: string;
-	/** One-line summary of the actor's final narration, with the completion tag stripped. Empty if none. */
-	readonly narration: string;
-	/** Names of tools the actor called during this attempt, in call order. */
-	readonly toolsCalled: readonly string[];
+  readonly attemptNumber: number;
+  /** Short human-readable outcome label, e.g. "route: changes_requested" or "no_completion: missing tag". */
+  readonly outcomeLabel: string;
+  /** One-line summary of the actor's final narration, with the completion tag stripped. Empty if none. */
+  readonly narration: string;
+  /** Names of tools the actor called during this attempt, in call order. */
+  readonly toolsCalled: readonly string[];
 }
 
 /**
@@ -114,25 +118,25 @@ export interface PriorAttempt {
  * actor can see what it did before. Returns an `ActionOutcome`.
  */
 export interface ActionRequest {
-	readonly step: ActionStep;
-	readonly actor: ActorConfig;
-	readonly artifacts: ArtifactSnapshot;
-	readonly artifactContracts: ReadonlyMap<ArtifactId, ArtifactContract>;
-	readonly cwd: string;
-	readonly signal?: AbortSignal;
-	readonly onProgress?: (event: ActorProgressEvent) => void;
-	/** Empty on the first activation; populated on re-entries via a back-edge. */
-	readonly priorAttempts: readonly PriorAttempt[];
-	/** Resolves a step ID to its actor name — for attributed artifact rendering. */
-	readonly stepActorResolver?: (stepId: StepId) => string | undefined;
-	/** Set when this action step was preceded by a check step. */
-	readonly priorCheckResult?: PriorCheckResult;
+  readonly step: ActionStep;
+  readonly actor: ActorConfig;
+  readonly artifacts: ArtifactSnapshot;
+  readonly artifactContracts: ReadonlyMap<ArtifactId, ArtifactContract>;
+  readonly cwd: string;
+  readonly signal?: AbortSignal;
+  readonly onProgress?: (event: ActorProgressEvent) => void;
+  /** Empty on the first activation; populated on re-entries via a back-edge. */
+  readonly priorAttempts: readonly PriorAttempt[];
+  /** Resolves a step ID to its actor name — for attributed artifact rendering. */
+  readonly stepActorResolver?: (stepId: StepId) => string | undefined;
+  /** Set when this action step was preceded by a check step. */
+  readonly priorCheckResult?: PriorCheckResult;
 }
 
 export interface PriorCheckResult {
-	readonly stepId: StepId;
-	readonly outcome: "passed" | "failed";
-	readonly description: string;
+  readonly stepId: StepId;
+  readonly outcome: "passed" | "failed";
+  readonly description: string;
 }
 
 /**
@@ -148,32 +152,32 @@ export interface PriorCheckResult {
  * `contract_rejected` are terminal for the current activation.
  */
 export type ActionOutcome =
-	| {
-			readonly kind: "completed";
-			readonly route: RouteId;
-			readonly writes: ReadonlyMap<ArtifactId, unknown>;
-			readonly usage: ActorUsage;
-			readonly transcript: readonly TranscriptItem[];
-	  }
-	| {
-			readonly kind: "no_completion";
-			readonly reason: string;
-			readonly usage: ActorUsage;
-			readonly transcript: readonly TranscriptItem[];
-	  }
-	| {
-			readonly kind: "engine_error";
-			readonly reason: string;
-			readonly usage: ActorUsage;
-			readonly transcript: readonly TranscriptItem[];
-	  }
-	| {
-			readonly kind: "aborted";
-			readonly usage: ActorUsage;
-			readonly transcript: readonly TranscriptItem[];
-	  };
+  | {
+      readonly kind: "completed";
+      readonly route: RouteId;
+      readonly writes: ReadonlyMap<ArtifactId, unknown>;
+      readonly usage: ActorUsage;
+      readonly transcript: readonly TranscriptItem[];
+    }
+  | {
+      readonly kind: "no_completion";
+      readonly reason: string;
+      readonly usage: ActorUsage;
+      readonly transcript: readonly TranscriptItem[];
+    }
+  | {
+      readonly kind: "engine_error";
+      readonly reason: string;
+      readonly usage: ActorUsage;
+      readonly transcript: readonly TranscriptItem[];
+    }
+  | {
+      readonly kind: "aborted";
+      readonly usage: ActorUsage;
+      readonly transcript: readonly TranscriptItem[];
+    };
 
 /** The contract the scheduler depends on. The default implementation spawns pi subprocesses; tests substitute fakes. */
 export interface ActorEngine {
-	runAction(request: ActionRequest): Promise<ActionOutcome>;
+  runAction(request: ActionRequest): Promise<ActionOutcome>;
 }

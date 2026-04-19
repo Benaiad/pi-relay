@@ -26,7 +26,12 @@ import { formatToolCall, plainTheme } from "../render/format.js";
 import { isAccumulatedEntryArray } from "./accumulated-entry.js";
 import type { ArtifactStore } from "./artifacts.js";
 import type { AuditLog } from "./audit.js";
-import type { RelayEvent, RelayRunState, RunPhase, StepStatus } from "./events.js";
+import type {
+  RelayEvent,
+  RelayRunState,
+  RunPhase,
+  StepStatus,
+} from "./events.js";
 
 export type RunOutcome = "success" | "failure" | "aborted" | "incomplete";
 
@@ -36,19 +41,19 @@ export type RunOutcome = "success" | "failure" | "aborted" | "incomplete";
  *   - `completed`      → action step emitted a route cleanly
  *   - `no_completion`  → actor ran but did not produce a valid completion block
  *   - `engine_error`   → actor engine itself failed (subprocess exit, abort, etc.)
- *   - `check_pass`     → deterministic check returned pass
- *   - `check_fail`     → deterministic check returned fail with a reason
+ *   - `verify_pass`    → deterministic verification returned pass
+ *   - `verify_fail`    → deterministic verification returned fail with a reason
  *   - `terminal`       → terminal step was reached
  *   - `open`           → attempt started but never closed (cut off by abort or crash)
  */
 export type AttemptOutcome =
-	| "completed"
-	| "no_completion"
-	| "engine_error"
-	| "check_pass"
-	| "check_fail"
-	| "terminal"
-	| "open";
+  | "completed"
+  | "no_completion"
+  | "engine_error"
+  | "verify_pass"
+  | "verify_fail"
+  | "terminal"
+  | "open";
 
 /**
  * One activation of a step, reconstructed from the audit log.
@@ -57,161 +62,183 @@ export type AttemptOutcome =
  * has one per activation, in chronological order.
  */
 export interface AttemptSummary {
-	readonly attemptNumber: number;
-	readonly outcome: AttemptOutcome;
-	readonly route?: RouteId;
-	readonly reason?: string;
-	readonly transcript: readonly TranscriptItem[];
-	readonly usage: ActorUsage;
-	readonly startedAt?: number;
-	readonly finishedAt?: number;
+  readonly attemptNumber: number;
+  readonly outcome: AttemptOutcome;
+  readonly route?: RouteId;
+  readonly reason?: string;
+  readonly transcript: readonly TranscriptItem[];
+  readonly usage: ActorUsage;
+  readonly startedAt?: number;
+  readonly finishedAt?: number;
 }
 
 export interface StepSummary {
-	readonly stepId: StepId;
-	readonly kind: Step["kind"];
-	readonly status: StepStatus;
-	readonly attemptCount: number;
-	readonly attempts: readonly AttemptSummary[];
-	readonly startedAt?: number;
-	readonly finishedAt?: number;
-	readonly durationMs?: number;
-	readonly lastRoute?: RouteId;
-	readonly lastReason?: string;
-	readonly usage: ActorUsage;
-	/** Present for action steps — the actor this step delegates to. */
-	readonly actorName?: string;
-	/** Present for check steps — a human-readable description of what the check runs. */
-	readonly checkDescription?: string;
-	/** Present for terminal steps — the success/failure outcome declared on the step. */
-	readonly terminalOutcome?: TerminalOutcome;
-	/** Present for terminal steps — the summary prose declared on the step. */
-	readonly terminalSummary?: string;
+  readonly stepId: StepId;
+  readonly kind: Step["kind"];
+  readonly status: StepStatus;
+  readonly attemptCount: number;
+  readonly attempts: readonly AttemptSummary[];
+  readonly startedAt?: number;
+  readonly finishedAt?: number;
+  readonly durationMs?: number;
+  readonly lastRoute?: RouteId;
+  readonly lastReason?: string;
+  readonly usage: ActorUsage;
+  /** Present for action steps — the actor this step delegates to. */
+  readonly actorName?: string;
+  /** Present for verify steps — a human-readable description of what the verification runs. */
+  readonly verifyDescription?: string;
+  /** Present for terminal steps — the success/failure outcome declared on the step. */
+  readonly terminalOutcome?: TerminalOutcome;
+  /** Present for terminal steps — the summary prose declared on the step. */
+  readonly terminalSummary?: string;
 }
 
 export interface ArtifactSummary {
-	readonly artifactId: ArtifactId;
-	readonly writerStep: StepId;
-	readonly description: string;
+  readonly artifactId: ArtifactId;
+  readonly writerStep: StepId;
+  readonly description: string;
 }
 
 export interface RunReport {
-	readonly planId: PlanId;
-	readonly task: string;
-	readonly outcome: RunOutcome;
-	readonly terminalOutcome?: TerminalOutcome;
-	readonly summary: string;
-	readonly durationMs: number;
-	readonly steps: readonly StepSummary[];
-	/**
-	 * Chronological attempt timeline reconstructed from the audit log.
-	 *
-	 * `steps` groups attempts by step id (plan order); `timeline` walks
-	 * the audit in execution order and shows each attempt as its own
-	 * entry. For a review/fix loop `steps` has two entries (`review`,
-	 * `fix`) while `timeline` has four (`review#1`, `fix#1`, `review#2`,
-	 * `fix#2`). Text rendering uses the timeline so the model sees the
-	 * loop the way it actually ran.
-	 */
-	readonly timeline: readonly AttemptTimelineEntry[];
-	readonly artifacts: readonly ArtifactSummary[];
-	readonly usage: ActorUsage;
-	readonly totalActivations: number;
+  readonly planId: PlanId;
+  readonly task: string;
+  readonly outcome: RunOutcome;
+  readonly terminalOutcome?: TerminalOutcome;
+  readonly summary: string;
+  readonly durationMs: number;
+  readonly steps: readonly StepSummary[];
+  /**
+   * Chronological attempt timeline reconstructed from the audit log.
+   *
+   * `steps` groups attempts by step id (plan order); `timeline` walks
+   * the audit in execution order and shows each attempt as its own
+   * entry. For a review/fix loop `steps` has two entries (`review`,
+   * `fix`) while `timeline` has four (`review#1`, `fix#1`, `review#2`,
+   * `fix#2`). Text rendering uses the timeline so the model sees the
+   * loop the way it actually ran.
+   */
+  readonly timeline: readonly AttemptTimelineEntry[];
+  readonly artifacts: readonly ArtifactSummary[];
+  readonly usage: ActorUsage;
+  readonly totalActivations: number;
 }
 
 export const phaseToOutcome = (phase: RunPhase): RunOutcome => {
-	switch (phase) {
-		case "succeeded":
-			return "success";
-		case "failed":
-			return "failure";
-		case "aborted":
-			return "aborted";
-		case "incomplete":
-		case "pending":
-		case "running":
-			return "incomplete";
-	}
+  switch (phase) {
+    case "succeeded":
+      return "success";
+    case "failed":
+      return "failure";
+    case "aborted":
+      return "aborted";
+    case "incomplete":
+    case "pending":
+    case "running":
+      return "incomplete";
+  }
 };
 
-export const buildRunReport = (state: RelayRunState, audit: AuditLog): RunReport => {
-	const { program } = state;
-	const events = audit.entries();
-	const timeline = buildAttemptTimeline(events);
-	const attemptHistories = buildAttemptHistories(events);
-	const steps = program.stepOrder.map((id) => buildStepSummary(id, state, attemptHistories.get(id) ?? []));
-	const artifacts = buildArtifactSummaries(state);
-	const outcome = phaseToOutcome(state.phase);
-	const durationMs = state.startedAt && state.finishedAt ? state.finishedAt - state.startedAt : 0;
-	const summary = buildSummary(state, outcome);
-	const totalActivations = steps.reduce((acc, s) => acc + s.attemptCount, 0);
-	return {
-		planId: program.id,
-		task: program.task,
-		outcome,
-		terminalOutcome: state.finalOutcome,
-		summary,
-		durationMs,
-		steps,
-		timeline,
-		artifacts,
-		usage: state.totalUsage,
-		totalActivations,
-	};
+export const buildRunReport = (
+  state: RelayRunState,
+  audit: AuditLog,
+): RunReport => {
+  const { program } = state;
+  const events = audit.entries();
+  const timeline = buildAttemptTimeline(events);
+  const attemptHistories = buildAttemptHistories(events);
+  const steps = program.stepOrder.map((id) =>
+    buildStepSummary(id, state, attemptHistories.get(id) ?? []),
+  );
+  const artifacts = buildArtifactSummaries(state);
+  const outcome = phaseToOutcome(state.phase);
+  const durationMs =
+    state.startedAt && state.finishedAt
+      ? state.finishedAt - state.startedAt
+      : 0;
+  const summary = buildSummary(state, outcome);
+  const totalActivations = steps.reduce((acc, s) => acc + s.attemptCount, 0);
+  return {
+    planId: program.id,
+    task: program.task,
+    outcome,
+    terminalOutcome: state.finalOutcome,
+    summary,
+    durationMs,
+    steps,
+    timeline,
+    artifacts,
+    usage: state.totalUsage,
+    totalActivations,
+  };
 };
 
-const buildStepSummary = (stepId: StepId, state: RelayRunState, attempts: readonly AttemptSummary[]): StepSummary => {
-	const runtime = state.steps.get(stepId);
-	const step = state.program.steps.get(stepId);
-	if (!runtime || !step) {
-		throw new Error(`invariant: step '${unwrap(stepId)}' missing from run state or program`);
-	}
-	return {
-		stepId,
-		kind: step.kind,
-		status: runtime.status,
-		attemptCount: runtime.attempts,
-		attempts,
-		startedAt: runtime.startedAt,
-		finishedAt: runtime.finishedAt,
-		durationMs:
-			runtime.startedAt !== undefined && runtime.finishedAt !== undefined
-				? runtime.finishedAt - runtime.startedAt
-				: undefined,
-		lastRoute: runtime.lastRoute,
-		lastReason: runtime.lastReason,
-		usage: runtime.usage,
-		actorName: step.kind === "action" ? unwrap(step.actor) : undefined,
-		checkDescription: step.kind === "check" ? describeCheckInline(step) : undefined,
-		terminalOutcome: step.kind === "terminal" ? step.outcome : undefined,
-		terminalSummary: step.kind === "terminal" ? step.summary : undefined,
-	};
+const buildStepSummary = (
+  stepId: StepId,
+  state: RelayRunState,
+  attempts: readonly AttemptSummary[],
+): StepSummary => {
+  const runtime = state.steps.get(stepId);
+  const step = state.program.steps.get(stepId);
+  if (!runtime || !step) {
+    throw new Error(
+      `invariant: step '${unwrap(stepId)}' missing from run state or program`,
+    );
+  }
+  return {
+    stepId,
+    kind: step.kind,
+    status: runtime.status,
+    attemptCount: runtime.attempts,
+    attempts,
+    startedAt: runtime.startedAt,
+    finishedAt: runtime.finishedAt,
+    durationMs:
+      runtime.startedAt !== undefined && runtime.finishedAt !== undefined
+        ? runtime.finishedAt - runtime.startedAt
+        : undefined,
+    lastRoute: runtime.lastRoute,
+    lastReason: runtime.lastReason,
+    usage: runtime.usage,
+    actorName: step.kind === "action" ? unwrap(step.actor) : undefined,
+    verifyDescription:
+      step.kind === "verify_command" || step.kind === "verify_files_exist"
+        ? describeVerifyStep(step)
+        : undefined,
+    terminalOutcome: step.kind === "terminal" ? step.outcome : undefined,
+    terminalSummary: step.kind === "terminal" ? step.summary : undefined,
+  };
 };
 
 const buildArtifactSummaries = (state: RelayRunState): ArtifactSummary[] => {
-	const summaries: ArtifactSummary[] = [];
-	for (const artifactId of state.committedArtifacts) {
-		const contract = state.program.artifacts.get(artifactId);
-		const writer = state.program.writers.get(artifactId);
-		if (!contract || !writer) continue;
-		summaries.push({ artifactId, writerStep: writer, description: contract.description });
-	}
-	return summaries;
+  const summaries: ArtifactSummary[] = [];
+  for (const artifactId of state.committedArtifacts) {
+    const contract = state.program.artifacts.get(artifactId);
+    const writer = state.program.writers.get(artifactId);
+    if (!contract || !writer) continue;
+    summaries.push({
+      artifactId,
+      writerStep: writer,
+      description: contract.description,
+    });
+  }
+  return summaries;
 };
 
 const buildSummary = (state: RelayRunState, outcome: RunOutcome): string => {
-	if (state.finalSummary && state.finalSummary.length > 0) return state.finalSummary;
-	const program = state.program;
-	switch (outcome) {
-		case "success":
-			return `Plan '${program.task}' completed successfully.`;
-		case "failure":
-			return `Plan '${program.task}' failed.`;
-		case "aborted":
-			return `Plan '${program.task}' was aborted by the user.`;
-		case "incomplete":
-			return `Plan '${program.task}' finished without reaching a terminal step.`;
-	}
+  if (state.finalSummary && state.finalSummary.length > 0)
+    return state.finalSummary;
+  const program = state.program;
+  switch (outcome) {
+    case "success":
+      return `Plan '${program.task}' completed successfully.`;
+    case "failure":
+      return `Plan '${program.task}' failed.`;
+    case "aborted":
+      return `Plan '${program.task}' was aborted by the user.`;
+    case "incomplete":
+      return `Plan '${program.task}' finished without reaching a terminal step.`;
+  }
 };
 
 // ============================================================================
@@ -219,10 +246,10 @@ const buildSummary = (state: RelayRunState, outcome: RunOutcome): string => {
 // ============================================================================
 
 interface OpenAttempt {
-	readonly attemptNumber: number;
-	readonly startedAt: number;
-	readonly transcript: TranscriptItem[];
-	usage: ActorUsage;
+  readonly attemptNumber: number;
+  readonly startedAt: number;
+  readonly transcript: TranscriptItem[];
+  usage: ActorUsage;
 }
 
 /**
@@ -231,7 +258,7 @@ interface OpenAttempt {
  * Bucket events by stepId. On `step_started`, open a new attempt record for
  * that step. On `action_progress`, append to the open attempt's transcript.
  * On a closing event (`action_completed`, `action_no_completion`,
- * `action_engine_error`, `check_passed`, `check_failed`, `terminal_reached`),
+ * `action_engine_error`, `verify_passed`, `verify_failed`, `terminal_reached`),
  * finalize the open attempt and push it into the step's history list. If the
  * run is aborted mid-step, leave the open attempt as `outcome: "open"` so
  * the renderer can show it.
@@ -246,8 +273,8 @@ interface OpenAttempt {
  * into a single review block that overwrites its own history.
  */
 export interface AttemptTimelineEntry {
-	readonly stepId: StepId;
-	readonly attempt: AttemptSummary;
+  readonly stepId: StepId;
+  readonly attempt: AttemptSummary;
 }
 
 /**
@@ -255,155 +282,162 @@ export interface AttemptTimelineEntry {
  * attempt entries. This is the primitive that `buildAttemptHistories`
  * groups by step for the per-step run-report view.
  */
-export const buildAttemptTimeline = (events: readonly RelayEvent[]): AttemptTimelineEntry[] => {
-	const timeline: AttemptTimelineEntry[] = [];
-	const open = new Map<StepId, OpenAttempt>();
+export const buildAttemptTimeline = (
+  events: readonly RelayEvent[],
+): AttemptTimelineEntry[] => {
+  const timeline: AttemptTimelineEntry[] = [];
+  const open = new Map<StepId, OpenAttempt>();
 
-	const close = (stepId: StepId, attempt: AttemptSummary) => {
-		timeline.push({ stepId, attempt });
-	};
+  const close = (stepId: StepId, attempt: AttemptSummary) => {
+    timeline.push({ stepId, attempt });
+  };
 
-	for (const event of events) {
-		switch (event.kind) {
-			case "step_started":
-				open.set(event.stepId, {
-					attemptNumber: event.attempt,
-					startedAt: event.at,
-					transcript: [],
-					usage: emptyUsage(),
-				});
-				break;
+  for (const event of events) {
+    switch (event.kind) {
+      case "step_started":
+        open.set(event.stepId, {
+          attemptNumber: event.attempt,
+          startedAt: event.at,
+          transcript: [],
+          usage: emptyUsage(),
+        });
+        break;
 
-			case "action_progress": {
-				const entry = open.get(event.stepId);
-				if (!entry) break;
-				entry.transcript.push(event.item);
-				entry.usage = event.usage;
-				break;
-			}
+      case "action_progress": {
+        const entry = open.get(event.stepId);
+        if (!entry) break;
+        entry.transcript.push(event.item);
+        entry.usage = event.usage;
+        break;
+      }
 
-			case "action_completed": {
-				const entry = open.get(event.stepId);
-				if (!entry) break;
-				close(event.stepId, {
-					attemptNumber: entry.attemptNumber,
-					outcome: "completed",
-					route: event.route,
-					transcript: entry.transcript,
-					usage: event.usage,
-					startedAt: entry.startedAt,
-					finishedAt: event.at,
-				});
-				open.delete(event.stepId);
-				break;
-			}
+      case "action_completed": {
+        const entry = open.get(event.stepId);
+        if (!entry) break;
+        close(event.stepId, {
+          attemptNumber: entry.attemptNumber,
+          outcome: "completed",
+          route: event.route,
+          transcript: entry.transcript,
+          usage: event.usage,
+          startedAt: entry.startedAt,
+          finishedAt: event.at,
+        });
+        open.delete(event.stepId);
+        break;
+      }
 
-			case "action_no_completion":
-			case "action_engine_error": {
-				const entry = open.get(event.stepId);
-				if (!entry) break;
-				close(event.stepId, {
-					attemptNumber: entry.attemptNumber,
-					outcome: event.kind === "action_no_completion" ? "no_completion" : "engine_error",
-					reason: event.reason,
-					transcript: entry.transcript,
-					usage: event.usage,
-					startedAt: entry.startedAt,
-					finishedAt: event.at,
-				});
-				open.delete(event.stepId);
-				break;
-			}
+      case "action_no_completion":
+      case "action_engine_error": {
+        const entry = open.get(event.stepId);
+        if (!entry) break;
+        close(event.stepId, {
+          attemptNumber: entry.attemptNumber,
+          outcome:
+            event.kind === "action_no_completion"
+              ? "no_completion"
+              : "engine_error",
+          reason: event.reason,
+          transcript: entry.transcript,
+          usage: event.usage,
+          startedAt: entry.startedAt,
+          finishedAt: event.at,
+        });
+        open.delete(event.stepId);
+        break;
+      }
 
-			case "check_passed": {
-				const entry = open.get(event.stepId);
-				if (!entry) break;
-				close(event.stepId, {
-					attemptNumber: entry.attemptNumber,
-					outcome: "check_pass",
-					transcript: [],
-					usage: emptyUsage(),
-					startedAt: entry.startedAt,
-					finishedAt: event.at,
-				});
-				open.delete(event.stepId);
-				break;
-			}
+      case "verify_passed": {
+        const entry = open.get(event.stepId);
+        if (!entry) break;
+        close(event.stepId, {
+          attemptNumber: entry.attemptNumber,
+          outcome: "verify_pass",
+          transcript: [],
+          usage: emptyUsage(),
+          startedAt: entry.startedAt,
+          finishedAt: event.at,
+        });
+        open.delete(event.stepId);
+        break;
+      }
 
-			case "check_failed": {
-				const entry = open.get(event.stepId);
-				if (!entry) break;
-				close(event.stepId, {
-					attemptNumber: entry.attemptNumber,
-					outcome: "check_fail",
-					reason: event.reason,
-					transcript: [],
-					usage: emptyUsage(),
-					startedAt: entry.startedAt,
-					finishedAt: event.at,
-				});
-				open.delete(event.stepId);
-				break;
-			}
+      case "verify_failed": {
+        const entry = open.get(event.stepId);
+        if (!entry) break;
+        close(event.stepId, {
+          attemptNumber: entry.attemptNumber,
+          outcome: "verify_fail",
+          reason: event.reason,
+          transcript: [],
+          usage: emptyUsage(),
+          startedAt: entry.startedAt,
+          finishedAt: event.at,
+        });
+        open.delete(event.stepId);
+        break;
+      }
 
-			case "terminal_reached": {
-				const entry = open.get(event.stepId);
-				if (!entry) {
-					// Terminals don't emit step_started in the current scheduler,
-					// so we synthesize an attempt entry on the fly. Keeps terminals
-					// visible in the timeline even though they don't "run" in the
-					// actor/check sense.
-					close(event.stepId, {
-						attemptNumber: 1,
-						outcome: "terminal",
-						transcript: [],
-						usage: emptyUsage(),
-						startedAt: event.at,
-						finishedAt: event.at,
-					});
-					break;
-				}
-				close(event.stepId, {
-					attemptNumber: entry.attemptNumber,
-					outcome: "terminal",
-					transcript: [],
-					usage: emptyUsage(),
-					startedAt: entry.startedAt,
-					finishedAt: event.at,
-				});
-				open.delete(event.stepId);
-				break;
-			}
+      case "terminal_reached": {
+        const entry = open.get(event.stepId);
+        if (!entry) {
+          // Terminals don't emit step_started in the current scheduler,
+          // so we synthesize an attempt entry on the fly. Keeps terminals
+          // visible in the timeline even though they don't "run" in the
+          // actor/check sense.
+          close(event.stepId, {
+            attemptNumber: 1,
+            outcome: "terminal",
+            transcript: [],
+            usage: emptyUsage(),
+            startedAt: event.at,
+            finishedAt: event.at,
+          });
+          break;
+        }
+        close(event.stepId, {
+          attemptNumber: entry.attemptNumber,
+          outcome: "terminal",
+          transcript: [],
+          usage: emptyUsage(),
+          startedAt: entry.startedAt,
+          finishedAt: event.at,
+        });
+        open.delete(event.stepId);
+        break;
+      }
 
-			default:
-				break;
-		}
-	}
+      default:
+        break;
+    }
+  }
 
-	// Any attempts still open at end-of-audit are aborted mid-flight. Record
-	// them as `open` so they don't disappear from the timeline silently.
-	for (const [stepId, entry] of open) {
-		close(stepId, {
-			attemptNumber: entry.attemptNumber,
-			outcome: "open",
-			transcript: entry.transcript,
-			usage: entry.usage,
-			startedAt: entry.startedAt,
-		});
-	}
+  // Any attempts still open at end-of-audit are aborted mid-flight. Record
+  // them as `open` so they don't disappear from the timeline silently.
+  for (const [stepId, entry] of open) {
+    close(stepId, {
+      attemptNumber: entry.attemptNumber,
+      outcome: "open",
+      transcript: entry.transcript,
+      usage: entry.usage,
+      startedAt: entry.startedAt,
+    });
+  }
 
-	return timeline;
+  return timeline;
 };
 
-export const buildAttemptHistories = (events: readonly RelayEvent[]): Map<StepId, AttemptSummary[]> => {
-	const timeline = buildAttemptTimeline(events);
-	const map = new Map<StepId, AttemptSummary[]>();
-	for (const { stepId, attempt } of timeline) {
-		const list = map.get(stepId) ?? [];
-		list.push(attempt);
-		map.set(stepId, list);
-	}
-	return map;
+export const buildAttemptHistories = (
+  events: readonly RelayEvent[],
+): Map<StepId, AttemptSummary[]> => {
+  const timeline = buildAttemptTimeline(events);
+  const map = new Map<StepId, AttemptSummary[]>();
+  for (const { stepId, attempt } of timeline) {
+    const list = map.get(stepId) ?? [];
+    list.push(attempt);
+    map.set(stepId, list);
+  }
+  return map;
 };
 
 // ============================================================================
@@ -422,185 +456,235 @@ export const buildAttemptHistories = (events: readonly RelayEvent[]): Map<StepId
  * Walks `report.timeline` (execution order). For a review/fix loop the
  * output reads:  create → review → fix → review (retry) → done.
  */
-export const renderRunReportText = (report: RunReport, artifactStore?: ArtifactStore): string => {
-	const lines: string[] = [];
-	lines.push(`Relay run: ${outcomeLabel(report.outcome)} — ${oneLine(report.task, 120)}`);
-	if (report.summary && report.summary !== report.task) {
-		lines.push(oneLine(report.summary));
-	}
-	lines.push("");
+export const renderRunReportText = (
+  report: RunReport,
+  artifactStore?: ArtifactStore,
+): string => {
+  const lines: string[] = [];
+  lines.push(
+    `Relay run: ${outcomeLabel(report.outcome)} — ${oneLine(report.task, 120)}`,
+  );
+  if (report.summary && report.summary !== report.task) {
+    lines.push(oneLine(report.summary));
+  }
+  lines.push("");
 
-	const stepById = new Map<string, StepSummary>();
-	for (const step of report.steps) stepById.set(unwrap(step.stepId), step);
+  const stepById = new Map<string, StepSummary>();
+  for (const step of report.steps) stepById.set(unwrap(step.stepId), step);
 
-	const stepArtifacts = artifactStore
-		? buildStepArtifactIndex(artifactStore, report)
-		: new Map<string, StepArtifactEntry[]>();
+  const stepArtifacts = artifactStore
+    ? buildStepArtifactIndex(artifactStore, report)
+    : new Map<string, StepArtifactEntry[]>();
 
-	for (const entry of report.timeline) {
-		const step = stepById.get(unwrap(entry.stepId));
-		if (!step) continue;
-		lines.push("");
-		const artifacts = stepArtifacts.get(`${unwrap(entry.stepId)}:${entry.attempt.attemptNumber}`) ?? [];
-		for (const line of formatTimelineEntry(step, entry.attempt, artifacts)) lines.push(line);
-	}
+  for (const entry of report.timeline) {
+    const step = stepById.get(unwrap(entry.stepId));
+    if (!step) continue;
+    lines.push("");
+    const artifacts =
+      stepArtifacts.get(
+        `${unwrap(entry.stepId)}:${entry.attempt.attemptNumber}`,
+      ) ?? [];
+    for (const line of formatTimelineEntry(step, entry.attempt, artifacts))
+      lines.push(line);
+  }
 
-	const skippedSteps = report.steps.filter((s) => s.status === "skipped");
-	if (skippedSteps.length > 0) {
-		lines.push("");
-		lines.push(
-			`(${skippedSteps.length} step${skippedSteps.length === 1 ? "" : "s"} not reached: ${skippedSteps.map((s) => unwrap(s.stepId)).join(", ")})`,
-		);
-	}
+  const skippedSteps = report.steps.filter((s) => s.status === "skipped");
+  if (skippedSteps.length > 0) {
+    lines.push("");
+    lines.push(
+      `(${skippedSteps.length} step${skippedSteps.length === 1 ? "" : "s"} not reached: ${skippedSteps.map((s) => unwrap(s.stepId)).join(", ")})`,
+    );
+  }
 
-	if (report.artifacts.length > 0) {
-		lines.push("");
-		lines.push(`Produced: ${report.artifacts.map((a) => unwrap(a.artifactId)).join(", ")}`);
-	}
+  if (report.artifacts.length > 0) {
+    lines.push("");
+    lines.push(
+      `Produced: ${report.artifacts.map((a) => unwrap(a.artifactId)).join(", ")}`,
+    );
+  }
 
-	if (report.usage.turns > 0) {
-		lines.push(
-			`Total: ${report.usage.turns} turns · ${report.usage.input}↑ ${report.usage.output}↓ · $${report.usage.cost.toFixed(4)}`,
-		);
-	}
+  if (report.usage.turns > 0) {
+    lines.push(
+      `Total: ${report.usage.turns} turns · ${report.usage.input}↑ ${report.usage.output}↓ · $${report.usage.cost.toFixed(4)}`,
+    );
+  }
 
-	return lines.join("\n");
+  return lines.join("\n");
 };
 
 interface StepArtifactEntry {
-	readonly artifactId: string;
-	readonly value: unknown;
-	readonly index?: number;
+  readonly artifactId: string;
+  readonly value: unknown;
+  readonly index?: number;
 }
 
 const formatTimelineEntry = (
-	step: StepSummary,
-	attempt: AttemptSummary,
-	artifacts: readonly StepArtifactEntry[],
+  step: StepSummary,
+  attempt: AttemptSummary,
+  artifacts: readonly StepArtifactEntry[],
 ): string[] => {
-	const stepId = unwrap(step.stepId);
-	const lines: string[] = [];
+  const stepId = unwrap(step.stepId);
+  const lines: string[] = [];
 
-	if (step.kind === "action") {
-		const actor = step.actorName ?? "";
-		const retryTag =
-			attempt.attemptNumber > 1
-				? ` ${attempt.attemptNumber === 2 ? "(retry)" : `(retry ${attempt.attemptNumber - 1})`}`
-				: "";
-		const actorPart = actor ? `, actor: ${actor}` : "";
-		lines.push(`step: ${stepId}${actorPart}${retryTag}`);
-	} else if (step.kind === "check") {
-		lines.push(`step: ${stepId}, check`);
-	} else if (step.kind === "terminal") {
-		const outcome = step.terminalOutcome ?? "unknown";
-		lines.push(`step: ${stepId}, terminal: ${outcome}`);
-	}
+  if (step.kind === "action") {
+    const actor = step.actorName ?? "";
+    const retryTag =
+      attempt.attemptNumber > 1
+        ? ` ${attempt.attemptNumber === 2 ? "(retry)" : `(retry ${attempt.attemptNumber - 1})`}`
+        : "";
+    const actorPart = actor ? `, actor: ${actor}` : "";
+    lines.push(`step: ${stepId}${actorPart}${retryTag}`);
+  } else if (
+    step.kind === "verify_command" ||
+    step.kind === "verify_files_exist"
+  ) {
+    lines.push(`step: ${stepId}, verify`);
+  } else if (step.kind === "terminal") {
+    const outcome = step.terminalOutcome ?? "unknown";
+    lines.push(`step: ${stepId}, terminal: ${outcome}`);
+  }
 
-	if (step.kind === "action") {
-		const toolCalls = attempt.transcript.filter(
-			(item): item is Extract<TranscriptItem, { kind: "tool_call" }> => item.kind === "tool_call",
-		);
-		for (const tc of toolCalls) {
-			lines.push(`  → ${formatToolCall(tc.toolName, tc.args, plainTheme)}`);
-		}
+  if (step.kind === "action") {
+    const toolCalls = attempt.transcript.filter(
+      (item): item is Extract<TranscriptItem, { kind: "tool_call" }> =>
+        item.kind === "tool_call",
+    );
+    for (const tc of toolCalls) {
+      lines.push(`  → ${formatToolCall(tc.toolName, tc.args, plainTheme)}`);
+    }
 
-		const finalText = extractAttemptFinalText(attempt);
-		if (finalText.length > 0) {
-			lines.push(`  "${oneLine(finalText)}"`);
-		}
-	} else if (step.kind === "check") {
-		if (step.checkDescription) lines.push(`  ${step.checkDescription}`);
-	} else if (step.kind === "terminal") {
-		if (step.terminalSummary) lines.push(`  ${oneLine(step.terminalSummary)}`);
-	}
+    const finalText = extractAttemptFinalText(attempt);
+    if (finalText.length > 0) {
+      lines.push(`  "${oneLine(finalText)}"`);
+    }
+  } else if (
+    step.kind === "verify_command" ||
+    step.kind === "verify_files_exist"
+  ) {
+    if (step.verifyDescription) lines.push(`  ${step.verifyDescription}`);
+  } else if (step.kind === "terminal") {
+    if (step.terminalSummary) lines.push(`  ${oneLine(step.terminalSummary)}`);
+  }
 
-	if (attempt.outcome === "completed" && attempt.route) {
-		const routeName = unwrap(attempt.route);
-		if (!GENERIC_ROUTE_NAMES_TEXT.has(routeName.toLowerCase())) {
-			lines.push(`  → ${routeName}`);
-		}
-	} else if (attempt.outcome === "no_completion" || attempt.outcome === "engine_error") {
-		lines.push(`  Failed: ${attempt.reason ? oneLine(attempt.reason) : "no reason"}`);
-	} else if (attempt.outcome === "check_fail") {
-		lines.push(`  Failed: ${attempt.reason ? oneLine(attempt.reason) : "no reason"}`);
-	}
+  if (attempt.outcome === "completed" && attempt.route) {
+    const routeName = unwrap(attempt.route);
+    if (!GENERIC_ROUTE_NAMES_TEXT.has(routeName.toLowerCase())) {
+      lines.push(`  → ${routeName}`);
+    }
+  } else if (
+    attempt.outcome === "no_completion" ||
+    attempt.outcome === "engine_error"
+  ) {
+    lines.push(
+      `  Failed: ${attempt.reason ? oneLine(attempt.reason) : "no reason"}`,
+    );
+  } else if (attempt.outcome === "verify_fail") {
+    lines.push(
+      `  Failed: ${attempt.reason ? oneLine(attempt.reason) : "no reason"}`,
+    );
+  }
 
-	for (const artifact of artifacts) {
-		const indexSuffix = artifact.index !== undefined ? ` [${artifact.index + 1}]` : "";
-		lines.push("");
-		lines.push(`  artifact ${artifact.artifactId}${indexSuffix}:`);
-		const rendered = renderValue(artifact.value, 2);
-		for (const line of rendered.split("\n")) {
-			lines.push(`  ${line}`);
-		}
-	}
+  for (const artifact of artifacts) {
+    const indexSuffix =
+      artifact.index !== undefined ? ` [${artifact.index + 1}]` : "";
+    lines.push("");
+    lines.push(`  artifact ${artifact.artifactId}${indexSuffix}:`);
+    const rendered = renderValue(artifact.value, 2);
+    for (const line of rendered.split("\n")) {
+      lines.push(`  ${line}`);
+    }
+  }
 
-	return lines;
+  return lines;
 };
 
-const GENERIC_ROUTE_NAMES_TEXT = new Set(["done", "next", "continue", "ok", "success", "pass"]);
+const GENERIC_ROUTE_NAMES_TEXT = new Set([
+  "done",
+  "next",
+  "continue",
+  "ok",
+  "success",
+  "pass",
+]);
 
-const buildStepArtifactIndex = (store: ArtifactStore, report: RunReport): Map<string, StepArtifactEntry[]> => {
-	const index = new Map<string, StepArtifactEntry[]>();
+const buildStepArtifactIndex = (
+  store: ArtifactStore,
+  report: RunReport,
+): Map<string, StepArtifactEntry[]> => {
+  const index = new Map<string, StepArtifactEntry[]>();
 
-	const addEntry = (stepId: string, attempt: number, entry: StepArtifactEntry) => {
-		const key = `${stepId}:${attempt}`;
-		const list = index.get(key) ?? [];
-		list.push(entry);
-		index.set(key, list);
-	};
+  const addEntry = (
+    stepId: string,
+    attempt: number,
+    entry: StepArtifactEntry,
+  ) => {
+    const key = `${stepId}:${attempt}`;
+    const list = index.get(key) ?? [];
+    list.push(entry);
+    index.set(key, list);
+  };
 
-	for (const stored of store.all()) {
-		const artifactId = unwrap(stored.id);
+  for (const stored of store.all()) {
+    const artifactId = unwrap(stored.id);
 
-		if (isAccumulatedEntryArray(stored.value)) {
-			for (const entry of stored.value) {
-				addEntry(unwrap(entry.stepId), entry.attempt, {
-					artifactId,
-					value: entry.value,
-					index: entry.index,
-				});
-			}
-		} else {
-			const writerStepId = unwrap(stored.writerStep);
-			const stepSummary = report.steps.find((s) => unwrap(s.stepId) === writerStepId);
-			const attempt = stepSummary?.attemptCount ?? 1;
-			addEntry(writerStepId, attempt, { artifactId, value: stored.value });
-		}
-	}
+    if (isAccumulatedEntryArray(stored.value)) {
+      for (const entry of stored.value) {
+        addEntry(unwrap(entry.stepId), entry.attempt, {
+          artifactId,
+          value: entry.value,
+          index: entry.index,
+        });
+      }
+    } else {
+      const writerStepId = unwrap(stored.writerStep);
+      const stepSummary = report.steps.find(
+        (s) => unwrap(s.stepId) === writerStepId,
+      );
+      const attempt = stepSummary?.attemptCount ?? 1;
+      addEntry(writerStepId, attempt, { artifactId, value: stored.value });
+    }
+  }
 
-	return index;
+  return index;
 };
 
-const describeCheckInline = (step: Extract<Step, { kind: "check" }>): string => {
-	switch (step.check.kind) {
-		case "file_exists":
-			return `File exists: ${step.check.path}`;
-		case "command_exits_zero":
-			return `$ ${step.check.command.slice(0, 120)}`;
-	}
+const describeVerifyStep = (
+  step: Extract<
+    Step,
+    { kind: "verify_command" } | { kind: "verify_files_exist" }
+  >,
+): string => {
+  switch (step.kind) {
+    case "verify_command":
+      return `$ ${step.command.slice(0, 120)}`;
+    case "verify_files_exist":
+      return step.paths.length === 1
+        ? `File exists: ${step.paths[0]}`
+        : `Files exist: ${step.paths.join(", ")}`;
+  }
 };
 
 const extractAttemptFinalText = (attempt: AttemptSummary): string => {
-	const texts: string[] = [];
-	for (const item of attempt.transcript) {
-		if (item.kind === "text" && item.text.trim().length > 0) texts.push(item.text);
-	}
-	if (texts.length === 0) return "";
-	return stripCompletionTag(texts.join("\n"));
+  const texts: string[] = [];
+  for (const item of attempt.transcript) {
+    if (item.kind === "text" && item.text.trim().length > 0)
+      texts.push(item.text);
+  }
+  if (texts.length === 0) return "";
+  return stripCompletionTag(texts.join("\n"));
 };
 
 const outcomeLabel = (outcome: RunOutcome): string => {
-	switch (outcome) {
-		case "success":
-			return "SUCCESS";
-		case "failure":
-			return "FAILURE";
-		case "aborted":
-			return "ABORTED";
-		case "incomplete":
-			return "INCOMPLETE";
-	}
+  switch (outcome) {
+    case "success":
+      return "SUCCESS";
+    case "failure":
+      return "FAILURE";
+    case "aborted":
+      return "ABORTED";
+    case "incomplete":
+      return "INCOMPLETE";
+  }
 };
 
 /**
@@ -612,9 +696,9 @@ const outcomeLabel = (outcome: RunOutcome): string => {
  * terminal summaries).
  */
 const oneLine = (text: string, limit?: number): string => {
-	const collapsed = text.replace(/\s+/g, " ").trim();
-	if (limit === undefined || collapsed.length <= limit) return collapsed;
-	return `${collapsed.slice(0, limit)}…`;
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  if (limit === undefined || collapsed.length <= limit) return collapsed;
+  return `${collapsed.slice(0, limit)}…`;
 };
 
 /**

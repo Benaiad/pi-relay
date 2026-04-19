@@ -13,21 +13,21 @@
 import type { RelayEvent } from "./events.js";
 
 export class AuditLog {
-	private readonly events: RelayEvent[] = [];
+  private readonly events: RelayEvent[] = [];
 
-	append(event: RelayEvent): void {
-		this.events.push(event);
-	}
+  append(event: RelayEvent): void {
+    this.events.push(event);
+  }
 
-	entries(): readonly RelayEvent[] {
-		return this.events;
-	}
+  entries(): readonly RelayEvent[] {
+    return this.events;
+  }
 
-	length(): number {
-		return this.events.length;
-	}
+  length(): number {
+    return this.events.length;
+  }
 
-	clear(): void {
-		this.events.length = 0;
-	}
+  clear(): void {
+    this.events.length = 0;
+  }
 }
