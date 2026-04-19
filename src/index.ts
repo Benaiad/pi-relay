@@ -137,6 +137,18 @@ export default function (pi: ExtensionAPI): void {
 					getSettingsListTheme(),
 					(id, newValue) => {
 						currentConfig = applyToggle(currentConfig, id, newValue === "enabled");
+
+						// Cascade: disabling an actor also disables plans that use it.
+						if (newValue === "disabled" && id.startsWith("actor:")) {
+							const actorName = id.slice("actor:".length);
+							for (const planName of plansUsingActor(templates.templates, actorName)) {
+								if (!currentConfig.disabledPlans.has(planName)) {
+									currentConfig = applyToggle(currentConfig, `plan:${planName}`, false);
+									settingsList.updateValue(`plan:${planName}`, "disabled");
+								}
+							}
+						}
+
 						saveRelayConfig(currentConfig);
 					},
 					() => done(undefined),
@@ -272,6 +284,22 @@ const buildSettingsItems = (
 	}
 
 	return items;
+};
+
+/** Return the names of plan templates whose steps reference a given actor. */
+const plansUsingActor = (templates: readonly PlanTemplate[], actorName: string): string[] => {
+	const result: string[] = [];
+	for (const t of templates) {
+		const steps = t.rawPlan.steps;
+		if (!Array.isArray(steps)) continue;
+		for (const step of steps) {
+			if (typeof step === "object" && step !== null && (step as Record<string, unknown>).actor === actorName) {
+				result.push(t.name);
+				break;
+			}
+		}
+	}
+	return result;
 };
 
 const applyToggle = (config: RelayConfig, id: string, enabled: boolean): RelayConfig => {
