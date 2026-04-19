@@ -261,7 +261,7 @@ const buildSettingsItems = (
 		const tools = a.tools ? a.tools.join(", ") : "default tool set";
 		items.push({
 			id: `actor:${a.name}`,
-			label: `${a.name} (${a.source})`,
+			label: a.name,
 			description: `${a.description} — tools: ${tools}`,
 			currentValue: config.disabledActors.has(a.name) ? "disabled" : "enabled",
 			values: ["enabled", "disabled"],
@@ -275,7 +275,7 @@ const buildSettingsItems = (
 			t.parameters.length > 0 ? t.parameters.map((p) => (p.required ? p.name : `${p.name}?`)).join(", ") : "";
 		items.push({
 			id: `plan:${t.name}`,
-			label: `${t.name} (${t.source})`,
+			label: t.name,
 			description: `${t.description}${sig ? ` — params: ${sig}` : ""}`,
 			currentValue: config.disabledPlans.has(t.name) ? "disabled" : "enabled",
 			values: ["enabled", "disabled"],
