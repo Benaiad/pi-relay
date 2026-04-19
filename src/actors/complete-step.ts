@@ -105,7 +105,7 @@ export const buildCompletionInstruction = (
  *
  * Returns `Result`. The caller treats every error as `no_completion` — it is
  * not a shape_mismatch at the artifact level, it is a protocol violation by
- * the actor that the scheduler retries (up to the step's retry policy).
+ * the actor that the scheduler implicitly retries.
  *
  * Defensive against two common model habits:
  *   - Wrapping the JSON in a ```json ... ``` code fence inside the tag.

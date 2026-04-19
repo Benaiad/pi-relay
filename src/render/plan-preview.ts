@@ -148,12 +148,6 @@ const buildActionBlock = (
         .join(", ");
       lines.push(`     ${theme.fg("dim", `Branches: ${branches}`)}`);
     }
-    if (step.retry) {
-      const plural = step.retry.maxAttempts === 1 ? "attempt" : "attempts";
-      lines.push(
-        `     ${theme.fg("dim", `Up to ${step.retry.maxAttempts} ${plural} on failure.`)}`,
-      );
-    }
   }
   return lines;
 };

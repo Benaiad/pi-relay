@@ -42,7 +42,6 @@ steps:
     reads: []
     writes: [change_notes]
     routes: { done: gate1 }
-    retry: { maxAttempts: 2 }
   - kind: verify_command
     id: gate1
     command: "{{gate1}}"

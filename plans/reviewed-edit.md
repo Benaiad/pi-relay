@@ -89,7 +89,6 @@ steps:
     reads: [spec_verdict, quality_verdict]
     writes: [notes]
     routes: { done: spec_review }
-    retry: { maxAttempts: 3 }
   - kind: verify_command
     id: verify
     command: "{{verify}}"

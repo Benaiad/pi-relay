@@ -256,21 +256,8 @@ describe("Scheduler — happy paths", () => {
   });
 });
 
-describe("Scheduler — retries", () => {
-  it("retries an action step up to maxAttempts before failing", async () => {
-    const plan: PlanDraftDoc = {
-      ...linearPlan,
-      steps: [
-        {
-          ...(linearPlan.steps[0] as Extract<
-            PlanDraftDoc["steps"][number],
-            { kind: "action" }
-          >),
-          retry: { maxAttempts: 3 },
-        },
-        linearPlan.steps[1]!,
-      ],
-    };
+describe("Scheduler — implicit retries", () => {
+  it("implicitly retries a failing action step up to 3 times then succeeds", async () => {
     const engine = new ScriptedActorEngine(
       new Map([
         [
@@ -283,13 +270,13 @@ describe("Scheduler — retries", () => {
         ],
       ]),
     );
-    const { scheduler } = buildScheduler(plan, engine);
+    const { scheduler } = buildScheduler(linearPlan, engine);
     const report = await scheduler.run();
     expect(report.outcome).toBe("success");
     expect(engine.callCounts().get("first")).toBe(3);
   });
 
-  it("routes to a declared 'failure' edge when retries are exhausted", async () => {
+  it("routes to a declared 'failure' edge when implicit retries are exhausted", async () => {
     const plan: PlanDraftDoc = {
       task: "Retry then fail.",
       artifacts: [],
@@ -305,7 +292,6 @@ describe("Scheduler — retries", () => {
             success: "good",
             failure: "bad",
           },
-          retry: { maxAttempts: 2 },
         },
         { kind: "terminal", id: "good", outcome: "success", summary: "ok" },
         { kind: "terminal", id: "bad", outcome: "failure", summary: "no good" },
@@ -313,18 +299,25 @@ describe("Scheduler — retries", () => {
       entryStep: "try",
     };
     const engine = new ScriptedActorEngine(
-      new Map([["try", [engineError("e1"), engineError("e2")]]]),
+      new Map([
+        ["try", [engineError("e1"), engineError("e2"), engineError("e3")]],
+      ]),
     );
     const { scheduler } = buildScheduler(plan, engine);
     const report = await scheduler.run();
     expect(report.outcome).toBe("failure");
     expect(report.terminalOutcome).toBe("failure");
-    expect(engine.callCounts().get("try")).toBe(2);
+    expect(engine.callCounts().get("try")).toBe(3);
   });
 
   it("emits a synthetic run_finished failure when no fallback route exists", async () => {
     const engine = new ScriptedActorEngine(
-      new Map([["first", [engineError("boom")]]]),
+      new Map([
+        [
+          "first",
+          [engineError("boom"), engineError("boom"), engineError("boom")],
+        ],
+      ]),
     );
     const { scheduler } = buildScheduler(linearPlan, engine);
     const report = await scheduler.run();
@@ -392,7 +385,6 @@ describe("Scheduler — artifact contract violations", () => {
           reads: [],
           writes: ["a"],
           routes: { next: "second" },
-          retry: { maxAttempts: 2 },
         },
         {
           kind: "action",

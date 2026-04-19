@@ -38,7 +38,6 @@ import { err, ok, type Result } from "./result.js";
 import type {
   ActionStep,
   ArtifactContract,
-  ContextPolicy,
   Step,
   TerminalStep,
   VerifyCommandStep,
@@ -94,9 +93,6 @@ export const compile = (
   const artifactCheck = buildArtifacts(doc.artifacts, stepsById);
   if (!artifactCheck.ok) return artifactCheck;
   const { artifacts, writers, allowedWriters, readers } = artifactCheck.value;
-
-  const policyCheck = validateContextPolicies(stepsById);
-  if (!policyCheck.ok) return policyCheck;
 
   const generateId = options.generateId ?? (() => crypto.randomUUID());
   const program: Program = {
@@ -170,9 +166,7 @@ const brandAction = (
       StepId(to),
     ]),
   ),
-  retry: doc.retry,
   maxRuns: doc.maxRuns,
-  contextPolicy: doc.contextPolicy,
 });
 
 const brandVerifyCommand = (
@@ -353,23 +347,4 @@ const buildArtifacts = (
   }
 
   return ok({ artifacts, writers, allowedWriters, readers });
-};
-
-const SUPPORTED_CONTEXT_POLICIES: readonly ContextPolicy[] = ["fresh_per_run"];
-
-const validateContextPolicies = (
-  steps: ReadonlyMap<StepId, Step>,
-): Result<void, CompileError> => {
-  for (const step of steps.values()) {
-    if (step.kind !== "action") continue;
-    const policy = step.contextPolicy ?? "fresh_per_run";
-    if (!SUPPORTED_CONTEXT_POLICIES.includes(policy)) {
-      return err({
-        kind: "unsupported_context_policy",
-        stepId: step.id,
-        policy,
-      });
-    }
-  }
-  return ok(undefined);
 };

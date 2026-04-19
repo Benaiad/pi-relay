@@ -702,7 +702,7 @@ const oneLine = (text: string, limit?: number): string => {
 };
 
 /**
- * Prefix used by the scheduler when a step's retry policy is exhausted.
+ * Prefix used by the scheduler when implicit retries are exhausted.
  * Exported so the scheduler and tests agree.
  */
 export const SYNTHETIC_FAILURE_REASON_PREFIX = "retries exhausted: ";

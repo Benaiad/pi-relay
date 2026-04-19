@@ -56,7 +56,6 @@ const basicPlan: PlanDraftDoc = {
       reads: ["requirements"],
       writes: ["notes"],
       routes: { done: "done" },
-      retry: { maxAttempts: 2 },
     },
     {
       kind: "terminal",
@@ -233,21 +232,6 @@ describe("compile", () => {
     const result = compile(bad, defaultActors, fixedIdOptions);
     if (!isErr(result)) throw new Error("expected error");
     expect(result.error.kind).toBe("duplicate_artifact");
-  });
-
-  it("rejects context policy other than fresh_per_run", () => {
-    const planStep = basicPlan.steps[0]!;
-    if (planStep.kind !== "action") throw new Error("expected action");
-    const bad: PlanDraftDoc = {
-      ...basicPlan,
-      steps: [
-        { ...planStep, contextPolicy: "persist_per_actor" as const },
-        ...basicPlan.steps.slice(1),
-      ],
-    };
-    const result = compile(bad, defaultActors, fixedIdOptions);
-    if (!isErr(result)) throw new Error("expected error");
-    expect(result.error.kind).toBe("unsupported_context_policy");
   });
 
   it("compiles a verify_files_exist step with pass and fail routes", () => {

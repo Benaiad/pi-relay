@@ -50,7 +50,6 @@ steps:
     reads: [diagnosis]
     writes: [fix_notes]
     routes: { done: verify }
-    retry: { maxAttempts: 2 }
   - kind: verify_command
     id: verify
     command: "{{verify}}"

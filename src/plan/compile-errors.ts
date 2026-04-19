@@ -9,7 +9,6 @@
  */
 
 import type { ActorId, ArtifactId, RouteId, StepId } from "./ids.js";
-import type { ContextPolicy } from "./types.js";
 
 export type CompileError =
   | { readonly kind: "empty_plan" }
@@ -45,9 +44,4 @@ export type CompileError =
   | {
       readonly kind: "missing_artifact_producer";
       readonly artifactId: ArtifactId;
-    }
-  | {
-      readonly kind: "unsupported_context_policy";
-      readonly stepId: StepId;
-      readonly policy: ContextPolicy;
     };

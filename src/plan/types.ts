@@ -9,18 +9,6 @@
 
 import type { ActorId, ArtifactId, RouteId, StepId } from "./ids.js";
 
-/** How an actor's conversation state persists across step invocations within a single run. */
-export type ContextPolicy =
-  | "fresh_per_run"
-  | "persist_per_step"
-  | "persist_per_actor";
-
-/** Retry policy for an action step. `maxAttempts` of 1 means a single attempt with no retry. */
-export interface RetryPolicy {
-  readonly maxAttempts: number;
-  readonly backoffMs?: number;
-}
-
 /** Shape of an artifact's stored value. MVP only supports untyped JSON. */
 export type ArtifactShape = { readonly kind: "untyped_json" };
 
@@ -55,9 +43,7 @@ export interface ActionStep {
   readonly reads: readonly ArtifactId[];
   readonly writes: readonly ArtifactId[];
   readonly routes: ReadonlyMap<RouteId, StepId>;
-  readonly retry?: RetryPolicy;
   readonly maxRuns?: number;
-  readonly contextPolicy?: ContextPolicy;
 }
 
 /**

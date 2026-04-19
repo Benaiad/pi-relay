@@ -22,42 +22,6 @@ const IdField = (description: string) =>
     pattern: "^[a-zA-Z0-9_.:-]+$",
   });
 
-const RetryPolicySchema = Type.Object(
-  {
-    maxAttempts: Type.Integer({
-      minimum: 1,
-      maximum: 10,
-      description:
-        "Maximum attempts before the step's failure route is taken. 1 means a single attempt.",
-    }),
-    backoffMs: Type.Optional(
-      Type.Integer({
-        minimum: 0,
-        maximum: 60_000,
-        description: "Milliseconds to wait between attempts. Defaults to 0.",
-      }),
-    ),
-  },
-  {
-    description:
-      "Retry policy for an action step. Only applies to Action steps; checks never retry.",
-  },
-);
-
-const ContextPolicySchema = Type.Union(
-  [
-    Type.Literal("fresh_per_run"),
-    Type.Literal("persist_per_step"),
-    Type.Literal("persist_per_actor"),
-  ],
-  {
-    description:
-      "How the actor's conversation persists within a run. 'fresh_per_run' starts clean every call. " +
-      "'persist_per_step' reuses the prior context when the same step re-enters. 'persist_per_actor' " +
-      "shares context across all steps that use the same actor. v0.1 only supports 'fresh_per_run'.",
-  },
-);
-
 const ActionStepSchema = Type.Object(
   {
     kind: Type.Literal("action"),
@@ -93,7 +57,6 @@ const ActionStepSchema = Type.Object(
           "The actor must emit exactly one of these route names on completion.",
       },
     ),
-    retry: Type.Optional(RetryPolicySchema),
     maxRuns: Type.Optional(
       Type.Integer({
         minimum: 1,
@@ -104,7 +67,6 @@ const ActionStepSchema = Type.Object(
           "(e.g. an experiment loop that runs overnight).",
       }),
     ),
-    contextPolicy: Type.Optional(ContextPolicySchema),
   },
   {
     description:

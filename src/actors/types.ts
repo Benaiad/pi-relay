@@ -147,9 +147,8 @@ export interface PriorCheckResult {
  * the route to decide the next step and passes the writes to the artifact
  * store for atomic commit.
  *
- * Every other variant is a failure mode. The scheduler applies the step's
- * retry policy to `no_completion` and `engine_error`; `aborted` and
- * `contract_rejected` are terminal for the current activation.
+ * Every other variant is a failure mode. The scheduler implicitly retries
+ * `no_completion` and `engine_error`; `aborted` is terminal for the run.
  */
 export type ActionOutcome =
   | {

@@ -56,11 +56,5 @@ export const formatCompileError = (error: CompileError): string => {
         `Artifact '${unwrap(error.artifactId)}' is declared in the plan's artifacts list but no step writes it. ` +
         `Either have a step declare it in its 'writes' or remove the contract.`
       );
-
-    case "unsupported_context_policy":
-      return (
-        `Step '${unwrap(error.stepId)}' requests contextPolicy '${error.policy}', which is not supported in v0.1. ` +
-        `Only 'fresh_per_run' is available. Remove the override or use 'fresh_per_run'.`
-      );
   }
 };

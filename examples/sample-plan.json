@@ -19,8 +19,7 @@
 			"routes": {
 				"done": "run-tests",
 				"failure": "failed"
-			},
-			"retry": { "maxAttempts": 2 }
+			}
 		},
 		{
 			"kind": "verify_command",

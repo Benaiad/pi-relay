@@ -37,7 +37,6 @@ const validPlan: PlanDraftDoc = {
       reads: ["requirements"],
       writes: ["implementation-notes"],
       routes: { done: "run-tests" },
-      retry: { maxAttempts: 2 },
     },
     {
       kind: "verify_command",

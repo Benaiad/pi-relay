@@ -9,8 +9,8 @@
  * Design choice: pi's extension API does not expose a way to invoke
  * registered tools from inside another tool. To let actors call bash/read/
  * edit/etc., we spawn pi recursively — the same mechanism subagent uses.
- * Each spawn gets context isolation as a side benefit (v0.1 only supports
- * `fresh_per_run`, which this model implements trivially).
+ * Each spawn gets context isolation as a side benefit — every actor
+ * invocation starts with a fresh conversation.
  *
  * Invariants the engine enforces on the actor's behalf:
  *

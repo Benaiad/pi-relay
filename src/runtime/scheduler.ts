@@ -14,19 +14,19 @@
  *      a. Pop the next step.
  *      b. Dispatch by kind. Action → actor engine. Verify → verify engine.
  *         Terminal → emit `terminal_reached` and stop.
- *      c. Apply retry policy on action failures.
+ *      c. On action failure (`no_completion` or `engine_error`), retry
+ *         implicitly up to 3 times before following the failure route.
  *      d. On successful completion, commit writes via the artifact store
  *         and follow the emitted route to the next step.
  *   3. On abort, drain in-flight work (there is only ever one in sequential
  *      mode, but the signal is forwarded to its AbortController so the
  *      subprocess sees it).
  *
- * Retry policy: an action step that returns `no_completion` or
- * `engine_error` increments its attempt count. If attempts < `maxAttempts`
- * (default 1 — single attempt, no retry), the step is re-queued. Otherwise
- * the scheduler looks for a route named `failure` or `error` on the step
- * and follows it; if neither exists, it emits a synthetic `step_failed`
- * event and falls back to a terminal failure.
+ * Implicit retry: action steps that return `no_completion` or `engine_error`
+ * are re-queued up to `IMPLICIT_RETRY_ATTEMPTS` (3) times. This is not
+ * configurable per step — it is invisible infrastructure. After exhausting
+ * retries, the scheduler looks for a route named `failure` or `error` on
+ * the step and follows it; if neither exists, it fails the plan.
  *
  * Time is injected via `clock` so tests can pin timestamps. The scheduler
  * never calls `Date.now` directly.
@@ -72,7 +72,7 @@ import {
 } from "./run-report.js";
 
 const DEFAULT_CLOCK = () => Date.now();
-const DEFAULT_RETRY_MAX_ATTEMPTS = 1;
+const IMPLICIT_RETRY_ATTEMPTS = 3;
 const MAX_CHECK_DISPLAY_BUFFER = 32 * 1024;
 
 const describeVerifyStep = (
@@ -615,7 +615,7 @@ export class Scheduler {
   private applyRetryOrFail(step: ActionStep, reason: string): void {
     const runtime = this.state.steps.get(step.id);
     const attempts = runtime?.attempts ?? 1;
-    const maxAttempts = step.retry?.maxAttempts ?? DEFAULT_RETRY_MAX_ATTEMPTS;
+    const maxAttempts = IMPLICIT_RETRY_ATTEMPTS;
     if (attempts < maxAttempts) {
       this.emit({
         kind: "step_retry_scheduled",
