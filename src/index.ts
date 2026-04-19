@@ -23,6 +23,7 @@ import {
 	DynamicBorder,
 	type ExtensionAPI,
 	getSettingsListTheme,
+	type Theme,
 	type ToolRenderResultOptions,
 } from "@mariozechner/pi-coding-agent";
 import { Container, type SettingItem, SettingsList, Text } from "@mariozechner/pi-tui";
@@ -124,7 +125,7 @@ export default function (pi: ExtensionAPI): void {
 			});
 
 			await ctx.ui.custom((_tui, theme, _kb, done) => {
-				const items = buildSettingsItems(discovery.actors, templates.templates, config);
+				const items = buildSettingsItems(discovery.actors, templates.templates, config, theme);
 				const container = new Container();
 				const border = new DynamicBorder((s: string) => theme.fg("accent", s));
 				container.addChild(border);
@@ -250,10 +251,11 @@ const buildSettingsItems = (
 	actors: readonly ActorConfig[],
 	templates: readonly PlanTemplate[],
 	config: RelayConfig,
+	theme: Theme,
 ): SettingItem[] => {
 	const items: SettingItem[] = [];
 
-	items.push({ id: "_actors", label: "Actors", currentValue: "" });
+	items.push({ id: "_actors", label: theme.bold(theme.fg("accent", "Actors")), currentValue: "" });
 
 	for (const a of actors) {
 		const tools = a.tools ? a.tools.join(", ") : "default tool set";
@@ -266,7 +268,7 @@ const buildSettingsItems = (
 		});
 	}
 
-	items.push({ id: "_plans", label: "Plans", currentValue: "" });
+	items.push({ id: "_plans", label: theme.bold(theme.fg("accent", "Plans")), currentValue: "" });
 
 	for (const t of templates) {
 		const sig =
