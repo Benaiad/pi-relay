@@ -1,7 +1,7 @@
 {
 	"name": "pi-relay",
 	"version": "0.1.0",
-	"description": "Graph-based planning and execution engine for the pi coding agent. Lets the model submit a typed plan that runs as a DAG of action, check, join, and terminal steps with deterministic verification gates.",
+	"description": "Graph-based planning and execution engine for the pi coding agent. Lets the model submit a typed plan that runs as a DAG of action, verify, and terminal steps with deterministic verification gates.",
 	"type": "module",
 	"main": "src/index.ts",
 	"pi": {
