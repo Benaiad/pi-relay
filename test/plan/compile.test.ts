@@ -86,6 +86,16 @@ describe("compile", () => {
 		expect(result.error.kind).toBe("empty_plan");
 	});
 
+	it("rejects a plan with no terminal step", () => {
+		const bad: PlanDraftDoc = {
+			...basicPlan,
+			steps: basicPlan.steps.filter((s) => s.kind !== "terminal"),
+		};
+		const result = compile(bad, defaultActors, fixedIdOptions);
+		if (!isErr(result)) throw new Error("expected error");
+		expect(result.error.kind).toBe("no_terminal");
+	});
+
 	it("rejects duplicate step ids", () => {
 		const firstStep = basicPlan.steps[0]!;
 		const bad: PlanDraftDoc = {

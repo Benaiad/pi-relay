@@ -19,6 +19,9 @@ export const formatCompileError = (error: CompileError): string => {
 		case "empty_plan":
 			return "Plan has no steps. Add at least one action step and a terminal.";
 
+		case "no_terminal":
+			return "Plan has no terminal step. Add at least one step with kind 'terminal' so the plan can complete.";
+
 		case "duplicate_step":
 			return `Step id '${unwrap(error.stepId)}' appears more than once. Every step id must be unique within the plan.`;
 

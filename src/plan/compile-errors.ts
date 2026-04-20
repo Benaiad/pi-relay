@@ -12,6 +12,7 @@ import type { ActorId, ArtifactId, RouteId, StepId } from "./ids.js";
 
 export type CompileError =
 	| { readonly kind: "empty_plan" }
+	| { readonly kind: "no_terminal" }
 	| { readonly kind: "duplicate_step"; readonly stepId: StepId }
 	| {
 			readonly kind: "missing_entry";

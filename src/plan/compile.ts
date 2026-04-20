@@ -65,6 +65,11 @@ export const compile = (
 	if (!stepsResult.ok) return stepsResult;
 	const { steps: stepsById, stepOrder } = stepsResult.value;
 
+	const hasTerminal = stepOrder.some((id) => stepsById.get(id)?.kind === "terminal");
+	if (!hasTerminal) {
+		return err({ kind: "no_terminal" });
+	}
+
 	const entryStep = doc.entryStep ? StepId(doc.entryStep) : stepOrder[0]!;
 	if (!stepsById.has(entryStep)) {
 		return err({
