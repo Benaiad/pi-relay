@@ -31,13 +31,16 @@ steps:
       Read the relevant code and reproduce the failure if possible.
       Identify the root cause — do NOT fix the code yet.
 
-      Write a diagnosis artifact:
-      - root_cause: one sentence
-      - file: the file containing the bug
-      - line: approximate line number if identifiable
-      - fix: the minimal change that resolves it
+      If you find the bug, write a diagnosis artifact with each issue
+      found, then route "found".
+
+      If the reported behavior is not a bug (works as intended, cannot
+      reproduce, or the premise is wrong), route "clean" without
+      writing a diagnosis.
     writes: [diagnosis]
-    routes: { done: fix }
+    routes:
+      found: fix
+      clean: not_a_bug
   - kind: action
     id: fix
     actor: worker
@@ -58,6 +61,10 @@ steps:
     id: done
     outcome: success
     summary: Bug fixed and verified.
+  - kind: terminal
+    id: not_a_bug
+    outcome: success
+    summary: Investigation found no bug — the reported behavior is not a defect.
   - kind: terminal
     id: failed
     outcome: failure
