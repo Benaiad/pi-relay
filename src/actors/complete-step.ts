@@ -137,9 +137,9 @@ export const parseCompletion = (
   }
 
   const writes: Record<string, unknown> = {};
-  let artifactMatch: RegExpExecArray | null;
-  const artifactRe = new RegExp(ARTIFACT_RE.source, ARTIFACT_RE.flags);
-  while ((artifactMatch = artifactRe.exec(payload)) !== null) {
+  for (const artifactMatch of payload.matchAll(
+    new RegExp(ARTIFACT_RE.source, ARTIFACT_RE.flags),
+  )) {
     const id = artifactMatch[1]!;
     const rawContent = artifactMatch[2]!.trim();
     writes[id] = parseArtifactContent(rawContent);
@@ -189,10 +189,10 @@ const buildExampleBlock = (input: CompletionInstructionInput): string => {
  * - Otherwise → plain text string
  */
 const parseArtifactContent = (content: string): unknown => {
-  const itemRe = new RegExp(ITEM_RE.source, ITEM_RE.flags);
   const items: Record<string, string>[] = [];
-  let itemMatch: RegExpExecArray | null;
-  while ((itemMatch = itemRe.exec(content)) !== null) {
+  for (const itemMatch of content.matchAll(
+    new RegExp(ITEM_RE.source, ITEM_RE.flags),
+  )) {
     items.push(parseFieldTags(itemMatch[1]!));
   }
   if (items.length > 0) return items;
@@ -205,9 +205,9 @@ const parseArtifactContent = (content: string): unknown => {
 
 const parseFieldTags = (content: string): Record<string, string> => {
   const fields: Record<string, string> = {};
-  const fieldRe = new RegExp(FIELD_TAG_RE.source, FIELD_TAG_RE.flags);
-  let fieldMatch: RegExpExecArray | null;
-  while ((fieldMatch = fieldRe.exec(content)) !== null) {
+  for (const fieldMatch of content.matchAll(
+    new RegExp(FIELD_TAG_RE.source, FIELD_TAG_RE.flags),
+  )) {
     fields[fieldMatch[1]!] = unescapeXml(fieldMatch[2]!.trim());
   }
   return fields;
