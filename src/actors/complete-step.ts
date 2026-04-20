@@ -39,14 +39,14 @@ const ITEM_RE = /<item>([\s\S]*?)<\/item>/g;
 const FIELD_TAG_RE = /<([a-zA-Z0-9_.:-]+)>([\s\S]*?)<\/\1>/g;
 
 export interface ParsedCompletion {
-  readonly route: string;
-  readonly writes: Record<string, unknown>;
+	readonly route: string;
+	readonly writes: Record<string, unknown>;
 }
 
 export interface CompletionInstructionInput {
-  readonly routes: readonly RouteId[];
-  readonly writableArtifactIds: readonly ArtifactId[];
-  readonly artifactContracts: ReadonlyMap<ArtifactId, ArtifactContract>;
+	readonly routes: readonly RouteId[];
+	readonly writableArtifactIds: readonly ArtifactId[];
+	readonly artifactContracts: ReadonlyMap<ArtifactId, ArtifactContract>;
 }
 
 /**
@@ -57,57 +57,55 @@ export interface CompletionInstructionInput {
  * writable artifacts — the model's only way to signal the scheduler is via
  * the tag, so we are loud about the format.
  */
-export const buildCompletionInstruction = (
-  input: CompletionInstructionInput,
-): string => {
-  const routeLines =
-    input.routes.length === 0
-      ? "  (none — this should not happen; report it to the caller)"
-      : input.routes.map((r) => `  - ${unwrap(r)}`).join("\n");
+export const buildCompletionInstruction = (input: CompletionInstructionInput): string => {
+	const routeLines =
+		input.routes.length === 0
+			? "  (none — this should not happen; report it to the caller)"
+			: input.routes.map((r) => `  - ${unwrap(r)}`).join("\n");
 
-  const writeLines =
-    input.writableArtifactIds.length === 0
-      ? "  (none — do not include any <artifact> tags)"
-      : input.writableArtifactIds
-          .map((id) => {
-            const contract = input.artifactContracts.get(id);
-            const description = contract?.description ?? "";
-            const line = `  - ${unwrap(id)}: ${description}`.trimEnd();
-            const hint = contract ? formatShapeHint(contract.shape) : "";
-            return hint ? `${line}\n${hint}` : line;
-          })
-          .join("\n");
+	const writeLines =
+		input.writableArtifactIds.length === 0
+			? "  (none — do not include any <artifact> tags)"
+			: input.writableArtifactIds
+					.map((id) => {
+						const contract = input.artifactContracts.get(id);
+						const description = contract?.description ?? "";
+						const line = `  - ${unwrap(id)}: ${description}`.trimEnd();
+						const hint = contract ? formatShapeHint(contract.shape) : "";
+						return hint ? `${line}\n${hint}` : line;
+					})
+					.join("\n");
 
-  const exampleBlock = buildExampleBlock(input);
+	const exampleBlock = buildExampleBlock(input);
 
-  return [
-    "## Relay completion protocol",
-    "",
-    "You are executing as one step of a Relay plan. The runtime will read",
-    "your final output for a completion block in the exact format below.",
-    "Do not emit this block until every task requirement is complete.",
-    "",
-    exampleBlock,
-    "",
-    "Requirements:",
-    "- Emit the block exactly once, as the VERY LAST thing in your reply.",
-    "- Use XML tags as shown. `<route>` is required. One `<artifact>` tag",
-    "  per writable artifact you want to commit.",
-    "- For structured artifacts with declared fields, use one XML tag per",
-    "  field (e.g. `<root_cause>value</root_cause>`). For list artifacts,",
-    "  wrap each entry in `<item>` tags.",
-    "- For text artifacts (no fields), put plain text directly inside the",
-    "  `<artifact>` tag. Do NOT use JSON.",
-    "- Keep values compact. Put detailed text in your narration (before",
-    "  the completion block), not inside the artifact tags.",
-    "- `route` must be one of the allowed routes listed below.",
-    "",
-    "Allowed routes (choose exactly one):",
-    routeLines,
-    "",
-    "Writable artifacts:",
-    writeLines,
-  ].join("\n");
+	return [
+		"## Relay completion protocol",
+		"",
+		"You are executing as one step of a Relay plan. The runtime will read",
+		"your final output for a completion block in the exact format below.",
+		"Do not emit this block until every task requirement is complete.",
+		"",
+		exampleBlock,
+		"",
+		"Requirements:",
+		"- Emit the block exactly once, as the VERY LAST thing in your reply.",
+		"- Use XML tags as shown. `<route>` is required. One `<artifact>` tag",
+		"  per writable artifact you want to commit.",
+		"- For structured artifacts with declared fields, use one XML tag per",
+		"  field (e.g. `<root_cause>value</root_cause>`). For list artifacts,",
+		"  wrap each entry in `<item>` tags.",
+		"- For text artifacts (no fields), put plain text directly inside the",
+		"  `<artifact>` tag. Do NOT use JSON.",
+		"- Keep values compact. Put detailed text in your narration (before",
+		"  the completion block), not inside the artifact tags.",
+		"- `route` must be one of the allowed routes listed below.",
+		"",
+		"Allowed routes (choose exactly one):",
+		routeLines,
+		"",
+		"Writable artifacts:",
+		writeLines,
+	].join("\n");
 };
 
 /**
@@ -117,68 +115,64 @@ export const buildCompletionInstruction = (
  * not a shape_mismatch at the artifact level, it is a protocol violation by
  * the actor that the scheduler implicitly retries.
  */
-export const parseCompletion = (
-  text: string,
-): Result<ParsedCompletion, string> => {
-  const match = COMPLETE_RE.exec(text);
-  if (!match?.[1]) {
-    return err("completion block not found in final output");
-  }
+export const parseCompletion = (text: string): Result<ParsedCompletion, string> => {
+	const match = COMPLETE_RE.exec(text);
+	if (!match?.[1]) {
+		return err("completion block not found in final output");
+	}
 
-  const payload = match[1];
+	const payload = match[1];
 
-  const routeMatch = ROUTE_RE.exec(payload);
-  if (!routeMatch) {
-    return err("completion block is missing <route> tag");
-  }
-  const route = (routeMatch[1] ?? "").trim();
-  if (route.length === 0) {
-    return err("completion block has an empty <route> tag");
-  }
+	const routeMatch = ROUTE_RE.exec(payload);
+	if (!routeMatch) {
+		return err("completion block is missing <route> tag");
+	}
+	const route = (routeMatch[1] ?? "").trim();
+	if (route.length === 0) {
+		return err("completion block has an empty <route> tag");
+	}
 
-  const writes: Record<string, unknown> = {};
-  for (const artifactMatch of payload.matchAll(
-    new RegExp(ARTIFACT_RE.source, ARTIFACT_RE.flags),
-  )) {
-    const id = artifactMatch[1]!;
-    const rawContent = artifactMatch[2]!.trim();
-    writes[id] = parseArtifactContent(rawContent);
-  }
+	const writes: Record<string, unknown> = {};
+	for (const artifactMatch of payload.matchAll(new RegExp(ARTIFACT_RE.source, ARTIFACT_RE.flags))) {
+		const id = artifactMatch[1]!;
+		const rawContent = artifactMatch[2]!.trim();
+		writes[id] = parseArtifactContent(rawContent);
+	}
 
-  return ok({ route, writes });
+	return ok({ route, writes });
 };
 
 const buildExampleBlock = (input: CompletionInstructionInput): string => {
-  const lines: string[] = [COMPLETE_OPEN, "<route>ROUTE_NAME</route>"];
+	const lines: string[] = [COMPLETE_OPEN, "<route>ROUTE_NAME</route>"];
 
-  for (const id of input.writableArtifactIds) {
-    const contract = input.artifactContracts.get(id);
-    const idStr = unwrap(id);
-    if (!contract || contract.shape.kind === "text") {
-      lines.push(`<artifact id="${idStr}">plain text value</artifact>`);
-    } else if (contract.shape.kind === "record") {
-      lines.push(`<artifact id="${idStr}">`);
-      for (const field of contract.shape.fields) {
-        lines.push(`<${field}>value</${field}>`);
-      }
-      lines.push("</artifact>");
-    } else if (contract.shape.kind === "record_list") {
-      lines.push(`<artifact id="${idStr}">`);
-      for (let i = 1; i <= 2; i++) {
-        lines.push("<item>");
-        for (const field of contract.shape.fields) {
-          lines.push(`<${field}>...</${field}>`);
-        }
-        lines.push("</item>");
-      }
-      lines.push("<!-- repeat <item> as needed -->");
-      lines.push("</artifact>");
-    }
-    break;
-  }
+	for (const id of input.writableArtifactIds) {
+		const contract = input.artifactContracts.get(id);
+		const idStr = unwrap(id);
+		if (!contract || contract.shape.kind === "text") {
+			lines.push(`<artifact id="${idStr}">plain text value</artifact>`);
+		} else if (contract.shape.kind === "record") {
+			lines.push(`<artifact id="${idStr}">`);
+			for (const field of contract.shape.fields) {
+				lines.push(`<${field}>value</${field}>`);
+			}
+			lines.push("</artifact>");
+		} else if (contract.shape.kind === "record_list") {
+			lines.push(`<artifact id="${idStr}">`);
+			for (let i = 1; i <= 2; i++) {
+				lines.push("<item>");
+				for (const field of contract.shape.fields) {
+					lines.push(`<${field}>...</${field}>`);
+				}
+				lines.push("</item>");
+			}
+			lines.push("<!-- repeat <item> as needed -->");
+			lines.push("</artifact>");
+		}
+		break;
+	}
 
-  lines.push(COMPLETE_CLOSE);
-  return lines.join("\n");
+	lines.push(COMPLETE_CLOSE);
+	return lines.join("\n");
 };
 
 /**
@@ -189,55 +183,47 @@ const buildExampleBlock = (input: CompletionInstructionInput): string => {
  * - Otherwise → plain text string
  */
 const parseArtifactContent = (content: string): unknown => {
-  const items: Record<string, string>[] = [];
-  for (const itemMatch of content.matchAll(
-    new RegExp(ITEM_RE.source, ITEM_RE.flags),
-  )) {
-    items.push(parseFieldTags(itemMatch[1]!));
-  }
-  if (items.length > 0) return items;
+	const items: Record<string, string>[] = [];
+	for (const itemMatch of content.matchAll(new RegExp(ITEM_RE.source, ITEM_RE.flags))) {
+		items.push(parseFieldTags(itemMatch[1]!));
+	}
+	if (items.length > 0) return items;
 
-  const fields = parseFieldTags(content);
-  if (Object.keys(fields).length > 0) return fields;
+	const fields = parseFieldTags(content);
+	if (Object.keys(fields).length > 0) return fields;
 
-  return unescapeXml(content);
+	return unescapeXml(content);
 };
 
 const parseFieldTags = (content: string): Record<string, string> => {
-  const fields: Record<string, string> = {};
-  for (const fieldMatch of content.matchAll(
-    new RegExp(FIELD_TAG_RE.source, FIELD_TAG_RE.flags),
-  )) {
-    fields[fieldMatch[1]!] = unescapeXml(fieldMatch[2]!.trim());
-  }
-  return fields;
+	const fields: Record<string, string> = {};
+	for (const fieldMatch of content.matchAll(new RegExp(FIELD_TAG_RE.source, FIELD_TAG_RE.flags))) {
+		fields[fieldMatch[1]!] = unescapeXml(fieldMatch[2]!.trim());
+	}
+	return fields;
 };
 
 const XML_ENTITY_RE = /&(?:lt|gt|amp|quot|apos);/g;
 
 const XML_ENTITIES: Record<string, string> = {
-  "&lt;": "<",
-  "&gt;": ">",
-  "&amp;": "&",
-  "&quot;": '"',
-  "&apos;": "'",
+	"&lt;": "<",
+	"&gt;": ">",
+	"&amp;": "&",
+	"&quot;": '"',
+	"&apos;": "'",
 };
 
-const unescapeXml = (text: string): string =>
-  text.replace(XML_ENTITY_RE, (entity) => XML_ENTITIES[entity] ?? entity);
+const unescapeXml = (text: string): string => text.replace(XML_ENTITY_RE, (entity) => XML_ENTITIES[entity] ?? entity);
 
 export const formatShapeHint = (shape: ArtifactShape): string => {
-  switch (shape.kind) {
-    case "text":
-      return "    Value: plain text";
-    case "record":
-      return `    Fields: ${shape.fields.join(", ")}`;
-    case "record_list":
-      return (
-        `    Fields (list): ${shape.fields.join(", ")}\n` +
-        "    Produce one <item> per entry found."
-      );
-  }
+	switch (shape.kind) {
+		case "text":
+			return "    Value: plain text";
+		case "record":
+			return `    Fields: ${shape.fields.join(", ")}`;
+		case "record_list":
+			return `    Fields (list): ${shape.fields.join(", ")}\n    Produce one <item> per entry found.`;
+	}
 };
 
 /**
@@ -253,9 +239,9 @@ export const formatShapeHint = (shape: ArtifactShape): string => {
  * end up with awkward blank lines where the tag used to live.
  */
 export const stripCompletionTag = (text: string): string => {
-  if (!text.includes("<relay-complete>")) return text.trim();
-  return text
-    .replace(COMPLETE_RE_GLOBAL, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+	if (!text.includes("<relay-complete>")) return text.trim();
+	return text
+		.replace(COMPLETE_RE_GLOBAL, "")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
 };

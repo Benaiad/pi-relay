@@ -38,216 +38,185 @@ import type { AccumulatedEntry } from "./accumulated-entry.js";
  * captured when the step started.
  */
 export interface ArtifactSnapshot {
-  /** Look up a committed value by id. Returns `undefined` if the artifact has not been committed yet. */
-  get(id: ArtifactId): unknown | undefined;
-  /** Whether a value is present for this id. */
-  has(id: ArtifactId): boolean;
-  /** Ordered list of ids present in the snapshot. */
-  ids(): readonly ArtifactId[];
+	/** Look up a committed value by id. Returns `undefined` if the artifact has not been committed yet. */
+	get(id: ArtifactId): unknown | undefined;
+	/** Whether a value is present for this id. */
+	has(id: ArtifactId): boolean;
+	/** Ordered list of ids present in the snapshot. */
+	ids(): readonly ArtifactId[];
 }
 
 /** A single committed artifact, including bookkeeping. */
 export interface StoredArtifact {
-  readonly id: ArtifactId;
-  readonly value: unknown;
-  readonly writerStep: StepId;
-  readonly committedAt: number;
+	readonly id: ArtifactId;
+	readonly value: unknown;
+	readonly writerStep: StepId;
+	readonly committedAt: number;
 }
 
 /** Reasons a commit may be rejected. */
 export type ContractViolation =
-  | {
-      readonly kind: "unknown_artifact";
-      readonly artifactId: ArtifactId;
-      readonly stepId: StepId;
-    }
-  | {
-      readonly kind: "wrong_writer";
-      readonly artifactId: ArtifactId;
-      readonly declaredWriter: StepId;
-      readonly actualWriter: StepId;
-    }
-  | {
-      readonly kind: "shape_mismatch";
-      readonly artifactId: ArtifactId;
-      readonly reason: string;
-    };
+	| {
+			readonly kind: "unknown_artifact";
+			readonly artifactId: ArtifactId;
+			readonly stepId: StepId;
+	  }
+	| {
+			readonly kind: "wrong_writer";
+			readonly artifactId: ArtifactId;
+			readonly declaredWriter: StepId;
+			readonly actualWriter: StepId;
+	  }
+	| {
+			readonly kind: "shape_mismatch";
+			readonly artifactId: ArtifactId;
+			readonly reason: string;
+	  };
 
-export const formatContractViolation = (
-  violation: ContractViolation,
-): string => {
-  switch (violation.kind) {
-    case "unknown_artifact":
-      return `Step '${unwrap(violation.stepId)}' tried to commit artifact '${unwrap(violation.artifactId)}', which has no contract in this plan.`;
-    case "wrong_writer":
-      return (
-        `Step '${unwrap(violation.actualWriter)}' tried to commit artifact '${unwrap(violation.artifactId)}', ` +
-        `but the plan declares '${unwrap(violation.declaredWriter)}' as the sole writer for that artifact.`
-      );
-    case "shape_mismatch":
-      return `Artifact '${unwrap(violation.artifactId)}' failed shape validation: ${violation.reason}`;
-  }
+export const formatContractViolation = (violation: ContractViolation): string => {
+	switch (violation.kind) {
+		case "unknown_artifact":
+			return `Step '${unwrap(violation.stepId)}' tried to commit artifact '${unwrap(violation.artifactId)}', which has no contract in this plan.`;
+		case "wrong_writer":
+			return (
+				`Step '${unwrap(violation.actualWriter)}' tried to commit artifact '${unwrap(violation.artifactId)}', ` +
+				`but the plan declares '${unwrap(violation.declaredWriter)}' as the sole writer for that artifact.`
+			);
+		case "shape_mismatch":
+			return `Artifact '${unwrap(violation.artifactId)}' failed shape validation: ${violation.reason}`;
+	}
 };
 
-const validateRecord = (
-  value: unknown,
-  fields: readonly string[],
-): Result<void, string> => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return err(
-      `expected an object, got ${Array.isArray(value) ? "array" : typeof value}`,
-    );
-  }
-  const obj = value as Record<string, unknown>;
-  const missing = fields.filter((f) => !(f in obj));
-  if (missing.length > 0) {
-    return err(`missing fields: ${missing.join(", ")}`);
-  }
-  return ok(undefined);
+const validateRecord = (value: unknown, fields: readonly string[]): Result<void, string> => {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) {
+		return err(`expected an object, got ${Array.isArray(value) ? "array" : typeof value}`);
+	}
+	const obj = value as Record<string, unknown>;
+	const missing = fields.filter((f) => !(f in obj));
+	if (missing.length > 0) {
+		return err(`missing fields: ${missing.join(", ")}`);
+	}
+	return ok(undefined);
 };
 
-const validateShape = (
-  value: unknown,
-  contract: ArtifactContract,
-): Result<void, string> => {
-  switch (contract.shape.kind) {
-    case "text":
-      return typeof value === "string"
-        ? ok(undefined)
-        : err(`expected a string, got ${typeof value}`);
-    case "record":
-      return validateRecord(value, contract.shape.fields);
-    case "record_list": {
-      if (!Array.isArray(value)) {
-        return err(`expected an array, got ${typeof value}`);
-      }
-      for (let i = 0; i < value.length; i++) {
-        const r = validateRecord(value[i], contract.shape.fields);
-        if (!r.ok) return err(`element [${i}]: ${r.error}`);
-      }
-      return ok(undefined);
-    }
-  }
+const validateShape = (value: unknown, contract: ArtifactContract): Result<void, string> => {
+	switch (contract.shape.kind) {
+		case "text":
+			return typeof value === "string" ? ok(undefined) : err(`expected a string, got ${typeof value}`);
+		case "record":
+			return validateRecord(value, contract.shape.fields);
+		case "record_list": {
+			if (!Array.isArray(value)) {
+				return err(`expected an array, got ${typeof value}`);
+			}
+			for (let i = 0; i < value.length; i++) {
+				const r = validateRecord(value[i], contract.shape.fields);
+				if (!r.ok) return err(`element [${i}]: ${r.error}`);
+			}
+			return ok(undefined);
+		}
+	}
 };
 
 export class ArtifactStore {
-  private readonly committed = new Map<ArtifactId, StoredArtifact>();
+	private readonly committed = new Map<ArtifactId, StoredArtifact>();
 
-  constructor(
-    private readonly program: Program,
-    private readonly clock: () => number,
-  ) {}
+	constructor(
+		private readonly program: Program,
+		private readonly clock: () => number,
+	) {}
 
-  /**
-   * Return a frozen snapshot over the requested subset of committed artifacts.
-   *
-   * Ids that have not yet been committed are omitted; callers should treat a
-   * missing id as "not produced yet."
-   */
-  snapshot(reads: readonly ArtifactId[]): ArtifactSnapshot {
-    const subset = new Map<ArtifactId, unknown>();
-    for (const id of reads) {
-      const stored = this.committed.get(id);
-      if (stored !== undefined) subset.set(id, stored.value);
-    }
-    const idsList: readonly ArtifactId[] = Object.freeze(
-      Array.from(subset.keys()),
-    );
-    return Object.freeze({
-      get: (id: ArtifactId) => subset.get(id),
-      has: (id: ArtifactId) => subset.has(id),
-      ids: () => idsList,
-    });
-  }
+	/**
+	 * Return a frozen snapshot over the requested subset of committed artifacts.
+	 *
+	 * Ids that have not yet been committed are omitted; callers should treat a
+	 * missing id as "not produced yet."
+	 */
+	snapshot(reads: readonly ArtifactId[]): ArtifactSnapshot {
+		const subset = new Map<ArtifactId, unknown>();
+		for (const id of reads) {
+			const stored = this.committed.get(id);
+			if (stored !== undefined) subset.set(id, stored.value);
+		}
+		const idsList: readonly ArtifactId[] = Object.freeze(Array.from(subset.keys()));
+		return Object.freeze({
+			get: (id: ArtifactId) => subset.get(id),
+			has: (id: ArtifactId) => subset.has(id),
+			ids: () => idsList,
+		});
+	}
 
-  /**
-   * Commit a batch of writes atomically.
-   *
-   * Every write is validated against the program's writer map and the
-   * artifact's shape. If any write is invalid, none are applied and the
-   * store returns the first violation encountered.
-   */
-  commit(
-    stepId: StepId,
-    writes: ReadonlyMap<ArtifactId, unknown>,
-    attempt?: number,
-  ): Result<void, ContractViolation> {
-    const patch: StoredArtifact[] = [];
-    const committedAt = this.clock();
+	/**
+	 * Commit a batch of writes atomically.
+	 *
+	 * Every write is validated against the program's writer map and the
+	 * artifact's shape. If any write is invalid, none are applied and the
+	 * store returns the first violation encountered.
+	 */
+	commit(stepId: StepId, writes: ReadonlyMap<ArtifactId, unknown>, attempt?: number): Result<void, ContractViolation> {
+		const patch: StoredArtifact[] = [];
+		const committedAt = this.clock();
 
-    for (const [artifactId, value] of writes) {
-      const contract = this.program.artifacts.get(artifactId);
-      if (contract === undefined) {
-        return err({ kind: "unknown_artifact", artifactId, stepId });
-      }
-      // Any step that declared the artifact in its `writes` is allowed.
-      const permitted = this.program.allowedWriters.get(artifactId);
-      if (permitted === undefined || !permitted.has(stepId)) {
-        const primary = this.program.writers.get(artifactId);
-        return err({
-          kind: "wrong_writer",
-          artifactId,
-          declaredWriter: primary ?? stepId,
-          actualWriter: stepId,
-        });
-      }
-      const shapeResult = validateShape(value, contract);
-      if (!shapeResult.ok) {
-        return err({
-          kind: "shape_mismatch",
-          artifactId,
-          reason: shapeResult.error,
-        });
-      }
+		for (const [artifactId, value] of writes) {
+			const contract = this.program.artifacts.get(artifactId);
+			if (contract === undefined) {
+				return err({ kind: "unknown_artifact", artifactId, stepId });
+			}
+			// Any step that declared the artifact in its `writes` is allowed.
+			const permitted = this.program.allowedWriters.get(artifactId);
+			if (permitted === undefined || !permitted.has(stepId)) {
+				const primary = this.program.writers.get(artifactId);
+				return err({
+					kind: "wrong_writer",
+					artifactId,
+					declaredWriter: primary ?? stepId,
+					actualWriter: stepId,
+				});
+			}
+			const shapeResult = validateShape(value, contract);
+			if (!shapeResult.ok) {
+				return err({
+					kind: "shape_mismatch",
+					artifactId,
+					reason: shapeResult.error,
+				});
+			}
 
-      const finalValue = this.appendToAccumulator(
-        artifactId,
-        value,
-        stepId,
-        attempt ?? 1,
-      );
-      patch.push({
-        id: artifactId,
-        value: finalValue,
-        writerStep: stepId,
-        committedAt,
-      });
-    }
+			const finalValue = this.appendToAccumulator(artifactId, value, stepId, attempt ?? 1);
+			patch.push({
+				id: artifactId,
+				value: finalValue,
+				writerStep: stepId,
+				committedAt,
+			});
+		}
 
-    for (const entry of patch) {
-      this.committed.set(entry.id, entry);
-    }
-    return ok(undefined);
-  }
+		for (const entry of patch) {
+			this.committed.set(entry.id, entry);
+		}
+		return ok(undefined);
+	}
 
-  /** Ordered list of every committed artifact, in commit order. */
-  all(): readonly StoredArtifact[] {
-    return Array.from(this.committed.values());
-  }
+	/** Ordered list of every committed artifact, in commit order. */
+	all(): readonly StoredArtifact[] {
+		return Array.from(this.committed.values());
+	}
 
-  /** Whether a specific artifact has been committed. */
-  has(id: ArtifactId): boolean {
-    return this.committed.has(id);
-  }
+	/** Whether a specific artifact has been committed. */
+	has(id: ArtifactId): boolean {
+		return this.committed.has(id);
+	}
 
-  private appendToAccumulator(
-    id: ArtifactId,
-    value: unknown,
-    stepId: StepId,
-    attempt: number,
-  ): AccumulatedEntry[] {
-    const existing = this.committed.get(id);
-    const prior: AccumulatedEntry[] =
-      existing !== undefined && Array.isArray(existing.value)
-        ? existing.value
-        : [];
-    const entry: AccumulatedEntry = {
-      index: prior.length,
-      stepId,
-      attempt,
-      value,
-      committedAt: this.clock(),
-    };
-    return [...prior, entry];
-  }
+	private appendToAccumulator(id: ArtifactId, value: unknown, stepId: StepId, attempt: number): AccumulatedEntry[] {
+		const existing = this.committed.get(id);
+		const prior: AccumulatedEntry[] = existing !== undefined && Array.isArray(existing.value) ? existing.value : [];
+		const entry: AccumulatedEntry = {
+			index: prior.length,
+			stepId,
+			attempt,
+			value,
+			committedAt: this.clock(),
+		};
+		return [...prior, entry];
+	}
 }

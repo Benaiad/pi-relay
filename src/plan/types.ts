@@ -10,9 +10,9 @@
 import type { ActorId, ArtifactId, RouteId, StepId } from "./ids.js";
 
 export type ArtifactShape =
-  | { readonly kind: "text" }
-  | { readonly kind: "record"; readonly fields: readonly string[] }
-  | { readonly kind: "record_list"; readonly fields: readonly string[] };
+	| { readonly kind: "text" }
+	| { readonly kind: "record"; readonly fields: readonly string[] }
+	| { readonly kind: "record_list"; readonly fields: readonly string[] };
 
 /**
  * Compile-time declaration of an artifact.
@@ -27,9 +27,9 @@ export type ArtifactShape =
  * Readers see the full history as an array of entries.
  */
 export interface ArtifactContract {
-  readonly id: ArtifactId;
-  readonly description: string;
-  readonly shape: ArtifactShape;
+	readonly id: ArtifactId;
+	readonly description: string;
+	readonly shape: ArtifactShape;
 }
 
 /**
@@ -38,14 +38,14 @@ export interface ArtifactContract {
  * committed by the actor via its completion tool call.
  */
 export interface ActionStep {
-  readonly kind: "action";
-  readonly id: StepId;
-  readonly actor: ActorId;
-  readonly instruction: string;
-  readonly reads: readonly ArtifactId[];
-  readonly writes: readonly ArtifactId[];
-  readonly routes: ReadonlyMap<RouteId, StepId>;
-  readonly maxRuns?: number;
+	readonly kind: "action";
+	readonly id: StepId;
+	readonly actor: ActorId;
+	readonly instruction: string;
+	readonly reads: readonly ArtifactId[];
+	readonly writes: readonly ArtifactId[];
+	readonly routes: ReadonlyMap<RouteId, StepId>;
+	readonly maxRuns?: number;
 }
 
 /**
@@ -53,12 +53,12 @@ export interface ActionStep {
  * Pass iff the command exits 0 within the timeout.
  */
 export interface VerifyCommandStep {
-  readonly kind: "verify_command";
-  readonly id: StepId;
-  readonly command: string;
-  readonly timeoutMs?: number;
-  readonly onPass: StepId;
-  readonly onFail: StepId;
+	readonly kind: "verify_command";
+	readonly id: StepId;
+	readonly command: string;
+	readonly timeoutMs?: number;
+	readonly onPass: StepId;
+	readonly onFail: StepId;
 }
 
 /**
@@ -66,11 +66,11 @@ export interface VerifyCommandStep {
  * Pass iff every path exists. Failure reason lists which paths are missing.
  */
 export interface VerifyFilesExistStep {
-  readonly kind: "verify_files_exist";
-  readonly id: StepId;
-  readonly paths: readonly string[];
-  readonly onPass: StepId;
-  readonly onFail: StepId;
+	readonly kind: "verify_files_exist";
+	readonly id: StepId;
+	readonly paths: readonly string[];
+	readonly onPass: StepId;
+	readonly onFail: StepId;
 }
 
 /**
@@ -78,20 +78,16 @@ export interface VerifyFilesExistStep {
  * emits `RunFinished` and the scheduler exits its loop.
  */
 export interface TerminalStep {
-  readonly kind: "terminal";
-  readonly id: StepId;
-  readonly outcome: TerminalOutcome;
-  readonly summary: string;
+	readonly kind: "terminal";
+	readonly id: StepId;
+	readonly outcome: TerminalOutcome;
+	readonly summary: string;
 }
 
 export type TerminalOutcome = "success" | "failure";
 
 /** The discriminated union of every step kind. Exhaustive matching is enforced. */
-export type Step =
-  | ActionStep
-  | VerifyCommandStep
-  | VerifyFilesExistStep
-  | TerminalStep;
+export type Step = ActionStep | VerifyCommandStep | VerifyFilesExistStep | TerminalStep;
 
 /**
  * A plan as the compiler understands it — branded IDs, frozen arrays.
@@ -101,9 +97,9 @@ export type Step =
  * structural well-formedness. Real validation lives in `compile()`.
  */
 export interface PlanDraft {
-  readonly task: string;
-  readonly successCriteria?: string;
-  readonly artifacts: readonly ArtifactContract[];
-  readonly steps: readonly Step[];
-  readonly entryStep?: StepId;
+	readonly task: string;
+	readonly successCriteria?: string;
+	readonly artifacts: readonly ArtifactContract[];
+	readonly steps: readonly Step[];
+	readonly entryStep?: StepId;
 }
