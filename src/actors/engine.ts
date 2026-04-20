@@ -256,15 +256,26 @@ const buildTaskPrompt = (
 
 	if (reads.length > 0) {
 		const inputs: string[] = [];
+		const missing: string[] = [];
 		for (const id of reads) {
-			if (!artifacts.has(id)) continue;
+			if (!artifacts.has(id)) {
+				missing.push(unwrap(id));
+				continue;
+			}
 			const contract = contracts.get(id);
-			const _desc = contract?.description ?? "";
 			const value = artifacts.get(id);
 			inputs.push(renderArtifact(unwrap(id), contract, value, stepActorResolver));
 		}
 		if (inputs.length > 0) {
 			lines.push("## Input artifacts", "", inputs.join("\n\n"));
+		}
+		if (missing.length > 0) {
+			lines.push(
+				"## Missing artifacts",
+				"",
+				`The following artifacts were expected but not produced by any prior step: ${missing.join(", ")}.`,
+				"This may mean a prior step chose a route that skipped writing them.",
+			);
 		}
 	}
 
