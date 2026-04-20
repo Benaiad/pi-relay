@@ -70,6 +70,11 @@ import {
   type RunReport,
   SYNTHETIC_FAILURE_REASON_PREFIX,
 } from "./run-report.js";
+import {
+  logCompletionParseError,
+  logContractViolation,
+  logShapeMismatch,
+} from "./schema-error-log.js";
 
 const DEFAULT_CLOCK = () => Date.now();
 const IMPLICIT_RETRY_ATTEMPTS = 3;
@@ -435,6 +440,11 @@ export class Scheduler {
           reason: outcome.reason,
           usage: outcome.usage,
         });
+        logCompletionParseError({
+          planId: unwrap(this.program.id),
+          stepId: unwrap(step.id),
+          error: outcome.reason,
+        });
         this.applyRetryOrFail(step, outcome.reason);
         return;
       case "engine_error":
@@ -466,15 +476,33 @@ export class Scheduler {
       currentAttempt,
     );
     if (!commitResult.ok) {
+      const violation = commitResult.error;
       this.emit({
         kind: "artifact_rejected",
         at: this.clock(),
         stepId: step.id,
-        violation: commitResult.error,
+        violation,
       });
+      if (violation.kind === "shape_mismatch") {
+        logShapeMismatch({
+          planId: unwrap(this.program.id),
+          stepId: unwrap(step.id),
+          artifactId: unwrap(violation.artifactId),
+          shape: this.program.artifacts.get(violation.artifactId)?.shape,
+          value: writes.get(violation.artifactId),
+          error: violation.reason,
+        });
+      } else {
+        logContractViolation({
+          planId: unwrap(this.program.id),
+          stepId: unwrap(step.id),
+          artifactId: unwrap(violation.artifactId),
+          error: violation.kind,
+        });
+      }
       this.applyRetryOrFail(
         step,
-        `artifact commit rejected: ${commitResult.error.kind}`,
+        `artifact commit rejected: ${violation.kind}`,
       );
       return;
     }
