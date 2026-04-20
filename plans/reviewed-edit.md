@@ -15,7 +15,6 @@ parameters:
 
 task: "{{task}}"
 successCriteria: "{{criteria}}"
-entryStep: implement
 artifacts:
   - id: notes
     description: Implementation and fix notes from the worker.
@@ -33,7 +32,6 @@ steps:
     instruction: |
       {{task}}
       Write a summary of your changes to the notes artifact.
-    reads: []
     writes: [notes]
     routes: { done: spec_review }
   - kind: action

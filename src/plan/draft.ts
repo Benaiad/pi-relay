@@ -35,14 +35,18 @@ const ActionStepSchema = Type.Object(
       description:
         "Task instruction handed to the actor, describing exactly what to do.",
     }),
-    reads: Type.Array(IdField("An ArtifactId this actor may read."), {
-      description:
-        "Artifacts visible to this step's actor in its input snapshot. Every read must have a writer.",
-    }),
-    writes: Type.Array(IdField("An ArtifactId this step may commit."), {
-      description:
-        "Artifacts this step is allowed to produce. Each artifact has at most one writing step.",
-    }),
+    reads: Type.Optional(
+      Type.Array(IdField("An ArtifactId this actor may read."), {
+        description:
+          "Artifacts visible to this step's actor in its input snapshot. Every read must have a writer. Defaults to none.",
+      }),
+    ),
+    writes: Type.Optional(
+      Type.Array(IdField("An ArtifactId this step may commit."), {
+        description:
+          "Artifacts this step is allowed to produce. Each artifact has at most one writing step. Defaults to none.",
+      }),
+    ),
     routes: Type.Record(
       Type.String({
         minLength: 1,
@@ -209,18 +213,22 @@ export const PlanDraftSchema = Type.Object(
           "How success will be judged. Referenced by actors and reviewers as part of their context.",
       }),
     ),
-    artifacts: Type.Array(ArtifactContractSchema, {
-      description:
-        "Every artifact the plan produces or consumes. Empty for plans with no intermediate state.",
-    }),
+    artifacts: Type.Optional(
+      Type.Array(ArtifactContractSchema, {
+        description:
+          "Every artifact the plan produces or consumes. Defaults to none.",
+      }),
+    ),
     steps: Type.Array(StepSchema, {
       minItems: 1,
       maxItems: 64,
       description:
         "All steps in the plan. Must contain the entry step and at least one terminal step. Max 64 steps.",
     }),
-    entryStep: IdField(
-      "StepId where execution begins. Must match one of the steps in `steps`.",
+    entryStep: Type.Optional(
+      IdField(
+        "StepId where execution begins. Defaults to the first step in `steps`.",
+      ),
     ),
   },
   {

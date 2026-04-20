@@ -73,7 +73,7 @@ export const compile = (
   if (!stepsResult.ok) return stepsResult;
   const { steps: stepsById, stepOrder } = stepsResult.value;
 
-  const entryStep = StepId(doc.entryStep);
+  const entryStep = doc.entryStep ? StepId(doc.entryStep) : stepOrder[0]!;
   if (!stepsById.has(entryStep)) {
     return err({
       kind: "missing_entry",
@@ -90,7 +90,7 @@ export const compile = (
   if (!edgeCheck.ok) return edgeCheck;
   const edges = edgeCheck.value;
 
-  const artifactCheck = buildArtifacts(doc.artifacts, stepsById);
+  const artifactCheck = buildArtifacts(doc.artifacts ?? [], stepsById);
   if (!artifactCheck.ok) return artifactCheck;
   const { artifacts, writers, allowedWriters, readers } = artifactCheck.value;
 
@@ -158,8 +158,8 @@ const brandAction = (
   id: StepId(doc.id),
   actor: ActorId(doc.actor),
   instruction: doc.instruction,
-  reads: doc.reads.map((r) => ArtifactId(r)),
-  writes: doc.writes.map((w) => ArtifactId(w)),
+  reads: (doc.reads ?? []).map((r) => ArtifactId(r)),
+  writes: (doc.writes ?? []).map((w) => ArtifactId(w)),
   routes: new Map(
     Object.entries(doc.routes).map(([route, to]) => [
       RouteId(route),
@@ -285,7 +285,7 @@ interface ArtifactIndices {
 }
 
 const buildArtifacts = (
-  contracts: PlanDraftDoc["artifacts"],
+  contracts: NonNullable<PlanDraftDoc["artifacts"]>,
   steps: ReadonlyMap<StepId, Step>,
 ): Result<ArtifactIndices, CompileError> => {
   const artifacts = new Map<ArtifactId, ArtifactContract>();

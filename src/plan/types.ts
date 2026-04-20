@@ -103,5 +103,5 @@ export interface PlanDraft {
   readonly successCriteria?: string;
   readonly artifacts: readonly ArtifactContract[];
   readonly steps: readonly Step[];
-  readonly entryStep: StepId;
+  readonly entryStep?: StepId;
 }

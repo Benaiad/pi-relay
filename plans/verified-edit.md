@@ -11,7 +11,6 @@ parameters:
 ---
 
 task: "{{task}}"
-entryStep: implement
 artifacts:
   - id: change_notes
     description: What was changed — files touched and a one-line description per file.
@@ -23,7 +22,6 @@ steps:
     instruction: |
       {{task}}
       Write a summary of your changes to the change_notes artifact.
-    reads: []
     writes: [change_notes]
     routes: { done: verify }
   - kind: verify_command

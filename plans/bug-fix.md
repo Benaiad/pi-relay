@@ -12,7 +12,6 @@ parameters:
 
 task: "Fix: {{bug}}"
 successCriteria: "Verification passes and the root cause is documented."
-entryStep: diagnose
 artifacts:
   - id: diagnosis
     description: "Root cause analysis: what's wrong, where, and the minimal fix."
@@ -36,7 +35,6 @@ steps:
       - file: the file containing the bug
       - line: approximate line number if identifiable
       - fix: the minimal change that resolves it
-    reads: []
     writes: [diagnosis]
     routes: { done: fix }
   - kind: action

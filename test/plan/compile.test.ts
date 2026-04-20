@@ -122,7 +122,15 @@ describe("compile", () => {
     expect(result.error.kind).toBe("duplicate_step");
   });
 
-  it("rejects a missing entry step", () => {
+  it("uses the first step as entry when entryStep is omitted", () => {
+    const { entryStep: _, ...planWithoutEntry } = basicPlan;
+    const result = compile(planWithoutEntry, defaultActors, fixedIdOptions);
+    expect(isOk(result)).toBe(true);
+    if (!isOk(result)) return;
+    expect(unwrap(result.value.entryStep)).toBe("plan");
+  });
+
+  it("rejects an explicit entryStep that does not exist", () => {
     const bad: PlanDraftDoc = { ...basicPlan, entryStep: "does-not-exist" };
     const result = compile(bad, defaultActors, fixedIdOptions);
     if (!isErr(result)) throw new Error("expected error");
@@ -135,6 +143,35 @@ describe("compile", () => {
         "done",
       ]);
     }
+  });
+
+  it("defaults artifacts to empty when omitted", () => {
+    const plan: PlanDraftDoc = {
+      task: "No artifacts needed.",
+      steps: [
+        {
+          kind: "action",
+          id: "work",
+          actor: "worker",
+          instruction: "Do the thing.",
+          routes: { done: "done" },
+        },
+        {
+          kind: "terminal",
+          id: "done",
+          outcome: "success",
+          summary: "Done.",
+        },
+      ],
+    };
+    const result = compile(plan, defaultActors, fixedIdOptions);
+    expect(isOk(result)).toBe(true);
+    if (!isOk(result)) return;
+    expect(result.value.artifacts.size).toBe(0);
+    const step = result.value.steps.get(StepId("work"));
+    if (step?.kind !== "action") throw new Error("expected action");
+    expect(step.reads).toEqual([]);
+    expect(step.writes).toEqual([]);
   });
 
   it("rejects a step referencing an unknown actor", () => {
@@ -201,7 +238,7 @@ describe("compile", () => {
     const bad: PlanDraftDoc = {
       ...basicPlan,
       artifacts: [
-        ...basicPlan.artifacts,
+        ...(basicPlan.artifacts ?? []),
         {
           id: "unused",
           description: "never produced",
@@ -221,7 +258,7 @@ describe("compile", () => {
     const bad: PlanDraftDoc = {
       ...basicPlan,
       artifacts: [
-        ...basicPlan.artifacts,
+        ...(basicPlan.artifacts ?? []),
         {
           id: "requirements",
           description: "dup",

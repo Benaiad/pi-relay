@@ -256,7 +256,7 @@ export const summarizePlanImpact = (
     actionStepCount,
     verifyStepCount,
     terminalStepCount,
-    artifactCount: plan.artifacts.length,
+    artifactCount: (plan.artifacts ?? []).length,
     uniqueActors: Array.from(uniqueActors),
     mayEdit,
     mayRunCommands,

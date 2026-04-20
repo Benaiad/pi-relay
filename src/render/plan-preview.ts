@@ -129,10 +129,10 @@ const buildActionBlock = (
 
   // Only show uses/produces when non-empty — empty declarations would add
   // noise. Use plain-English labels instead of `reads:` / `writes:`.
-  if (step.reads.length > 0) {
+  if (step.reads && step.reads.length > 0) {
     lines.push(`     ${theme.fg("dim", `Uses: ${step.reads.join(", ")}`)}`);
   }
-  if (step.writes.length > 0) {
+  if (step.writes && step.writes.length > 0) {
     lines.push(
       `     ${theme.fg("dim", `Produces: ${step.writes.join(", ")}`)}`,
     );

@@ -15,7 +15,6 @@ parameters:
 
 task: "Debate: {{topic}}"
 successCriteria: "The judge declares the question resolved with a justified verdict, or max rounds are reached."
-entryStep: argue
 artifacts:
   - id: debate_log
     description: "Full debate history — arguments, critiques, and verdicts from all rounds."

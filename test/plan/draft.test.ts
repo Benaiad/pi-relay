@@ -170,4 +170,26 @@ describe("PlanDraftSchema", () => {
     };
     expect(Value.Check(PlanDraftSchema, minimal)).toBe(true);
   });
+
+  it("accepts a plan without entryStep, artifacts, reads, or writes", () => {
+    const minimal: PlanDraftDoc = {
+      task: "Say hello.",
+      steps: [
+        {
+          kind: "action",
+          id: "greet",
+          actor: "worker",
+          instruction: "Produce a one-line greeting.",
+          routes: { done: "end" },
+        },
+        {
+          kind: "terminal",
+          id: "end",
+          outcome: "success",
+          summary: "Greeted.",
+        },
+      ],
+    };
+    expect(Value.Check(PlanDraftSchema, minimal)).toBe(true);
+  });
 });
