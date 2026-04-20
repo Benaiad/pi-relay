@@ -438,6 +438,24 @@ export class Scheduler {
 				writerStep: step.id,
 			});
 		}
+		const targetId = this.program.edges.get(edgeKey(step.id, route));
+		if (targetId) {
+			const targetStep = this.program.steps.get(targetId);
+			if (targetStep?.kind === "action") {
+				const missingForTarget = targetStep.reads.filter(
+					(readId) => step.writes.includes(readId) && !writes.has(readId),
+				);
+				if (missingForTarget.length > 0) {
+					const names = missingForTarget.map(unwrap).join(", ");
+					this.applyRetryOrFail(
+						step,
+						`route '${unwrap(route)}' leads to step '${unwrap(targetId)}' which reads [${names}], but this step did not write them`,
+					);
+					return;
+				}
+			}
+		}
+
 		this.emit({
 			kind: "action_completed",
 			at: this.clock(),

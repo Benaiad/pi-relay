@@ -758,6 +758,64 @@ describe("Scheduler — terminal routes", () => {
 		expect(report.summary).toContain("maxRuns cap");
 	});
 
+	it("rejects a completion that routes to a reader without writing the required artifact", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Diagnose then fix.",
+			artifacts: [{ id: "diag", description: "d", fields: ["cause"] }],
+			steps: [
+				{
+					kind: "action",
+					id: "diagnose",
+					actor: "worker",
+					instruction: "find bug",
+					writes: ["diag"],
+					routes: { found: "fix", clean: "done" },
+				},
+				{
+					kind: "action",
+					id: "fix",
+					actor: "worker",
+					instruction: "fix it",
+					reads: ["diag"],
+					routes: { done: "done" },
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+			],
+		};
+		const engine = new ScriptedActorEngine(
+			new Map([
+				["diagnose", [completed("found")]],
+				["fix", [completed("done")]],
+			]),
+		);
+		const { scheduler } = buildScheduler(plan, engine);
+		const report = await scheduler.run();
+		expect(["incomplete", "failure"]).toContain(report.outcome);
+		expect(report.summary).toContain("did not write");
+	});
+
+	it("allows routing without writing when the target does not read the artifact", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Optional write.",
+			artifacts: [{ id: "notes", description: "n" }],
+			steps: [
+				{
+					kind: "action",
+					id: "work",
+					actor: "worker",
+					instruction: "do",
+					writes: ["notes"],
+					routes: { done: "done" },
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+			],
+		};
+		const engine = new ScriptedActorEngine(new Map([["work", [completed("done")]]]));
+		const { scheduler } = buildScheduler(plan, engine);
+		const report = await scheduler.run();
+		expect(report.outcome).toBe("success");
+	});
+
 	it("marks unreached branches as skipped after run_finished fires", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Pick the good path, leave the alternate branch unreached.",
