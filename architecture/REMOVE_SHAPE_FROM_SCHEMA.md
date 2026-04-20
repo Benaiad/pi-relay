@@ -123,33 +123,75 @@ A `record_list` with multiple entries and free-form text in field values will
 amplify this fragility.
 
 The encoding mechanism must be improved before `fields`/`list` can be useful.
-Options:
 
-**A. Artifact writes via tool calls.** Add `write_artifact` as an actor tool.
-The model provider handles JSON encoding natively — escaping, structure, and
-validation are solved at the API level. The completion block shrinks to just
-the route: `<relay-complete>{"route":"done"}</relay-complete>`. This is the
-cleanest option.
+### XML encoding for artifact values
 
-**B. XML encoding for field values.** Actors write fields as tagged content
-instead of JSON:
+Replace JSON artifact values in the completion block with XML-tagged fields.
+Actors write each artifact as a tagged block with one tag per field:
+
 ```xml
+<relay-complete>
+<route>done</route>
 <artifact id="diagnosis">
 <root_cause>null check missing</root_cause>
 <file>src/auth.ts</file>
+<line>42</line>
+<fix>add null guard before accessing user.email</fix>
+</artifact>
+</relay-complete>
+```
+
+For `list: true` artifacts, each item is wrapped in an `<item>` tag:
+
+```xml
+<artifact id="diagnosis">
+<item>
+<root_cause>null check missing</root_cause>
+<file>src/auth.ts</file>
+<line>42</line>
+<fix>add null guard</fix>
+</item>
+<item>
+<root_cause>race condition in session refresh</root_cause>
+<file>src/session.ts</file>
+<line>88</line>
+<fix>lock before read-modify-write</fix>
+</item>
 </artifact>
 ```
-No escaping issues. Models produce XML-style tags more reliably than nested
-JSON. But values become untyped strings.
 
-**C. Separate artifact blocks from routing.** Keep the completion tag for
-routing only. Artifact values go in separate tagged blocks outside the
-completion JSON, parsed independently. A malformed artifact doesn't corrupt
-the route.
+For `text` artifacts (no `fields`), the value is the tag's text content:
 
-The encoding decision should be made before implementing `fields`/`list`. Field
-validation built on an unreliable transport wastes retries on encoding errors,
-not structural errors.
+```xml
+<artifact id="fix_notes">Applied the null guard and added a regression test.</artifact>
+```
+
+**Why XML over JSON:**
+- No escaping issues. Field values are plain text — no quotes to escape, no
+  braces to balance. The only problematic characters (`<`, `>`, `&`) are rare
+  in natural language and can be handled with a simple unescape.
+- Models produce XML-style tags more reliably than nested JSON. The tag names
+  come from the `fields` declaration, so the actor's prompt shows exactly what
+  tags to emit.
+- Each field is independently parseable. A malformed value in one field doesn't
+  corrupt the rest of the artifact.
+- The route moves from JSON to a simple `<route>done</route>` tag, eliminating
+  the last piece of JSON the actor must produce correctly.
+
+**What this means for the completion protocol:**
+- `parseCompletion` in `complete-step.ts` changes from JSON parsing to XML/tag
+  extraction. The `tryExtractJson` recovery logic goes away — XML tags are
+  either present or absent, no partial recovery needed.
+- `buildCompletionInstruction` changes the format example from the JSON block
+  to the XML block.
+- The `ParsedCompletion` type changes: `writes` becomes a map of artifact ids
+  to parsed field maps (for `record`/`record_list`) or strings (for `text`).
+- All field values are strings. The runtime does not attempt type coercion.
+  If a downstream consumer needs a number, it parses the string.
+
+**This is a breaking change to the completion protocol.** It must be
+implemented before `fields`/`list` — the XML encoding is the transport that
+makes field validation meaningful.
 
 ## What changes
 
