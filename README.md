@@ -58,7 +58,7 @@ Verify steps route via fixed `onPass` / `onFail` fields.
 
 ### Artifacts
 
-Structured state passed between steps. Declared at the plan level with an id and description, then read and written by action steps. The runtime enforces that only declared writers commit values. Artifacts accumulate across loop iterations with attribution metadata.
+Structured state passed between steps. Declared at the plan level with an id and description, then read and written by action steps. Artifacts can optionally declare `fields` (named keys the value must contain) and `list: true` (value is an array of objects with those fields). The runtime validates committed values against the declared shape and enforces that only declared writers commit. Artifacts accumulate across loop iterations with attribution metadata.
 
 ### Back-edges and loops
 
@@ -220,15 +220,11 @@ parameters:
 ---
 
 task: "{{task}}"
-entryStep: implement
-artifacts: []
 steps:
   - kind: action
     id: implement
     actor: worker
     instruction: "{{task}}"
-    reads: []
-    writes: []
     routes: { done: verify }
   - kind: verify_command
     id: verify
