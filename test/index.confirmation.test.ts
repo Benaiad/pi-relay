@@ -25,7 +25,7 @@ const registry = new Map<ReturnType<typeof ActorId>, ActorConfig>([
 const readOnlyPlan: PlanDraftDoc = {
   task: "Describe what the parser does.",
   artifacts: [
-    { id: "summary", description: "analysis", shape: { kind: "untyped_json" } },
+    { id: "summary", description: "analysis" },
   ],
   steps: [
     {
@@ -46,7 +46,7 @@ const mutatingPlan: PlanDraftDoc = {
   task: "Add a feature flag and verify the tests pass.",
   successCriteria: "Tests green after the change.",
   artifacts: [
-    { id: "notes", description: "n", shape: { kind: "untyped_json" } },
+    { id: "notes", description: "n" },
   ],
   steps: [
     {

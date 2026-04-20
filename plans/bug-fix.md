@@ -15,10 +15,10 @@ successCriteria: "Verification passes and the root cause is documented."
 artifacts:
   - id: diagnosis
     description: "Root cause analysis: what's wrong, where, and the minimal fix."
-    shape: { kind: untyped_json }
+
   - id: fix_notes
     description: What was changed to fix the bug.
-    shape: { kind: untyped_json }
+
 steps:
   - kind: action
     id: diagnose

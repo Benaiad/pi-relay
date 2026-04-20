@@ -10,12 +10,10 @@ const validPlan: PlanDraftDoc = {
     {
       id: "requirements",
       description: "Parsed requirements",
-      shape: { kind: "untyped_json" },
     },
     {
       id: "implementation-notes",
       description: "Notes from the implementer",
-      shape: { kind: "untyped_json" },
     },
   ],
   steps: [

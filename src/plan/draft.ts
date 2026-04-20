@@ -171,16 +171,6 @@ const StepSchema = Type.Union(
   },
 );
 
-const ArtifactShapeSchema = Type.Object(
-  {
-    kind: Type.Literal("untyped_json"),
-  },
-  {
-    description:
-      "The stored shape of an artifact. v0.1 only supports `untyped_json`; named TypeBox shapes land in v0.2.",
-  },
-);
-
 const ArtifactContractSchema = Type.Object(
   {
     id: IdField("Unique artifact identifier within this plan."),
@@ -190,11 +180,10 @@ const ArtifactContractSchema = Type.Object(
       description:
         "What this artifact represents, e.g. 'parsed requirements' or 'test output JSON'.",
     }),
-    shape: ArtifactShapeSchema,
   },
   {
     description:
-      "Compile-time declaration of an artifact's identity, description, and shape.",
+      "Compile-time declaration of an artifact's identity and description.",
   },
 );
 

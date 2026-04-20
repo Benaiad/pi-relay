@@ -14,7 +14,7 @@ task: "{{task}}"
 artifacts:
   - id: change_notes
     description: What was changed — files touched and a one-line description per file.
-    shape: { kind: untyped_json }
+
 steps:
   - kind: action
     id: implement

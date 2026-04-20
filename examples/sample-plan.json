@@ -4,8 +4,7 @@
 	"artifacts": [
 		{
 			"id": "implementation-notes",
-			"description": "What the worker changed, as JSON: files touched and a one-line summary per file.",
-			"shape": { "kind": "untyped_json" }
+			"description": "What the worker changed, as JSON: files touched and a one-line summary per file."
 		}
 	],
 	"steps": [

@@ -100,7 +100,6 @@ entryStep: rename
 artifacts:
   - id: notes
     description: Rename notes.
-    shape: { kind: untyped_json }
 steps:
   - kind: action
     id: rename

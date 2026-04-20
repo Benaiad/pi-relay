@@ -297,7 +297,7 @@ const buildArtifacts = (
     artifacts.set(id, {
       id,
       description: c.description,
-      shape: c.shape,
+      shape: { kind: "untyped_json" },
     });
   }
 

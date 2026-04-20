@@ -130,7 +130,7 @@ const engineError =
 const linearPlan: PlanDraftDoc = {
   task: "Linear two-step plan.",
   artifacts: [
-    { id: "note", description: "n", shape: { kind: "untyped_json" } },
+    { id: "note", description: "n" },
   ],
   steps: [
     {
@@ -373,8 +373,8 @@ describe("Scheduler — artifact contract violations", () => {
     const plan: PlanDraftDoc = {
       task: "Two-step with contracts.",
       artifacts: [
-        { id: "a", description: "a", shape: { kind: "untyped_json" } },
-        { id: "b", description: "b", shape: { kind: "untyped_json" } },
+        { id: "a", description: "a" },
+        { id: "b", description: "b" },
       ],
       steps: [
         {
@@ -454,8 +454,8 @@ describe("Scheduler — terminal routes", () => {
     const plan: PlanDraftDoc = {
       task: "Loop with back-edge, timeline check.",
       artifacts: [
-        { id: "notes", description: "n", shape: { kind: "untyped_json" } },
-        { id: "verdict", description: "v", shape: { kind: "untyped_json" } },
+        { id: "notes", description: "n" },
+        { id: "verdict", description: "v" },
       ],
       steps: [
         {
@@ -539,8 +539,8 @@ describe("Scheduler — terminal routes", () => {
     const plan: PlanDraftDoc = {
       task: "Simple review loop with one iteration.",
       artifacts: [
-        { id: "notes", description: "impl", shape: { kind: "untyped_json" } },
-        { id: "verdict", description: "r", shape: { kind: "untyped_json" } },
+        { id: "notes", description: "impl" },
+        { id: "verdict", description: "r" },
       ],
       steps: [
         {
@@ -618,8 +618,8 @@ describe("Scheduler — terminal routes", () => {
     const plan: PlanDraftDoc = {
       task: "Loop once.",
       artifacts: [
-        { id: "notes", description: "n", shape: { kind: "untyped_json" } },
-        { id: "verdict", description: "v", shape: { kind: "untyped_json" } },
+        { id: "notes", description: "n" },
+        { id: "verdict", description: "v" },
       ],
       steps: [
         {
@@ -689,12 +689,8 @@ describe("Scheduler — terminal routes", () => {
     const plan: PlanDraftDoc = {
       task: "Review-fix loop.",
       artifacts: [
-        { id: "notes", description: "impl", shape: { kind: "untyped_json" } },
-        {
-          id: "verdict",
-          description: "review",
-          shape: { kind: "untyped_json" },
-        },
+        { id: "notes", description: "impl" },
+        { id: "verdict", description: "review" },
       ],
       steps: [
         {
@@ -763,7 +759,7 @@ describe("Scheduler — terminal routes", () => {
     const plan: PlanDraftDoc = {
       task: "Two-actor ping-pong that never converges.",
       artifacts: [
-        { id: "state", description: "s", shape: { kind: "untyped_json" } },
+        { id: "state", description: "s" },
       ],
       steps: [
         {

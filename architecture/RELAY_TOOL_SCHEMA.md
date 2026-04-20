@@ -21,7 +21,7 @@ Here's the schema definition the models see for the `relay` tool — this is wha
       "description": "Every artifact the plan produces or consumes. Defaults to none.",
       "items": {
         "type": "object",
-        "required": ["id", "description", "shape"],
+        "required": ["id", "description"],
         "properties": {
           "id": {
             "type": "string",
@@ -35,17 +35,9 @@ Here's the schema definition the models see for the `relay` tool — this is wha
             "minLength": 1,
             "maxLength": 1000,
             "description": "What this artifact represents, e.g. 'parsed requirements' or 'test output JSON'."
-          },
-          "shape": {
-            "type": "object",
-            "required": ["kind"],
-            "properties": {
-              "kind": { "const": "untyped_json" }
-            },
-            "description": "The stored shape of an artifact. v0.1 only supports `untyped_json`; named TypeBox shapes land in v0.2."
           }
         },
-        "description": "Compile-time declaration of an artifact's identity, description, and shape."
+        "description": "Compile-time declaration of an artifact's identity and description."
       }
     },
     "steps": {
@@ -150,3 +142,4 @@ Key changes from the previous schema version:
 - `artifacts` is optional — defaults to empty
 - `reads` and `writes` on action steps are optional — default to empty
 - Action step `required` is now `["kind", "id", "actor", "instruction", "routes"]` — was `["kind", "id", "actor", "instruction", "reads", "writes", "routes"]`
+- `shape` removed from artifact declarations — was `{ kind: "untyped_json" }`, the only possible value. The compiler hardcodes it internally.

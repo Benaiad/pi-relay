@@ -16,8 +16,8 @@ const actors = {
 const planWithTwoWriters: PlanDraftDoc = {
   task: "t",
   artifacts: [
-    { id: "a", description: "a", shape: { kind: "untyped_json" } },
-    { id: "b", description: "b", shape: { kind: "untyped_json" } },
+    { id: "a", description: "a" },
+    { id: "b", description: "b" },
   ],
   steps: [
     {
@@ -175,7 +175,7 @@ describe("ArtifactStore", () => {
     const plan: PlanDraftDoc = {
       task: "t",
       artifacts: [
-        { id: "log", description: "log", shape: { kind: "untyped_json" } },
+        { id: "log", description: "log" },
       ],
       steps: [
         {

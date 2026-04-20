@@ -30,12 +30,10 @@ const basicPlan: PlanDraftDoc = {
     {
       id: "requirements",
       description: "Parsed requirements",
-      shape: { kind: "untyped_json" },
     },
     {
       id: "notes",
       description: "Implementer notes",
-      shape: { kind: "untyped_json" },
     },
   ],
   steps: [
@@ -242,7 +240,6 @@ describe("compile", () => {
         {
           id: "unused",
           description: "never produced",
-          shape: { kind: "untyped_json" },
         },
       ],
     };
@@ -262,7 +259,6 @@ describe("compile", () => {
         {
           id: "requirements",
           description: "dup",
-          shape: { kind: "untyped_json" },
         },
       ],
     };
@@ -275,7 +271,7 @@ describe("compile", () => {
     const plan: PlanDraftDoc = {
       task: "Run tests and branch on outcome.",
       artifacts: [
-        { id: "spec", description: "spec", shape: { kind: "untyped_json" } },
+        { id: "spec", description: "spec" },
       ],
       steps: [
         {

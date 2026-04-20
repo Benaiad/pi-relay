@@ -283,7 +283,7 @@ describe("instantiateTemplate", () => {
         task: "test {{flag}}",
         entryStep: "a",
         artifacts: [
-          { id: "x", description: "x", shape: { kind: "untyped_json" } },
+          { id: "x", description: "x" },
         ],
         steps: [
           {

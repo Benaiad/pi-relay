@@ -30,7 +30,7 @@ successCriteria: "All three gates pass: {{gate1_name}}, {{gate2_name}}, {{gate3_
 artifacts:
   - id: change_notes
     description: What was changed — files touched and a one-line description per file.
-    shape: { kind: untyped_json }
+
 steps:
   - kind: action
     id: implement
