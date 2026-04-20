@@ -234,15 +234,55 @@ line three</artifact>
     expect(result.value.route).toBe("first");
   });
 
-  it("handles an artifact value that looks like JSON", () => {
+  it("parses field tags inside an artifact as a record", () => {
     const text = `<relay-complete>
 <route>done</route>
-<artifact id="spec">{"ok": true, "count": 3}</artifact>
+<artifact id="diag">
+<root_cause>null check missing</root_cause>
+<file>src/auth.ts</file>
+</artifact>
 </relay-complete>`;
     const result = parseCompletion(text);
     expect(isOk(result)).toBe(true);
     if (!isOk(result)) return;
-    expect(result.value.writes.spec).toBe('{"ok": true, "count": 3}');
+    expect(result.value.writes.diag).toEqual({
+      root_cause: "null check missing",
+      file: "src/auth.ts",
+    });
+  });
+
+  it("parses item tags inside an artifact as a record_list", () => {
+    const text = `<relay-complete>
+<route>done</route>
+<artifact id="issues">
+<item>
+<file>a.ts</file>
+<fix>add guard</fix>
+</item>
+<item>
+<file>b.ts</file>
+<fix>remove dead code</fix>
+</item>
+</artifact>
+</relay-complete>`;
+    const result = parseCompletion(text);
+    expect(isOk(result)).toBe(true);
+    if (!isOk(result)) return;
+    expect(result.value.writes.issues).toEqual([
+      { file: "a.ts", fix: "add guard" },
+      { file: "b.ts", fix: "remove dead code" },
+    ]);
+  });
+
+  it("returns plain text for artifacts without tags", () => {
+    const text = `<relay-complete>
+<route>done</route>
+<artifact id="notes">just a plain summary</artifact>
+</relay-complete>`;
+    const result = parseCompletion(text);
+    expect(isOk(result)).toBe(true);
+    if (!isOk(result)) return;
+    expect(result.value.writes.notes).toBe("just a plain summary");
   });
 
   it("handles a large artifact value", () => {

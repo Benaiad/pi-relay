@@ -35,10 +35,12 @@ const COMPLETE_RE_GLOBAL = /<relay-complete>[\s\S]*?<\/relay-complete>/g;
 
 const ROUTE_RE = /<route>([\s\S]*?)<\/route>/;
 const ARTIFACT_RE = /<artifact\s+id="([^"]+)">([\s\S]*?)<\/artifact>/g;
+const ITEM_RE = /<item>([\s\S]*?)<\/item>/g;
+const FIELD_TAG_RE = /<([a-zA-Z0-9_.:-]+)>([\s\S]*?)<\/\1>/g;
 
 export interface ParsedCompletion {
   readonly route: string;
-  readonly writes: Record<string, string>;
+  readonly writes: Record<string, unknown>;
 }
 
 export interface CompletionInstructionInput {
@@ -76,10 +78,7 @@ export const buildCompletionInstruction = (
           })
           .join("\n");
 
-  const exampleArtifact =
-    input.writableArtifactIds.length > 0
-      ? `\n<artifact id="${unwrap(input.writableArtifactIds[0]!)}">value here</artifact>`
-      : "";
+  const exampleBlock = buildExampleBlock(input);
 
   return [
     "## Relay completion protocol",
@@ -88,17 +87,19 @@ export const buildCompletionInstruction = (
     "your final output for a completion block in the exact format below.",
     "Do not emit this block until every task requirement is complete.",
     "",
-    `${COMPLETE_OPEN}`,
-    `<route>ROUTE_NAME</route>${exampleArtifact}`,
-    `${COMPLETE_CLOSE}`,
+    exampleBlock,
     "",
     "Requirements:",
     "- Emit the block exactly once, as the VERY LAST thing in your reply.",
     "- Use XML tags as shown. `<route>` is required. One `<artifact>` tag",
     "  per writable artifact you want to commit.",
-    "- Artifact values are plain text between the tags. Do NOT use JSON.",
-    "  Keep values compact — short summaries, not long prose.",
-    "  Put detailed text in your narration (before the completion block).",
+    "- For structured artifacts with declared fields, use one XML tag per",
+    "  field (e.g. `<root_cause>value</root_cause>`). For list artifacts,",
+    "  wrap each entry in `<item>` tags.",
+    "- For text artifacts (no fields), put plain text directly inside the",
+    "  `<artifact>` tag. Do NOT use JSON.",
+    "- Keep values compact. Put detailed text in your narration (before",
+    "  the completion block), not inside the artifact tags.",
     "- `route` must be one of the allowed routes listed below.",
     "",
     "Allowed routes (choose exactly one):",
@@ -135,16 +136,78 @@ export const parseCompletion = (
     return err("completion block has an empty <route> tag");
   }
 
-  const writes: Record<string, string> = {};
+  const writes: Record<string, unknown> = {};
   let artifactMatch: RegExpExecArray | null;
   const artifactRe = new RegExp(ARTIFACT_RE.source, ARTIFACT_RE.flags);
   while ((artifactMatch = artifactRe.exec(payload)) !== null) {
     const id = artifactMatch[1]!;
-    const value = unescapeXml(artifactMatch[2]!.trim());
-    writes[id] = value;
+    const rawContent = artifactMatch[2]!.trim();
+    writes[id] = parseArtifactContent(rawContent);
   }
 
   return ok({ route, writes });
+};
+
+const buildExampleBlock = (input: CompletionInstructionInput): string => {
+  const lines: string[] = [COMPLETE_OPEN, "<route>ROUTE_NAME</route>"];
+
+  for (const id of input.writableArtifactIds) {
+    const contract = input.artifactContracts.get(id);
+    const idStr = unwrap(id);
+    if (!contract || contract.shape.kind === "text") {
+      lines.push(`<artifact id="${idStr}">plain text value</artifact>`);
+    } else if (contract.shape.kind === "record") {
+      lines.push(`<artifact id="${idStr}">`);
+      for (const field of contract.shape.fields) {
+        lines.push(`<${field}>value</${field}>`);
+      }
+      lines.push("</artifact>");
+    } else if (contract.shape.kind === "record_list") {
+      lines.push(`<artifact id="${idStr}">`);
+      lines.push("<item>");
+      for (const field of contract.shape.fields) {
+        lines.push(`<${field}>value</${field}>`);
+      }
+      lines.push("</item>");
+      lines.push("</artifact>");
+    }
+    break;
+  }
+
+  lines.push(COMPLETE_CLOSE);
+  return lines.join("\n");
+};
+
+/**
+ * Infer structure from artifact content.
+ *
+ * - If `<item>` tags are present → parse each item's field tags → array
+ * - If field-level tags are present (no `<item>`) → parse as single record
+ * - Otherwise → plain text string
+ */
+const parseArtifactContent = (content: string): unknown => {
+  const itemRe = new RegExp(ITEM_RE.source, ITEM_RE.flags);
+  const items: Record<string, string>[] = [];
+  let itemMatch: RegExpExecArray | null;
+  while ((itemMatch = itemRe.exec(content)) !== null) {
+    items.push(parseFieldTags(itemMatch[1]!));
+  }
+  if (items.length > 0) return items;
+
+  const fields = parseFieldTags(content);
+  if (Object.keys(fields).length > 0) return fields;
+
+  return unescapeXml(content);
+};
+
+const parseFieldTags = (content: string): Record<string, string> => {
+  const fields: Record<string, string> = {};
+  const fieldRe = new RegExp(FIELD_TAG_RE.source, FIELD_TAG_RE.flags);
+  let fieldMatch: RegExpExecArray | null;
+  while ((fieldMatch = fieldRe.exec(content)) !== null) {
+    fields[fieldMatch[1]!] = unescapeXml(fieldMatch[2]!.trim());
+  }
+  return fields;
 };
 
 const XML_ENTITY_RE = /&(?:lt|gt|amp|quot|apos);/g;

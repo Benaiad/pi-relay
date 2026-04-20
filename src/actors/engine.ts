@@ -62,21 +62,6 @@ export const createSubprocessActorEngine = (): ActorEngine => ({
   runAction,
 });
 
-const tryParseJson = (text: string): unknown => {
-  const trimmed = text.trim();
-  if (
-    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-    (trimmed.startsWith("[") && trimmed.endsWith("]"))
-  ) {
-    try {
-      return JSON.parse(trimmed);
-    } catch {
-      return text;
-    }
-  }
-  return text;
-};
-
 const runAction = async (request: ActionRequest): Promise<ActionOutcome> => {
   const { actor, step, artifacts, artifactContracts, cwd, signal, onProgress } =
     request;
@@ -183,10 +168,10 @@ const runAction = async (request: ActionRequest): Promise<ActionOutcome> => {
 
     const allowedWrites = new Set<ArtifactIdType>(step.writes);
     const writes = new Map<ArtifactIdType, unknown>();
-    for (const [idStr, rawValue] of Object.entries(parsed.value.writes)) {
+    for (const [idStr, value] of Object.entries(parsed.value.writes)) {
       const id = ArtifactId(idStr);
       if (!allowedWrites.has(id)) continue;
-      writes.set(id, tryParseJson(rawValue));
+      writes.set(id, value);
     }
 
     return {
