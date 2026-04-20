@@ -143,6 +143,48 @@ describe("compile", () => {
     }
   });
 
+  it("derives text shape for artifacts without fields", () => {
+    const result = compile(basicPlan, defaultActors, fixedIdOptions);
+    if (!isOk(result)) throw new Error("expected ok");
+    const contract = result.value.artifacts.get(ArtifactId("requirements"));
+    expect(contract?.shape).toEqual({ kind: "text" });
+  });
+
+  it("derives record shape for artifacts with fields", () => {
+    const plan: PlanDraftDoc = {
+      ...basicPlan,
+      artifacts: [
+        { id: "requirements", description: "reqs", fields: ["x", "y"] },
+        { id: "notes", description: "notes" },
+      ],
+    };
+    const result = compile(plan, defaultActors, fixedIdOptions);
+    if (!isOk(result)) throw new Error("expected ok");
+    expect(result.value.artifacts.get(ArtifactId("requirements"))?.shape).toEqual({
+      kind: "record",
+      fields: ["x", "y"],
+    });
+    expect(result.value.artifacts.get(ArtifactId("notes"))?.shape).toEqual({
+      kind: "text",
+    });
+  });
+
+  it("derives record_list shape for artifacts with fields and list", () => {
+    const plan: PlanDraftDoc = {
+      ...basicPlan,
+      artifacts: [
+        { id: "requirements", description: "reqs", fields: ["a"], list: true },
+        { id: "notes", description: "notes" },
+      ],
+    };
+    const result = compile(plan, defaultActors, fixedIdOptions);
+    if (!isOk(result)) throw new Error("expected ok");
+    expect(result.value.artifacts.get(ArtifactId("requirements"))?.shape).toEqual({
+      kind: "record_list",
+      fields: ["a"],
+    });
+  });
+
   it("defaults artifacts to empty when omitted", () => {
     const plan: PlanDraftDoc = {
       task: "No artifacts needed.",

@@ -100,6 +100,7 @@ entryStep: rename
 artifacts:
   - id: notes
     description: Rename notes.
+    fields: [result]
 steps:
   - kind: action
     id: rename

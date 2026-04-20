@@ -190,4 +190,30 @@ describe("PlanDraftSchema", () => {
     };
     expect(Value.Check(PlanDraftSchema, minimal)).toBe(true);
   });
+
+  it("accepts an artifact with fields", () => {
+    const plan = {
+      ...validPlan,
+      artifacts: [{ id: "a", description: "a", fields: ["x", "y"] }],
+    };
+    expect(Value.Check(PlanDraftSchema, plan)).toBe(true);
+  });
+
+  it("accepts an artifact with fields and list", () => {
+    const plan = {
+      ...validPlan,
+      artifacts: [
+        { id: "a", description: "a", fields: ["x"], list: true },
+      ],
+    };
+    expect(Value.Check(PlanDraftSchema, plan)).toBe(true);
+  });
+
+  it("rejects an artifact with an empty fields array", () => {
+    const plan = {
+      ...validPlan,
+      artifacts: [{ id: "a", description: "a", fields: [] }],
+    };
+    expect(Value.Check(PlanDraftSchema, plan)).toBe(false);
+  });
 });

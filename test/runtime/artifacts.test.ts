@@ -16,7 +16,7 @@ const actors = {
 const planWithTwoWriters: PlanDraftDoc = {
   task: "t",
   artifacts: [
-    { id: "a", description: "a" },
+    { id: "a", description: "a", fields: ["value"] },
     { id: "b", description: "b" },
   ],
   steps: [
@@ -78,7 +78,7 @@ describe("ArtifactStore", () => {
 
   it("omits artifacts not listed in the snapshot's reads", () => {
     const store = buildStore();
-    store.commit(StepId("first"), new Map([[ArtifactId("a"), "hello"]]));
+    store.commit(StepId("first"), new Map([[ArtifactId("a"), { value: "hello" }]]));
     const snap = store.snapshot([]);
     expect(snap.has(ArtifactId("a"))).toBe(false);
     expect(snap.ids()).toEqual([]);
@@ -123,7 +123,7 @@ describe("ArtifactStore", () => {
     const result = store.commit(
       StepId("first"),
       new Map<ReturnType<typeof ArtifactId>, unknown>([
-        [ArtifactId("a"), { ok: true }],
+        [ArtifactId("a"), { value: true }],
         [ArtifactId("b"), { never: "committed" }],
       ]),
     );
@@ -149,21 +149,21 @@ describe("ArtifactStore", () => {
     const store = buildStore();
     store.commit(
       StepId("first"),
-      new Map([[ArtifactId("a"), { hello: "world" }]]),
+      new Map([[ArtifactId("a"), { value: "world" }]]),
     );
-    store.commit(StepId("second"), new Map([[ArtifactId("b"), [1, 2, 3]]]));
+    store.commit(StepId("second"), new Map([[ArtifactId("b"), "1, 2, 3"]]));
     expect(store.has(ArtifactId("a"))).toBe(true);
     expect(store.has(ArtifactId("b"))).toBe(true);
     const snap = store.snapshot([ArtifactId("a"), ArtifactId("b")]);
     const aEntries = snap.get(ArtifactId("a")) as Array<{ value: unknown }>;
     const bEntries = snap.get(ArtifactId("b")) as Array<{ value: unknown }>;
-    expect(aEntries[0]!.value).toEqual({ hello: "world" });
-    expect(bEntries[0]!.value).toEqual([1, 2, 3]);
+    expect(aEntries[0]!.value).toEqual({ value: "world" });
+    expect(bEntries[0]!.value).toEqual("1, 2, 3");
   });
 
   it("returns committed artifacts with writer bookkeeping via all()", () => {
     const store = buildStore();
-    store.commit(StepId("first"), new Map([[ArtifactId("a"), 1]]));
+    store.commit(StepId("first"), new Map([[ArtifactId("a"), { value: 1 }]]));
     const entries = store.all();
     expect(entries.length).toBe(1);
     expect(unwrap(entries[0]!.id)).toBe("a");
@@ -175,7 +175,7 @@ describe("ArtifactStore", () => {
     const plan: PlanDraftDoc = {
       task: "t",
       artifacts: [
-        { id: "log", description: "log" },
+        { id: "log", description: "log", fields: ["tried"] },
       ],
       steps: [
         {
@@ -243,6 +243,221 @@ describe("ArtifactStore", () => {
       { tried: "bitwise" },
       { tried: "wheel" },
     ]);
+  });
+
+  it("text shape accepts string values", () => {
+    const plan: PlanDraftDoc = {
+      task: "t",
+      artifacts: [{ id: "a", description: "a" }],
+      steps: [
+        {
+          kind: "action",
+          id: "s",
+          actor: "worker",
+          instruction: "do",
+          writes: ["a"],
+          routes: { done: "end" },
+        },
+        { kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+      ],
+    };
+    const result = compile(plan, actors, { generateId: () => "pid" });
+    if (!isOk(result)) throw new Error("compile should succeed");
+    const store = new ArtifactStore(result.value, () => 1);
+    expect(isOk(store.commit(StepId("s"), new Map([[ArtifactId("a"), "hello"]])))).toBe(true);
+  });
+
+  it("text shape rejects non-string values", () => {
+    const plan: PlanDraftDoc = {
+      task: "t",
+      artifacts: [{ id: "a", description: "a" }],
+      steps: [
+        {
+          kind: "action",
+          id: "s",
+          actor: "worker",
+          instruction: "do",
+          writes: ["a"],
+          routes: { done: "end" },
+        },
+        { kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+      ],
+    };
+    const result = compile(plan, actors, { generateId: () => "pid" });
+    if (!isOk(result)) throw new Error("compile should succeed");
+    const store = new ArtifactStore(result.value, () => 1);
+    const commit = store.commit(StepId("s"), new Map([[ArtifactId("a"), 42]]));
+    expect(isErr(commit)).toBe(true);
+    if (isErr(commit)) expect(commit.error.kind).toBe("shape_mismatch");
+  });
+
+  it("record shape accepts object with all declared fields", () => {
+    const plan: PlanDraftDoc = {
+      task: "t",
+      artifacts: [{ id: "a", description: "a", fields: ["x", "y"] }],
+      steps: [
+        {
+          kind: "action",
+          id: "s",
+          actor: "worker",
+          instruction: "do",
+          writes: ["a"],
+          routes: { done: "end" },
+        },
+        { kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+      ],
+    };
+    const result = compile(plan, actors, { generateId: () => "pid" });
+    if (!isOk(result)) throw new Error("compile should succeed");
+    const store = new ArtifactStore(result.value, () => 1);
+    expect(isOk(store.commit(StepId("s"), new Map([[ArtifactId("a"), { x: 1, y: 2 }]])))).toBe(true);
+  });
+
+  it("record shape permits extra fields", () => {
+    const plan: PlanDraftDoc = {
+      task: "t",
+      artifacts: [{ id: "a", description: "a", fields: ["x"] }],
+      steps: [
+        {
+          kind: "action",
+          id: "s",
+          actor: "worker",
+          instruction: "do",
+          writes: ["a"],
+          routes: { done: "end" },
+        },
+        { kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+      ],
+    };
+    const result = compile(plan, actors, { generateId: () => "pid" });
+    if (!isOk(result)) throw new Error("compile should succeed");
+    const store = new ArtifactStore(result.value, () => 1);
+    expect(isOk(store.commit(StepId("s"), new Map([[ArtifactId("a"), { x: 1, extra: true }]])))).toBe(true);
+  });
+
+  it("record shape rejects object missing a field", () => {
+    const plan: PlanDraftDoc = {
+      task: "t",
+      artifacts: [{ id: "a", description: "a", fields: ["x", "y"] }],
+      steps: [
+        {
+          kind: "action",
+          id: "s",
+          actor: "worker",
+          instruction: "do",
+          writes: ["a"],
+          routes: { done: "end" },
+        },
+        { kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+      ],
+    };
+    const result = compile(plan, actors, { generateId: () => "pid" });
+    if (!isOk(result)) throw new Error("compile should succeed");
+    const store = new ArtifactStore(result.value, () => 1);
+    const commit = store.commit(StepId("s"), new Map([[ArtifactId("a"), { x: 1 }]]));
+    expect(isErr(commit)).toBe(true);
+    if (isErr(commit)) expect(commit.error.kind).toBe("shape_mismatch");
+  });
+
+  it("record_list shape accepts array of conforming objects", () => {
+    const plan: PlanDraftDoc = {
+      task: "t",
+      artifacts: [{ id: "a", description: "a", fields: ["f"], list: true }],
+      steps: [
+        {
+          kind: "action",
+          id: "s",
+          actor: "worker",
+          instruction: "do",
+          writes: ["a"],
+          routes: { done: "end" },
+        },
+        { kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+      ],
+    };
+    const result = compile(plan, actors, { generateId: () => "pid" });
+    if (!isOk(result)) throw new Error("compile should succeed");
+    const store = new ArtifactStore(result.value, () => 1);
+    expect(isOk(store.commit(StepId("s"), new Map([[ArtifactId("a"), [{ f: "a" }, { f: "b" }]]])))).toBe(true);
+  });
+
+  it("record_list shape accepts empty array", () => {
+    const plan: PlanDraftDoc = {
+      task: "t",
+      artifacts: [{ id: "a", description: "a", fields: ["f"], list: true }],
+      steps: [
+        {
+          kind: "action",
+          id: "s",
+          actor: "worker",
+          instruction: "do",
+          writes: ["a"],
+          routes: { done: "end" },
+        },
+        { kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+      ],
+    };
+    const result = compile(plan, actors, { generateId: () => "pid" });
+    if (!isOk(result)) throw new Error("compile should succeed");
+    const store = new ArtifactStore(result.value, () => 1);
+    expect(isOk(store.commit(StepId("s"), new Map([[ArtifactId("a"), []]])))).toBe(true);
+  });
+
+  it("record_list shape rejects element missing a field", () => {
+    const plan: PlanDraftDoc = {
+      task: "t",
+      artifacts: [{ id: "a", description: "a", fields: ["f", "g"], list: true }],
+      steps: [
+        {
+          kind: "action",
+          id: "s",
+          actor: "worker",
+          instruction: "do",
+          writes: ["a"],
+          routes: { done: "end" },
+        },
+        { kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+      ],
+    };
+    const result = compile(plan, actors, { generateId: () => "pid" });
+    if (!isOk(result)) throw new Error("compile should succeed");
+    const store = new ArtifactStore(result.value, () => 1);
+    const commit = store.commit(
+      StepId("s"),
+      new Map([[ArtifactId("a"), [{ f: "ok", g: "ok" }, { f: "ok" }]]]),
+    );
+    expect(isErr(commit)).toBe(true);
+    if (isErr(commit)) {
+      expect(commit.error.kind).toBe("shape_mismatch");
+      if (commit.error.kind === "shape_mismatch") {
+        expect(commit.error.reason).toContain("[1]");
+        expect(commit.error.reason).toContain("g");
+      }
+    }
+  });
+
+  it("record_list shape rejects non-array value", () => {
+    const plan: PlanDraftDoc = {
+      task: "t",
+      artifacts: [{ id: "a", description: "a", fields: ["f"], list: true }],
+      steps: [
+        {
+          kind: "action",
+          id: "s",
+          actor: "worker",
+          instruction: "do",
+          writes: ["a"],
+          routes: { done: "end" },
+        },
+        { kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+      ],
+    };
+    const result = compile(plan, actors, { generateId: () => "pid" });
+    if (!isOk(result)) throw new Error("compile should succeed");
+    const store = new ArtifactStore(result.value, () => 1);
+    const commit = store.commit(StepId("s"), new Map([[ArtifactId("a"), "not an array"]]));
+    expect(isErr(commit)).toBe(true);
+    if (isErr(commit)) expect(commit.error.kind).toBe("shape_mismatch");
   });
 
   it("formatContractViolation produces a useful message for each variant", () => {

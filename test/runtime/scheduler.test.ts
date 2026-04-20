@@ -130,7 +130,7 @@ const engineError =
 const linearPlan: PlanDraftDoc = {
   task: "Linear two-step plan.",
   artifacts: [
-    { id: "note", description: "n" },
+    { id: "note", description: "n", fields: ["ok"] },
   ],
   steps: [
     {
@@ -342,7 +342,7 @@ describe("Scheduler — abort", () => {
 describe("Scheduler — audit replay", () => {
   it("replaying the captured audit yields an identical final state", async () => {
     const engine = new ScriptedActorEngine(
-      new Map([["first", [completed("next", { note: 1 })]]]),
+      new Map([["first", [completed("next", { note: { ok: 1 } })]]]),
     );
     const { scheduler, program } = buildScheduler(linearPlan, engine);
     await scheduler.run();
@@ -402,8 +402,8 @@ describe("Scheduler — artifact contract violations", () => {
     // First attempt: try to write to b (not allowed) — should cause a rejection and a retry.
     const engine = new ScriptedActorEngine(
       new Map([
-        ["first", [completed("next", { b: 1 }), completed("next", { a: 1 })]],
-        ["second", [completed("done", { b: 2 })]],
+        ["first", [completed("next", { b: "1" }), completed("next", { a: "1" })]],
+        ["second", [completed("done", { b: "2" })]],
       ]),
     );
     const { scheduler } = buildScheduler(plan, engine);
@@ -454,8 +454,8 @@ describe("Scheduler — terminal routes", () => {
     const plan: PlanDraftDoc = {
       task: "Loop with back-edge, timeline check.",
       artifacts: [
-        { id: "notes", description: "n" },
-        { id: "verdict", description: "v" },
+        { id: "notes", description: "n", fields: ["v"] },
+        { id: "verdict", description: "v", fields: ["ok"] },
       ],
       steps: [
         {
@@ -539,8 +539,8 @@ describe("Scheduler — terminal routes", () => {
     const plan: PlanDraftDoc = {
       task: "Simple review loop with one iteration.",
       artifacts: [
-        { id: "notes", description: "impl" },
-        { id: "verdict", description: "r" },
+        { id: "notes", description: "impl", fields: ["v"] },
+        { id: "verdict", description: "r", fields: ["ok"] },
       ],
       steps: [
         {
@@ -618,8 +618,8 @@ describe("Scheduler — terminal routes", () => {
     const plan: PlanDraftDoc = {
       task: "Loop once.",
       artifacts: [
-        { id: "notes", description: "n" },
-        { id: "verdict", description: "v" },
+        { id: "notes", description: "n", fields: ["v"] },
+        { id: "verdict", description: "v", fields: ["ok"] },
       ],
       steps: [
         {
@@ -689,8 +689,8 @@ describe("Scheduler — terminal routes", () => {
     const plan: PlanDraftDoc = {
       task: "Review-fix loop.",
       artifacts: [
-        { id: "notes", description: "impl" },
-        { id: "verdict", description: "review" },
+        { id: "notes", description: "impl", fields: ["v"] },
+        { id: "verdict", description: "review", fields: ["ok"] },
       ],
       steps: [
         {
@@ -788,7 +788,7 @@ describe("Scheduler — terminal routes", () => {
     };
     const engine = new ScriptedActorEngine(
       new Map([
-        ["a", [completed("next", { state: 1 })]],
+        ["a", [completed("next", { state: "1" })]],
         ["b", [completed("again")]],
       ]),
     );

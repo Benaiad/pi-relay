@@ -21,9 +21,10 @@ artifacts:
 
   - id: spec_verdict
     description: "Spec compliance verdict: does the implementation match the requirements?"
-
+    fields: [compliant, gaps]
   - id: quality_verdict
     description: "Code quality verdict: is the implementation well-written?"
+    fields: [approved, issues, fixes]
 
 steps:
   - kind: action

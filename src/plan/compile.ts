@@ -294,11 +294,13 @@ const buildArtifacts = (
     if (artifacts.has(id)) {
       return err({ kind: "duplicate_artifact", artifactId: id });
     }
-    artifacts.set(id, {
-      id,
-      description: c.description,
-      shape: { kind: "untyped_json" },
-    });
+    const shape = c.fields
+      ? c.list
+        ? { kind: "record_list" as const, fields: c.fields }
+        : { kind: "record" as const, fields: c.fields }
+      : { kind: "text" as const };
+
+    artifacts.set(id, { id, description: c.description, shape });
   }
 
   const writers = new Map<ArtifactId, StepId>();

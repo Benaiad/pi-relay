@@ -32,10 +32,12 @@ import * as path from "node:path";
 import type { Message } from "@mariozechner/pi-ai";
 import { withFileMutationQueue } from "@mariozechner/pi-coding-agent";
 import type { ArtifactId as ArtifactIdType, StepId } from "../plan/ids.js";
+import type { ArtifactContract } from "../plan/types.js";
 import { ArtifactId, RouteId, unwrap } from "../plan/ids.js";
 import { isAccumulatedEntryArray } from "../runtime/accumulated-entry.js";
 import {
   buildCompletionInstruction,
+  formatShapeHint,
   parseCompletion,
 } from "./complete-step.js";
 import { renderValue } from "./render-value.js";
@@ -231,7 +233,7 @@ const buildTaskPrompt = (
   instruction: string,
   reads: readonly ArtifactIdType[],
   artifacts: ActionRequest["artifacts"],
-  contracts: ReadonlyMap<ArtifactIdType, { description: string }>,
+  contracts: ReadonlyMap<ArtifactIdType, ArtifactContract>,
   priorAttempts: ActionRequest["priorAttempts"],
   actorName: string,
   stepId: StepId,
@@ -300,7 +302,7 @@ const buildTaskPrompt = (
       const contract = contracts.get(id);
       const desc = contract?.description ?? "";
       const value = artifacts.get(id);
-      inputs.push(renderArtifact(unwrap(id), desc, value, stepActorResolver));
+      inputs.push(renderArtifact(unwrap(id), contract, value, stepActorResolver));
     }
     if (inputs.length > 0) {
       lines.push("## Input artifacts", "", inputs.join("\n\n"));
@@ -320,14 +322,19 @@ const buildTaskPrompt = (
 
 const renderArtifact = (
   id: string,
-  description: string,
+  contract: ArtifactContract | undefined,
   value: unknown,
   stepActorResolver?: (stepId: StepId) => string | undefined,
 ): string => {
+  const description = contract?.description ?? "";
   const descSuffix = description ? ` (${description})` : "";
+  const shapeHint = contract ? formatShapeHint(contract.shape) : "";
 
   if (isAccumulatedEntryArray(value)) {
     const header = `### ${id}${descSuffix} — ${value.length} ${value.length === 1 ? "entry" : "entries"}`;
+    const headerWithShape = shapeHint
+      ? `${header}\n${shapeHint}`
+      : header;
     const entries = value.map((entry) => {
       const actor = stepActorResolver?.(entry.stepId) ?? unwrap(entry.stepId);
       const attemptSuffix =
@@ -335,10 +342,12 @@ const renderArtifact = (
       const attribution = `[${entry.index + 1}] by ${actor} (step: ${unwrap(entry.stepId)}${attemptSuffix}):`;
       return `${attribution}\n${renderValue(entry.value, 1)}`;
     });
-    return `${header}\n\n${entries.join("\n\n")}`;
+    return `${headerWithShape}\n\n${entries.join("\n\n")}`;
   }
 
-  return `### ${id}${descSuffix}\n\n${renderValue(value, 0)}`;
+  const header = `### ${id}${descSuffix}`;
+  const headerWithShape = shapeHint ? `${header}\n${shapeHint}` : header;
+  return `${headerWithShape}\n\n${renderValue(value, 0)}`;
 };
 
 // ============================================================================

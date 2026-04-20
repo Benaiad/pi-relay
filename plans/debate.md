@@ -18,6 +18,8 @@ successCriteria: "The judge declares the question resolved with a justified verd
 artifacts:
   - id: debate_log
     description: "Full debate history — arguments, critiques, and verdicts from all rounds."
+    fields: [role, claims]
+    list: true
 
 steps:
   - kind: action

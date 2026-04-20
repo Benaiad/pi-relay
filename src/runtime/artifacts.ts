@@ -12,9 +12,9 @@
  *   1. Every artifact has exactly one writer. The program's compiled
  *      `writers` index is the source of truth; commits from any other
  *      step are rejected.
- *   2. Every committed value matches the artifact's compiled shape. For
- *      v0.1 this is trivially true because the only shape is `untyped_json`;
- *      for v0.2 it becomes a TypeBox check.
+ *   2. Every committed value matches the artifact's compiled shape:
+ *      `text` (string), `record` (object with required fields), or
+ *      `record_list` (array of objects with required fields).
  *   3. Commits are all-or-nothing. If any write in a batch is invalid, none
  *      are applied.
  *
@@ -89,27 +89,43 @@ export const formatContractViolation = (
   }
 };
 
-/**
- * Validate a value against an artifact's compiled shape.
- *
- * v0.1 only supports `untyped_json`, which accepts any JSON-serializable value
- * (any value that round-trips through JSON.stringify without loss). A shape
- * registry lands in v0.2.
- */
+const validateRecord = (
+  value: unknown,
+  fields: readonly string[],
+): Result<void, string> => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return err(
+      `expected an object, got ${Array.isArray(value) ? "array" : typeof value}`,
+    );
+  }
+  const obj = value as Record<string, unknown>;
+  const missing = fields.filter((f) => !(f in obj));
+  if (missing.length > 0) {
+    return err(`missing fields: ${missing.join(", ")}`);
+  }
+  return ok(undefined);
+};
+
 const validateShape = (
   value: unknown,
   contract: ArtifactContract,
 ): Result<void, string> => {
   switch (contract.shape.kind) {
-    case "untyped_json": {
-      try {
-        const roundTripped = JSON.parse(JSON.stringify(value));
-        void roundTripped;
-        return ok(undefined);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return err(`value is not JSON-serializable: ${message}`);
+    case "text":
+      return typeof value === "string"
+        ? ok(undefined)
+        : err(`expected a string, got ${typeof value}`);
+    case "record":
+      return validateRecord(value, contract.shape.fields);
+    case "record_list": {
+      if (!Array.isArray(value)) {
+        return err(`expected an array, got ${typeof value}`);
       }
+      for (let i = 0; i < value.length; i++) {
+        const r = validateRecord(value[i], contract.shape.fields);
+        if (!r.ok) return err(`element [${i}]: ${r.error}`);
+      }
+      return ok(undefined);
     }
   }
 };

@@ -23,7 +23,7 @@
 import type { ArtifactId, RouteId } from "../plan/ids.js";
 import { unwrap } from "../plan/ids.js";
 import { err, ok, type Result } from "../plan/result.js";
-import type { ArtifactContract } from "../plan/types.js";
+import type { ArtifactContract, ArtifactShape } from "../plan/types.js";
 
 const COMPLETE_TAG = "relay-complete";
 
@@ -70,7 +70,9 @@ export const buildCompletionInstruction = (
           .map((id) => {
             const contract = input.artifactContracts.get(id);
             const description = contract?.description ?? "";
-            return `  - ${unwrap(id)}: ${description}`.trimEnd();
+            const line = `  - ${unwrap(id)}: ${description}`.trimEnd();
+            const hint = contract ? formatShapeHint(contract.shape) : "";
+            return hint ? `${line}\n${hint}` : line;
           })
           .join("\n");
 
@@ -157,6 +159,20 @@ const XML_ENTITIES: Record<string, string> = {
 
 const unescapeXml = (text: string): string =>
   text.replace(XML_ENTITY_RE, (entity) => XML_ENTITIES[entity] ?? entity);
+
+export const formatShapeHint = (shape: ArtifactShape): string => {
+  switch (shape.kind) {
+    case "text":
+      return "    Value: plain text";
+    case "record":
+      return `    Fields: ${shape.fields.join(", ")}`;
+    case "record_list":
+      return (
+        `    Fields (list): ${shape.fields.join(", ")}\n` +
+        "    Produce one <item> per entry found."
+      );
+  }
+};
 
 /**
  * Remove the `<relay-complete>...</relay-complete>` block from an actor's

@@ -180,10 +180,28 @@ const ArtifactContractSchema = Type.Object(
       description:
         "What this artifact represents, e.g. 'parsed requirements' or 'test output JSON'.",
     }),
+    fields: Type.Optional(
+      Type.Array(
+        IdField("A field name the artifact value must contain."),
+        {
+          minItems: 1,
+          description:
+            "Named fields the artifact value must include. " +
+            "Omit for plain text artifacts.",
+        },
+      ),
+    ),
+    list: Type.Optional(
+      Type.Boolean({
+        description:
+          "If true, the artifact is an array of objects each with the declared fields. " +
+          "Defaults to false (single object). Only meaningful when fields is present.",
+      }),
+    ),
   },
   {
     description:
-      "Compile-time declaration of an artifact's identity and description.",
+      "Compile-time declaration of an artifact's identity, description, and structure.",
   },
 );
 

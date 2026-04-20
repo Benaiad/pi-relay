@@ -9,8 +9,10 @@
 
 import type { ActorId, ArtifactId, RouteId, StepId } from "./ids.js";
 
-/** Shape of an artifact's stored value. MVP only supports untyped JSON. */
-export type ArtifactShape = { readonly kind: "untyped_json" };
+export type ArtifactShape =
+  | { readonly kind: "text" }
+  | { readonly kind: "record"; readonly fields: readonly string[] }
+  | { readonly kind: "record_list"; readonly fields: readonly string[] };
 
 /**
  * Compile-time declaration of an artifact.

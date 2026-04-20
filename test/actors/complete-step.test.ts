@@ -14,7 +14,7 @@ const contracts = new Map<ReturnType<typeof ArtifactId>, ArtifactContract>([
     {
       id: ArtifactId("spec"),
       description: "Parsed requirements",
-      shape: { kind: "untyped_json" },
+      shape: { kind: "text" },
     },
   ],
   [
@@ -22,7 +22,7 @@ const contracts = new Map<ReturnType<typeof ArtifactId>, ArtifactContract>([
     {
       id: ArtifactId("notes"),
       description: "Implementer notes",
-      shape: { kind: "untyped_json" },
+      shape: { kind: "text" },
     },
   ],
 ]);
@@ -61,6 +61,51 @@ describe("buildCompletionInstruction", () => {
       artifactContracts: contracts,
     });
     expect(text).toContain('<artifact id="spec">');
+  });
+
+  it("includes shape hints for record artifacts", () => {
+    const recordContracts = new Map<
+      ReturnType<typeof ArtifactId>,
+      ArtifactContract
+    >([
+      [
+        ArtifactId("diag"),
+        {
+          id: ArtifactId("diag"),
+          description: "Diagnosis",
+          shape: { kind: "record", fields: ["root_cause", "file"] },
+        },
+      ],
+    ]);
+    const text = buildCompletionInstruction({
+      routes: [RouteId("done")],
+      writableArtifactIds: [ArtifactId("diag")],
+      artifactContracts: recordContracts,
+    });
+    expect(text).toContain("Fields: root_cause, file");
+  });
+
+  it("includes list hint for record_list artifacts", () => {
+    const listContracts = new Map<
+      ReturnType<typeof ArtifactId>,
+      ArtifactContract
+    >([
+      [
+        ArtifactId("items"),
+        {
+          id: ArtifactId("items"),
+          description: "Items",
+          shape: { kind: "record_list", fields: ["name"] },
+        },
+      ],
+    ]);
+    const text = buildCompletionInstruction({
+      routes: [RouteId("done")],
+      writableArtifactIds: [ArtifactId("items")],
+      artifactContracts: listContracts,
+    });
+    expect(text).toContain("Fields (list): name");
+    expect(text).toContain("<item>");
   });
 });
 
