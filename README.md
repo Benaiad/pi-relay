@@ -289,7 +289,9 @@ Read-only plans skip the dialog.
 ```bash
 git clone https://github.com/benaiad/pi-relay.git
 cd pi-relay && npm install && pi install .
-npm test
+npm test              # run tests
+npm run check         # typecheck + lint (tsc + biome)
+npm run format        # auto-format (biome, tabs, width 3)
 ```
 
 ## License
