@@ -1,5 +1,7 @@
 # Remove `shape` from the Model-Facing Schema
 
+**Status: implemented.** All three phases shipped.
+
 Kill `shape: { kind: "untyped_json" }` from the artifact declaration the model
 sees. Every artifact carries this nested object with one possible value — it's
 ceremony that adds noise to every plan and a failure mode when the model writes

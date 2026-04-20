@@ -35,9 +35,19 @@ Here's the schema definition the models see for the `relay` tool — this is wha
             "minLength": 1,
             "maxLength": 1000,
             "description": "What this artifact represents, e.g. 'parsed requirements' or 'test output JSON'."
+          },
+          "fields": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_.:-]+$", "description": "A field name the artifact value must contain." },
+            "description": "Named fields the artifact value must include. Omit for plain text artifacts."
+          },
+          "list": {
+            "type": "boolean",
+            "description": "If true, the artifact is an array of objects each with the declared fields. Defaults to false. Only meaningful when fields is present."
           }
         },
-        "description": "Compile-time declaration of an artifact's identity and description."
+        "description": "Compile-time declaration of an artifact's identity, description, and structure."
       }
     },
     "steps": {
@@ -142,4 +152,6 @@ Key changes from the previous schema version:
 - `artifacts` is optional — defaults to empty
 - `reads` and `writes` on action steps are optional — default to empty
 - Action step `required` is now `["kind", "id", "actor", "instruction", "routes"]` — was `["kind", "id", "actor", "instruction", "reads", "writes", "routes"]`
-- `shape` removed from artifact declarations — was `{ kind: "untyped_json" }`, the only possible value. The compiler hardcodes it internally.
+- `shape` removed from artifact declarations — was `{ kind: "untyped_json" }`, the only possible value. The compiler derives shape internally from `fields`/`list`.
+- `fields` added to artifacts — optional array of field names the value must contain
+- `list` added to artifacts — optional boolean, when true the value is an array of objects with those fields
