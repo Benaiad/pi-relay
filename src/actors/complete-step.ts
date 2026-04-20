@@ -169,7 +169,6 @@ const buildExampleBlock = (input: CompletionInstructionInput): string => {
 			lines.push("<!-- repeat <item> as needed -->");
 			lines.push("</artifact>");
 		}
-		break;
 	}
 
 	lines.push(COMPLETE_CLOSE);

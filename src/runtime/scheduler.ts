@@ -233,16 +233,14 @@ export class Scheduler {
 				return buildRunReport(this.state, this.audit);
 			}
 
-			if (step.kind === "action") {
-				const maxRuns = step.maxRuns ?? DEFAULT_MAX_RUNS;
-				const priorAttempts = this.state.steps.get(nextId)?.attempts ?? 0;
-				if (priorAttempts >= maxRuns) {
-					this.finishWith(
-						"incomplete",
-						`step '${unwrap(nextId)}' exceeded its maxRuns cap (${maxRuns}) — the loop through this step is not converging`,
-					);
-					break;
-				}
+			const maxRuns = (step.kind === "action" ? step.maxRuns : undefined) ?? DEFAULT_MAX_RUNS;
+			const priorAttempts = this.state.steps.get(nextId)?.attempts ?? 0;
+			if (priorAttempts >= maxRuns) {
+				this.finishWith(
+					"incomplete",
+					`step '${unwrap(nextId)}' exceeded its maxRuns cap (${maxRuns}) — the loop through this step is not converging`,
+				);
+				break;
 			}
 
 			await this.executeStep(step);
@@ -420,7 +418,7 @@ export class Scheduler {
 		writes: ReadonlyMap<ArtifactId, unknown>,
 		usage: ActorUsage,
 	): void {
-		const currentAttempt = (this.state.steps.get(step.id)?.attempts ?? 0) + 1;
+		const currentAttempt = this.state.steps.get(step.id)?.attempts ?? 1;
 		const commitResult = this.artifactStore.commit(step.id, writes, currentAttempt);
 		if (!commitResult.ok) {
 			this.emit({

@@ -737,6 +737,27 @@ describe("Scheduler — terminal routes", () => {
 		expect((runCounts.get("a") ?? 0) + (runCounts.get("b") ?? 0)).toBeLessThanOrEqual(6);
 	});
 
+	it("halts a verify-step loop that would otherwise run forever", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Verify loop with no escape.",
+			steps: [
+				{
+					kind: "verify_files_exist",
+					id: "check",
+					paths: ["/tmp/pi-relay-nonexistent-sentinel-file"],
+					onPass: "done",
+					onFail: "check",
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+			],
+		};
+		const engine = new ScriptedActorEngine(new Map());
+		const { scheduler } = buildScheduler(plan, engine);
+		const report = await scheduler.run();
+		expect(report.outcome).toBe("incomplete");
+		expect(report.summary).toContain("maxRuns cap");
+	});
+
 	it("marks unreached branches as skipped after run_finished fires", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Pick the good path, leave the alternate branch unreached.",

@@ -96,6 +96,26 @@ describe("compile", () => {
 		expect(result.error.kind).toBe("no_terminal");
 	});
 
+	it("rejects a plan whose entry step is a terminal", () => {
+		const bad: PlanDraftDoc = {
+			task: "Instant done",
+			steps: [
+				{ kind: "terminal", id: "done", outcome: "success", summary: "Nothing happened." },
+				{
+					kind: "action",
+					id: "work",
+					actor: "worker",
+					instruction: "Do things.",
+					routes: { done: "done" },
+				},
+			],
+			entryStep: "done",
+		};
+		const result = compile(bad, defaultActors, fixedIdOptions);
+		if (!isErr(result)) throw new Error("expected error");
+		expect(result.error.kind).toBe("terminal_entry");
+	});
+
 	it("rejects duplicate step ids", () => {
 		const firstStep = basicPlan.steps[0]!;
 		const bad: PlanDraftDoc = {

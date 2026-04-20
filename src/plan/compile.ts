@@ -78,6 +78,9 @@ export const compile = (
 			availableSteps: stepOrder,
 		});
 	}
+	if (stepsById.get(entryStep)?.kind === "terminal") {
+		return err({ kind: "terminal_entry", entryStep });
+	}
 
 	const actorCheck = validateActors(stepsById, actors);
 	if (!actorCheck.ok) return actorCheck;

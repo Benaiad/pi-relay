@@ -59,6 +59,16 @@ describe("buildCompletionInstruction", () => {
 		expect(text).toContain('<artifact id="spec">');
 	});
 
+	it("shows all writable artifacts in the example block, not just the first", () => {
+		const text = buildCompletionInstruction({
+			routes: [RouteId("done")],
+			writableArtifactIds: [ArtifactId("spec"), ArtifactId("notes")],
+			artifactContracts: contracts,
+		});
+		expect(text).toContain('<artifact id="spec">');
+		expect(text).toContain('<artifact id="notes">');
+	});
+
 	it("includes shape hints for record artifacts", () => {
 		const recordContracts = new Map<ReturnType<typeof ArtifactId>, ArtifactContract>([
 			[
