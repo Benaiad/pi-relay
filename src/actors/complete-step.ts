@@ -164,11 +164,14 @@ const buildExampleBlock = (input: CompletionInstructionInput): string => {
       lines.push("</artifact>");
     } else if (contract.shape.kind === "record_list") {
       lines.push(`<artifact id="${idStr}">`);
-      lines.push("<item>");
-      for (const field of contract.shape.fields) {
-        lines.push(`<${field}>value</${field}>`);
+      for (let i = 1; i <= 2; i++) {
+        lines.push("<item>");
+        for (const field of contract.shape.fields) {
+          lines.push(`<${field}>...</${field}>`);
+        }
+        lines.push("</item>");
       }
-      lines.push("</item>");
+      lines.push("<!-- repeat <item> as needed -->");
       lines.push("</artifact>");
     }
     break;
