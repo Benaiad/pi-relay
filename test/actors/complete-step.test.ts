@@ -36,6 +36,8 @@ describe("buildCompletionInstruction", () => {
     });
     expect(text).toContain("<relay-complete>");
     expect(text).toContain("</relay-complete>");
+    expect(text).toContain("<route>");
+    expect(text).toContain("<artifact");
     expect(text).toContain("- success");
     expect(text).toContain("- failure");
     expect(text).toContain("- spec: Parsed requirements");
@@ -48,35 +50,105 @@ describe("buildCompletionInstruction", () => {
       writableArtifactIds: [],
       artifactContracts: new Map(),
     });
-    expect(text).toContain("(none — emit an empty object");
+    expect(text).toContain("(none");
+    expect(text).not.toContain('<artifact id="');
+  });
+
+  it("includes an example artifact tag when artifacts are present", () => {
+    const text = buildCompletionInstruction({
+      routes: [RouteId("done")],
+      writableArtifactIds: [ArtifactId("spec")],
+      artifactContracts: contracts,
+    });
+    expect(text).toContain('<artifact id="spec">');
   });
 });
 
 describe("parseCompletion", () => {
-  it("parses a well-formed completion block", () => {
+  it("parses a well-formed XML completion block", () => {
     const text = `Some preamble...
-<relay-complete>{"route":"success","writes":{"spec":{"ok":true}}}</relay-complete>`;
+<relay-complete>
+<route>success</route>
+<artifact id="spec">parsed requirements here</artifact>
+</relay-complete>`;
     const result = parseCompletion(text);
     expect(isOk(result)).toBe(true);
     if (!isOk(result)) return;
     expect(result.value.route).toBe("success");
-    expect(result.value.writes).toEqual({ spec: { ok: true } });
+    expect(result.value.writes).toEqual({
+      spec: "parsed requirements here",
+    });
   });
 
-  it("parses a block with empty writes", () => {
-    const text = `<relay-complete>{"route":"done","writes":{}}</relay-complete>`;
+  it("parses a block with no artifacts", () => {
+    const text = `<relay-complete><route>done</route></relay-complete>`;
     const result = parseCompletion(text);
     expect(isOk(result)).toBe(true);
     if (!isOk(result)) return;
+    expect(result.value.route).toBe("done");
     expect(result.value.writes).toEqual({});
   });
 
-  it("parses a block with a null writes field", () => {
-    const text = `<relay-complete>{"route":"done","writes":null}</relay-complete>`;
+  it("parses multiple artifacts", () => {
+    const text = `<relay-complete>
+<route>done</route>
+<artifact id="spec">spec value</artifact>
+<artifact id="notes">notes value</artifact>
+</relay-complete>`;
     const result = parseCompletion(text);
     expect(isOk(result)).toBe(true);
     if (!isOk(result)) return;
-    expect(result.value.writes).toEqual({});
+    expect(result.value.writes).toEqual({
+      spec: "spec value",
+      notes: "notes value",
+    });
+  });
+
+  it("trims whitespace from artifact values", () => {
+    const text = `<relay-complete>
+<route>done</route>
+<artifact id="notes">
+  some text with leading/trailing whitespace
+</artifact>
+</relay-complete>`;
+    const result = parseCompletion(text);
+    expect(isOk(result)).toBe(true);
+    if (!isOk(result)) return;
+    expect(result.value.writes.notes).toBe(
+      "some text with leading/trailing whitespace",
+    );
+  });
+
+  it("trims whitespace from the route", () => {
+    const text = `<relay-complete><route>  done  </route></relay-complete>`;
+    const result = parseCompletion(text);
+    expect(isOk(result)).toBe(true);
+    if (!isOk(result)) return;
+    expect(result.value.route).toBe("done");
+  });
+
+  it("unescapes XML entities in artifact values", () => {
+    const text = `<relay-complete>
+<route>done</route>
+<artifact id="notes">x &lt; y &amp; a &gt; b</artifact>
+</relay-complete>`;
+    const result = parseCompletion(text);
+    expect(isOk(result)).toBe(true);
+    if (!isOk(result)) return;
+    expect(result.value.writes.notes).toBe("x < y & a > b");
+  });
+
+  it("preserves newlines inside artifact values", () => {
+    const text = `<relay-complete>
+<route>done</route>
+<artifact id="notes">line one
+line two
+line three</artifact>
+</relay-complete>`;
+    const result = parseCompletion(text);
+    expect(isOk(result)).toBe(true);
+    if (!isOk(result)) return;
+    expect(result.value.writes.notes).toBe("line one\nline two\nline three");
   });
 
   it("fails when the completion block is missing", () => {
@@ -84,99 +156,66 @@ describe("parseCompletion", () => {
     expect(isErr(result)).toBe(true);
   });
 
-  it("fails when the JSON is invalid", () => {
-    const result = parseCompletion(`<relay-complete>not json</relay-complete>`);
-    expect(isErr(result)).toBe(true);
-  });
-
-  it("fails when the payload is an array", () => {
-    const result = parseCompletion(`<relay-complete>[1,2,3]</relay-complete>`);
-    expect(isErr(result)).toBe(true);
-  });
-
-  it("fails when the route field is missing or empty", () => {
-    const r1 = parseCompletion(
-      `<relay-complete>{"writes":{}}</relay-complete>`,
-    );
-    const r2 = parseCompletion(
-      `<relay-complete>{"route":"","writes":{}}</relay-complete>`,
-    );
-    expect(isErr(r1)).toBe(true);
-    expect(isErr(r2)).toBe(true);
-  });
-
-  it("fails when writes is not an object", () => {
+  it("fails when the route tag is missing", () => {
     const result = parseCompletion(
-      `<relay-complete>{"route":"done","writes":[]}</relay-complete>`,
+      `<relay-complete><artifact id="x">y</artifact></relay-complete>`,
+    );
+    expect(isErr(result)).toBe(true);
+    if (!isErr(result)) return;
+    expect(result.error).toContain("<route>");
+  });
+
+  it("fails when the route is empty", () => {
+    const result = parseCompletion(
+      `<relay-complete><route></route></relay-complete>`,
+    );
+    expect(isErr(result)).toBe(true);
+    if (!isErr(result)) return;
+    expect(result.error).toContain("empty");
+  });
+
+  it("fails when the route is whitespace-only", () => {
+    const result = parseCompletion(
+      `<relay-complete><route>   </route></relay-complete>`,
     );
     expect(isErr(result)).toBe(true);
   });
 
   it("takes the first completion block if multiple are present", () => {
-    const text = `<relay-complete>{"route":"first","writes":{}}</relay-complete> junk <relay-complete>{"route":"second","writes":{}}</relay-complete>`;
+    const text = `<relay-complete><route>first</route></relay-complete> junk <relay-complete><route>second</route></relay-complete>`;
     const result = parseCompletion(text);
     expect(isOk(result)).toBe(true);
     if (!isOk(result)) return;
     expect(result.value.route).toBe("first");
   });
 
-  it("recovers when trailing text follows valid JSON inside the tag", () => {
-    const text = `<relay-complete>{"route":"done","writes":{"notes":{"ok":true}}} and then the model kept writing</relay-complete>`;
+  it("handles an artifact value that looks like JSON", () => {
+    const text = `<relay-complete>
+<route>done</route>
+<artifact id="spec">{"ok": true, "count": 3}</artifact>
+</relay-complete>`;
     const result = parseCompletion(text);
     expect(isOk(result)).toBe(true);
     if (!isOk(result)) return;
-    expect(result.value.route).toBe("done");
-    expect(result.value.writes).toEqual({ notes: { ok: true } });
+    expect(result.value.writes.spec).toBe('{"ok": true, "count": 3}');
   });
 
-  it("recovers when JSON string values contain unescaped newlines", () => {
-    const text = `<relay-complete>{"route":"done","writes":{"notes":{"text":"line one\nline two"}}}</relay-complete>`;
-    const result = parseCompletion(text);
-    expect(isOk(result)).toBe(true);
-    if (!isOk(result)) return;
-    expect(result.value.route).toBe("done");
-  });
-
-  it("recovers from a large JSON payload with trailing content", () => {
+  it("handles a large artifact value", () => {
     const longValue = "x".repeat(5000);
-    const text = `<relay-complete>{"route":"done","writes":{"log":{"data":"${longValue}"}}} extra junk here</relay-complete>`;
+    const text = `<relay-complete><route>done</route><artifact id="log">${longValue}</artifact></relay-complete>`;
+    const result = parseCompletion(text);
+    expect(isOk(result)).toBe(true);
+    if (!isOk(result)) return;
+    expect(result.value.writes.log).toBe(longValue);
+  });
+
+  it("handles inline completion block with no whitespace", () => {
+    const text = `<relay-complete><route>done</route><artifact id="a">v</artifact></relay-complete>`;
     const result = parseCompletion(text);
     expect(isOk(result)).toBe(true);
     if (!isOk(result)) return;
     expect(result.value.route).toBe("done");
-  });
-
-  it("tolerates a json code fence inside the completion tag", () => {
-    const text = `<relay-complete>
-\`\`\`json
-{"route":"success","writes":{"spec":{"ok":true}}}
-\`\`\`
-</relay-complete>`;
-    const result = parseCompletion(text);
-    expect(isOk(result)).toBe(true);
-    if (!isOk(result)) return;
-    expect(result.value.route).toBe("success");
-    expect(result.value.writes).toEqual({ spec: { ok: true } });
-  });
-
-  it("tolerates a plain code fence inside the completion tag", () => {
-    const text = `<relay-complete>
-\`\`\`
-{"route":"done","writes":{}}
-\`\`\`
-</relay-complete>`;
-    const result = parseCompletion(text);
-    expect(isOk(result)).toBe(true);
-    if (!isOk(result)) return;
-    expect(result.value.route).toBe("done");
-  });
-
-  it("tolerates leading and trailing whitespace inside the tag", () => {
-    const text = `<relay-complete>
-   {"route":"done","writes":{}}
-</relay-complete>`;
-    const result = parseCompletion(text);
-    expect(isOk(result)).toBe(true);
+    expect(result.value.writes.a).toBe("v");
   });
 });
 
@@ -184,7 +223,9 @@ describe("stripCompletionTag", () => {
   it("removes a completion tag from the middle of text", () => {
     const text = `Here is my plan:
 
-<relay-complete>{"route":"done","writes":{}}</relay-complete>
+<relay-complete>
+<route>done</route>
+</relay-complete>
 
 Done.`;
     expect(stripCompletionTag(text)).toBe("Here is my plan:\n\nDone.");
@@ -192,18 +233,16 @@ Done.`;
 
   it("removes a tag at the end of text", () => {
     const text = `Prose before the tag.
-<relay-complete>{"route":"done","writes":{}}</relay-complete>`;
+<relay-complete><route>done</route></relay-complete>`;
     expect(stripCompletionTag(text)).toBe("Prose before the tag.");
   });
 
-  it("removes a multi-line JSON payload inside the tag", () => {
+  it("removes a multi-line payload inside the tag", () => {
     const text = `Summary:
 
 <relay-complete>
-{
-  "route": "success",
-  "writes": { "spec": { "ok": true } }
-}
+<route>success</route>
+<artifact id="spec">some value</artifact>
 </relay-complete>
 `;
     expect(stripCompletionTag(text)).toBe("Summary:");
@@ -217,26 +256,24 @@ Done.`;
   it("returns an empty string when the text is only a completion tag", () => {
     expect(
       stripCompletionTag(
-        '<relay-complete>{"route":"x","writes":{}}</relay-complete>',
+        "<relay-complete><route>x</route></relay-complete>",
       ),
     ).toBe("");
   });
 
   it("collapses multiple blank lines that would remain after removal", () => {
     const text =
-      'para one\n\n\n<relay-complete>{"route":"x","writes":{}}</relay-complete>\n\n\npara two';
+      "para one\n\n\n<relay-complete><route>x</route></relay-complete>\n\n\npara two";
     expect(stripCompletionTag(text)).toBe("para one\n\npara two");
   });
 
   it("strips EVERY completion tag, not just the first (re-entered step case)", () => {
     const text = [
       "attempt 1 narration — rejecting.",
-      '<relay-complete>{"route":"changes_requested","writes":{}}</relay-complete>',
+      "<relay-complete><route>changes_requested</route></relay-complete>",
       "attempt 2 narration — accepting.",
-      '<relay-complete>{"route":"accepted","writes":{}}</relay-complete>',
+      "<relay-complete><route>accepted</route></relay-complete>",
     ].join("\n");
-    // Both tags removed; the blank line between narrations is preserved
-    // because the tags were on their own lines.
     expect(stripCompletionTag(text)).toBe(
       "attempt 1 narration — rejecting.\n\nattempt 2 narration — accepting.",
     );

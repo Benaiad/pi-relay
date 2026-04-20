@@ -2,21 +2,22 @@
  * Actor completion protocol.
  *
  * An actor runs in a pi subprocess with restricted tools. The completion
- * signal is a single tagged block the actor emits as its final output:
+ * signal is an XML-tagged block the actor emits as its final output:
  *
- *     <relay-complete>{"route":"<name>","writes":{"artifact-id": <value>}}</relay-complete>
+ *     <relay-complete>
+ *     <route>done</route>
+ *     <artifact id="notes">plain text value</artifact>
+ *     </relay-complete>
  *
- * The scheduler treats the tag as a structured tool call:
+ * The scheduler treats the tag as a structured signal:
  *
  *   - The route must match one of the action step's declared outgoing routes.
- *   - Every artifact in `writes` must be in the step's declared `writes` list.
+ *   - Every artifact in the block must be in the step's declared `writes` list.
  *     Extra ids are silently dropped (defensive), never treated as errors.
  *
  * The instruction text appended to the actor's system prompt lists the
  * allowed routes and writable artifacts explicitly, with their descriptions
- * lifted from the plan's artifact contracts. The protocol's correctness is
- * enforced by `parseCompletion` — no trust is placed in the actor's output
- * beyond "the JSON parses and the fields are the right shape."
+ * lifted from the plan's artifact contracts.
  */
 
 import type { ArtifactId, RouteId } from "../plan/ids.js";
@@ -30,12 +31,14 @@ const COMPLETE_OPEN = `<${COMPLETE_TAG}>`;
 const COMPLETE_CLOSE = `</${COMPLETE_TAG}>`;
 
 const COMPLETE_RE = /<relay-complete>([\s\S]*?)<\/relay-complete>/;
-/** Global variant for removing EVERY occurrence of the tag when rendering. */
 const COMPLETE_RE_GLOBAL = /<relay-complete>[\s\S]*?<\/relay-complete>/g;
+
+const ROUTE_RE = /<route>([\s\S]*?)<\/route>/;
+const ARTIFACT_RE = /<artifact\s+id="([^"]+)">([\s\S]*?)<\/artifact>/g;
 
 export interface ParsedCompletion {
   readonly route: string;
-  readonly writes: Record<string, unknown>;
+  readonly writes: Record<string, string>;
 }
 
 export interface CompletionInstructionInput {
@@ -62,7 +65,7 @@ export const buildCompletionInstruction = (
 
   const writeLines =
     input.writableArtifactIds.length === 0
-      ? "  (none — emit an empty object `{}`)"
+      ? "  (none — do not include any <artifact> tags)"
       : input.writableArtifactIds
           .map((id) => {
             const contract = input.artifactContracts.get(id);
@@ -71,6 +74,11 @@ export const buildCompletionInstruction = (
           })
           .join("\n");
 
+  const exampleArtifact =
+    input.writableArtifactIds.length > 0
+      ? `\n<artifact id="${unwrap(input.writableArtifactIds[0]!)}">value here</artifact>`
+      : "";
+
   return [
     "## Relay completion protocol",
     "",
@@ -78,19 +86,18 @@ export const buildCompletionInstruction = (
     "your final output for a completion block in the exact format below.",
     "Do not emit this block until every task requirement is complete.",
     "",
-    `${COMPLETE_OPEN}{"route":"<ROUTE>","writes":{"<artifact-id>": <value>, ...}}${COMPLETE_CLOSE}`,
+    `${COMPLETE_OPEN}`,
+    `<route>ROUTE_NAME</route>${exampleArtifact}`,
+    `${COMPLETE_CLOSE}`,
     "",
     "Requirements:",
     "- Emit the block exactly once, as the VERY LAST thing in your reply.",
-    "- The content between the tags must be valid JSON. Double-quote all",
-    '  keys and string values. Escape newlines as \\n and quotes as \\".',
-    "- Keep artifact values compact — short strings, arrays, simple objects.",
-    "  Do NOT embed long prose in JSON strings. Put detailed text in your",
-    "  narration (before the tag), not inside the writes object.",
+    "- Use XML tags as shown. `<route>` is required. One `<artifact>` tag",
+    "  per writable artifact you want to commit.",
+    "- Artifact values are plain text between the tags. Do NOT use JSON.",
+    "  Keep values compact — short summaries, not long prose.",
+    "  Put detailed text in your narration (before the completion block).",
     "- `route` must be one of the allowed routes listed below.",
-    "- `writes` is an object mapping every writable artifact id (listed below)",
-    "  to the value you want committed. Omit artifacts you do not produce;",
-    "  the runtime will treat missing entries as empty.",
     "",
     "Allowed routes (choose exactly one):",
     routeLines,
@@ -106,10 +113,6 @@ export const buildCompletionInstruction = (
  * Returns `Result`. The caller treats every error as `no_completion` — it is
  * not a shape_mismatch at the artifact level, it is a protocol violation by
  * the actor that the scheduler implicitly retries.
- *
- * Defensive against two common model habits:
- *   - Wrapping the JSON in a ```json ... ``` code fence inside the tag.
- *   - Leading/trailing whitespace inside the tag.
  */
 export const parseCompletion = (
   text: string,
@@ -119,115 +122,41 @@ export const parseCompletion = (
     return err("completion block not found in final output");
   }
 
-  const payload = stripCodeFence(match[1].trim());
+  const payload = match[1];
 
-  let raw: unknown;
-  try {
-    raw = JSON.parse(payload);
-  } catch {
-    raw = tryExtractJson(payload);
-    if (raw === undefined) {
-      const preview =
-        payload.length > 200 ? `${payload.slice(0, 200)}…` : payload;
-      return err(
-        `completion JSON did not parse. Payload starts with: ${preview}`,
-      );
-    }
+  const routeMatch = ROUTE_RE.exec(payload);
+  if (!routeMatch) {
+    return err("completion block is missing <route> tag");
+  }
+  const route = (routeMatch[1] ?? "").trim();
+  if (route.length === 0) {
+    return err("completion block has an empty <route> tag");
   }
 
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    return err("completion JSON must be an object");
-  }
-  const obj = raw as Record<string, unknown>;
-
-  const route = obj.route;
-  if (typeof route !== "string" || route.length === 0) {
-    return err("completion JSON is missing string field 'route'");
-  }
-
-  let writes: Record<string, unknown>;
-  if (obj.writes === undefined || obj.writes === null) {
-    writes = {};
-  } else if (typeof obj.writes !== "object" || Array.isArray(obj.writes)) {
-    return err("completion JSON field 'writes' must be an object");
-  } else {
-    writes = obj.writes as Record<string, unknown>;
+  const writes: Record<string, string> = {};
+  let artifactMatch: RegExpExecArray | null;
+  const artifactRe = new RegExp(ARTIFACT_RE.source, ARTIFACT_RE.flags);
+  while ((artifactMatch = artifactRe.exec(payload)) !== null) {
+    const id = artifactMatch[1]!;
+    const value = unescapeXml(artifactMatch[2]!.trim());
+    writes[id] = value;
   }
 
   return ok({ route, writes });
 };
 
-/**
- * Attempt to extract a valid JSON object from a payload that failed
- * `JSON.parse`. Handles two common model errors:
- *
- *   1. Trailing text after the JSON object (the model wrote more
- *      content after closing the braces).
- *   2. Unescaped newlines inside string values.
- *
- * Returns `undefined` if no valid JSON object can be extracted.
- */
-const tryExtractJson = (payload: string): unknown | undefined => {
-  const start = payload.indexOf("{");
-  if (start === -1) return undefined;
+const XML_ENTITY_RE = /&(?:lt|gt|amp|quot|apos);/g;
 
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  let end = -1;
-
-  for (let i = start; i < payload.length; i++) {
-    const ch = payload[i]!;
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (ch === "\\") {
-      escaped = true;
-      continue;
-    }
-    if (ch === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (inString) continue;
-    if (ch === "{") depth++;
-    else if (ch === "}") {
-      depth--;
-      if (depth === 0) {
-        end = i;
-        break;
-      }
-    }
-  }
-
-  if (end === -1) return undefined;
-
-  const candidate = payload.slice(start, end + 1);
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    const fixed = candidate.replace(/[\n\r]/g, "\\n").replace(/\t/g, "\\t");
-    try {
-      return JSON.parse(fixed);
-    } catch {
-      return undefined;
-    }
-  }
+const XML_ENTITIES: Record<string, string> = {
+  "&lt;": "<",
+  "&gt;": ">",
+  "&amp;": "&",
+  "&quot;": '"',
+  "&apos;": "'",
 };
 
-const FENCE_OPEN = /^```(?:json)?\s*\n?/i;
-const FENCE_CLOSE = /\n?```$/;
-
-/**
- * If the payload is wrapped in a markdown code fence (with optional language
- * tag), strip the fence. The model frequently does this out of habit when
- * asked to emit JSON.
- */
-const stripCodeFence = (payload: string): string => {
-  if (!FENCE_OPEN.test(payload)) return payload;
-  return payload.replace(FENCE_OPEN, "").replace(FENCE_CLOSE, "").trim();
-};
+const unescapeXml = (text: string): string =>
+  text.replace(XML_ENTITY_RE, (entity) => XML_ENTITIES[entity] ?? entity);
 
 /**
  * Remove the `<relay-complete>...</relay-complete>` block from an actor's

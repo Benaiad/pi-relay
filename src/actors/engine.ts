@@ -60,6 +60,21 @@ export const createSubprocessActorEngine = (): ActorEngine => ({
   runAction,
 });
 
+const tryParseJson = (text: string): unknown => {
+  const trimmed = text.trim();
+  if (
+    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+    (trimmed.startsWith("[") && trimmed.endsWith("]"))
+  ) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return text;
+    }
+  }
+  return text;
+};
+
 const runAction = async (request: ActionRequest): Promise<ActionOutcome> => {
   const { actor, step, artifacts, artifactContracts, cwd, signal, onProgress } =
     request;
@@ -166,10 +181,10 @@ const runAction = async (request: ActionRequest): Promise<ActionOutcome> => {
 
     const allowedWrites = new Set<ArtifactIdType>(step.writes);
     const writes = new Map<ArtifactIdType, unknown>();
-    for (const [idStr, value] of Object.entries(parsed.value.writes)) {
+    for (const [idStr, rawValue] of Object.entries(parsed.value.writes)) {
       const id = ArtifactId(idStr);
       if (!allowedWrites.has(id)) continue;
-      writes.set(id, value);
+      writes.set(id, tryParseJson(rawValue));
     }
 
     return {
@@ -298,7 +313,7 @@ const buildTaskPrompt = (
   lines.push(
     "## Completion reminder",
     "",
-    'When you are done, your reply MUST end with a single line of the form `<relay-complete>{"route":"<ROUTE>","writes":{...}}</relay-complete>`, using one of the allowed routes from the Relay completion protocol section of your system prompt. Everything before that line is freeform narration; the tag itself is the only thing Relay reads.',
+    "When you are done, your reply MUST end with a `<relay-complete>` block containing a `<route>` tag and any `<artifact>` tags, using one of the allowed routes from the Relay completion protocol section of your system prompt. Everything before that block is freeform narration; the block itself is the only thing Relay reads.",
   );
   return lines.join("\n\n");
 };
