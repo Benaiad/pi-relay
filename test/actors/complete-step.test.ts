@@ -208,12 +208,32 @@ line three</artifact>
 		expect(isErr(result)).toBe(true);
 	});
 
-	it("takes the first completion block if multiple are present", () => {
+	it("takes the last completion block if multiple are present", () => {
 		const text = `<relay-complete><route>first</route></relay-complete> junk <relay-complete><route>second</route></relay-complete>`;
 		const result = parseCompletion(text);
 		expect(isOk(result)).toBe(true);
 		if (!isOk(result)) return;
-		expect(result.value.route).toBe("first");
+		expect(result.value.route).toBe("second");
+	});
+
+	it("ignores a quoted example block before the real completion", () => {
+		const text = `Here is the format:
+<relay-complete>
+<route>ROUTE_NAME</route>
+<artifact id="x">value</artifact>
+</relay-complete>
+
+Now here is my actual result:
+
+<relay-complete>
+<route>done</route>
+<artifact id="notes">fixed the bug</artifact>
+</relay-complete>`;
+		const result = parseCompletion(text);
+		expect(isOk(result)).toBe(true);
+		if (!isOk(result)) return;
+		expect(result.value.route).toBe("done");
+		expect(result.value.writes.notes).toBe("fixed the bug");
 	});
 
 	it("parses field tags inside an artifact as a record", () => {
@@ -254,6 +274,18 @@ line three</artifact>
 			{ file: "a.ts", fix: "add guard" },
 			{ file: "b.ts", fix: "remove dead code" },
 		]);
+	});
+
+	it("treats content with tag-like text mixed with prose as plain text", () => {
+		const text = `<relay-complete>
+<route>done</route>
+<artifact id="notes">The fix was to change <ok>true</ok> to false in the config.</artifact>
+</relay-complete>`;
+		const result = parseCompletion(text);
+		expect(isOk(result)).toBe(true);
+		if (!isOk(result)) return;
+		expect(typeof result.value.writes.notes).toBe("string");
+		expect(result.value.writes.notes).toContain("<ok>true</ok>");
 	});
 
 	it("returns plain text for artifacts without tags", () => {

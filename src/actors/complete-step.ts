@@ -116,7 +116,8 @@ export const buildCompletionInstruction = (input: CompletionInstructionInput): s
  * the actor that the scheduler implicitly retries.
  */
 export const parseCompletion = (text: string): Result<ParsedCompletion, string> => {
-	const match = COMPLETE_RE.exec(text);
+	const allMatches = [...text.matchAll(new RegExp(COMPLETE_RE.source, "g"))];
+	const match = allMatches.length > 0 ? allMatches[allMatches.length - 1] : undefined;
 	if (!match?.[1]) {
 		return err("completion block not found in final output");
 	}
@@ -190,7 +191,10 @@ const parseArtifactContent = (content: string): unknown => {
 	if (items.length > 0) return items;
 
 	const fields = parseFieldTags(content);
-	if (Object.keys(fields).length > 0) return fields;
+	if (Object.keys(fields).length > 0) {
+		const withoutTags = content.replace(new RegExp(FIELD_TAG_RE.source, "g"), "").trim();
+		if (withoutTags.length === 0) return fields;
+	}
 
 	return unescapeXml(content);
 };
