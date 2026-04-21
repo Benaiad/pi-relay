@@ -19,6 +19,17 @@ ln -s "$(pwd)" ~/.pi/agent/extensions/pi-relay
 
 Without relay, the assistant handles everything in a single conversation turn. Relay lets it break complex work into a plan with multiple actors, verification gates, and structured routing between steps. The assistant decides when a task needs relay — you just describe what you want.
 
+Relay encodes *process* — how steps connect, where verification happens, when to loop — not domain knowledge. The same template works across projects because the workflow topology is independent of what's being built.
+
+| Topology | What it models | Template |
+|----------|---------------|----------|
+| act → verify | Gated commit | verified-edit |
+| diagnose → fix → verify | Root cause analysis | bug-fix |
+| act → review → fix ↺ | Iterative QA | reviewed-edit |
+| act → gate₁ → gate₂ → gate₃ | Sequential checks | multi-gate |
+| argue → challenge → judge ↺ | Structured debate | debate |
+| propose → benchmark → evaluate ↺ | Optimization loop | autoresearch |
+
 Three things are added to pi:
 
 - **`relay` tool** — the assistant builds and executes an ad-hoc plan: steps, actors, artifacts, verification gates.
