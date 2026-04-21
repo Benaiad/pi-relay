@@ -926,16 +926,15 @@ describe("Scheduler — verify step artifact reads", () => {
 
 	it("omits env vars for artifacts not yet committed", async () => {
 		const plan: PlanDraftDoc = {
-			task: "Verify reads uncommitted artifact.",
+			task: "Verify reads artifact that another step writes but hasn't run yet.",
 			artifacts: [{ id: "data", description: "d" }],
 			steps: [
 				{
 					kind: "action",
-					id: "work",
+					id: "early",
 					actor: "worker",
-					instruction: "Do not write data.",
-					writes: ["data"],
-					routes: { skip: "check" },
+					instruction: "Does not write data.",
+					routes: { done: "check" },
 				},
 				{
 					kind: "verify_command",
@@ -945,14 +944,87 @@ describe("Scheduler — verify step artifact reads", () => {
 					onPass: "done",
 					onFail: "failed",
 				},
+				{
+					kind: "action",
+					id: "late",
+					actor: "worker",
+					instruction: "Writes data but never reached.",
+					writes: ["data"],
+					routes: { done: "done" },
+				},
 				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
 				{ kind: "terminal", id: "failed", outcome: "failure", summary: "bad" },
 			],
 		};
-		const engine = new ScriptedActorEngine(new Map([["work", [completed("skip")]]]));
+		const engine = new ScriptedActorEngine(new Map([["early", [completed("done")]]]));
 		const { scheduler } = buildScheduler(plan, engine);
 		const report = await scheduler.run();
 		expect(report.outcome).toBe("success");
+	});
+});
+
+describe("Scheduler — verify reader write enforcement", () => {
+	it("retries when action routes to a verify reader without writing the required artifact", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Action must write before verify reads.",
+			artifacts: [{ id: "candidate", description: "c" }],
+			steps: [
+				{
+					kind: "action",
+					id: "produce",
+					actor: "worker",
+					instruction: "Write candidate.",
+					writes: ["candidate"],
+					routes: { done: "grade" },
+				},
+				{
+					kind: "verify_command",
+					id: "grade",
+					command: "echo $candidate",
+					reads: ["candidate"],
+					onPass: "done",
+					onFail: "done",
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+			],
+		};
+		const engine = new ScriptedActorEngine(
+			new Map([["produce", [completed("done"), completed("done", { candidate: "fixed" })]]]),
+		);
+		const { scheduler } = buildScheduler(plan, engine);
+		const report = await scheduler.run();
+		expect(report.outcome).toBe("success");
+		expect(engine.callCounts().get("produce")).toBe(2);
+	});
+
+	it("does not enforce when verify step has no reads", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Action routes to verify without reads.",
+			artifacts: [{ id: "notes", description: "n" }],
+			steps: [
+				{
+					kind: "action",
+					id: "work",
+					actor: "worker",
+					instruction: "Work.",
+					writes: ["notes"],
+					routes: { done: "check" },
+				},
+				{
+					kind: "verify_command",
+					id: "check",
+					command: 'node -e "process.exit(0)"',
+					onPass: "done",
+					onFail: "done",
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+			],
+		};
+		const engine = new ScriptedActorEngine(new Map([["work", [completed("done")]]]));
+		const { scheduler } = buildScheduler(plan, engine);
+		const report = await scheduler.run();
+		expect(report.outcome).toBe("success");
+		expect(engine.callCounts().get("work")).toBe(1);
 	});
 });
 

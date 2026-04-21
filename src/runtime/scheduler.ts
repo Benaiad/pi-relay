@@ -442,8 +442,10 @@ export class Scheduler {
 		const targetId = this.program.edges.get(edgeKey(step.id, route));
 		if (targetId) {
 			const targetStep = this.program.steps.get(targetId);
-			if (targetStep?.kind === "action") {
-				const missingForTarget = targetStep.reads.filter(
+			const targetReads =
+				targetStep?.kind === "action" || targetStep?.kind === "verify_command" ? targetStep.reads : undefined;
+			if (targetReads && targetReads.length > 0) {
+				const missingForTarget = targetReads.filter(
 					(readId) => step.writes.includes(readId) && !writes.has(readId),
 				);
 				if (missingForTarget.length > 0) {
