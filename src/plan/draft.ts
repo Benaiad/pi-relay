@@ -170,7 +170,9 @@ const StepSchema = Type.Union(
 
 const ArtifactContractSchema = Type.Object(
 	{
-		id: ArtifactIdField("Unique artifact identifier within this plan. Must be snake_case (lowercase, digits, underscores)."),
+		id: ArtifactIdField(
+			"Unique artifact identifier within this plan. Must be snake_case (lowercase, digits, underscores).",
+		),
 		description: Type.String({
 			minLength: 1,
 			maxLength: 1000,

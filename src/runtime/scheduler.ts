@@ -47,6 +47,7 @@ import type { ActorId, ArtifactId, RouteId, StepId } from "../plan/ids.js";
 import { edgeKey, RouteId as makeRouteId, unwrap } from "../plan/ids.js";
 import type { Program } from "../plan/program.js";
 import type { ActionStep, Step, TerminalStep, VerifyCommandStep, VerifyFilesExistStep } from "../plan/types.js";
+import { isAccumulatedEntryArray } from "./accumulated-entry.js";
 import { ArtifactStore } from "./artifacts.js";
 import { AuditLog } from "./audit.js";
 import { runFilesExist, runVerifyCommand } from "./checks.js";
@@ -490,7 +491,8 @@ export class Scheduler {
 			this.notifyOutputHandlers();
 		};
 
-		const outcome = await runVerifyCommand(step, { cwd: this.cwd, signal: this.signal }, onOutput);
+		const env = this.buildArtifactEnv(step.reads);
+		const outcome = await runVerifyCommand(step, { cwd: this.cwd, signal: this.signal, env }, onOutput);
 		this.checkOutputChunks.delete(step.id);
 		this.checkOutputLens.delete(step.id);
 		const description = describeVerifyStep(step);
@@ -620,4 +622,24 @@ export class Scheduler {
 		}
 		this.enqueueReady(target);
 	}
+
+	private buildArtifactEnv(reads: readonly ArtifactId[]): Record<string, string> | undefined {
+		if (reads.length === 0) return undefined;
+		const snapshot = this.artifactStore.snapshot(reads);
+		const env: Record<string, string> = {};
+		for (const id of reads) {
+			if (!snapshot.has(id)) continue;
+			env[unwrap(id)] = serializeForEnv(snapshot.get(id));
+		}
+		return Object.keys(env).length > 0 ? env : undefined;
+	}
 }
+
+const serializeForEnv = (value: unknown): string => {
+	if (isAccumulatedEntryArray(value)) {
+		const latest = value[value.length - 1]!.value;
+		return typeof latest === "string" ? latest : JSON.stringify(latest);
+	}
+	if (typeof value === "string") return value;
+	return JSON.stringify(value);
+};

@@ -179,4 +179,28 @@ describe("runVerifyCommand", () => {
 		const outcome = await runVerifyCommand(commandStep("echo hello && echo world"), { cwd: process.cwd() });
 		expect(outcome.kind).toBe("pass");
 	});
+
+	it("passes env vars from context to the child process", async () => {
+		const chunks: string[] = [];
+		const outcome = await runVerifyCommand(
+			commandStep("node -e \"process.stdout.write(process.env.candidate || 'MISSING')\""),
+			{ cwd: process.cwd(), env: { candidate: "hello from artifact" } },
+			(text) => chunks.push(text),
+		);
+		expect(outcome.kind).toBe("pass");
+		expect(chunks.join("")).toContain("hello from artifact");
+	});
+
+	it("preserves standard env vars (PATH) when custom env is set", async () => {
+		const outcome = await runVerifyCommand(commandStep("node --version"), {
+			cwd: process.cwd(),
+			env: { candidate: "test" },
+		});
+		expect(outcome.kind).toBe("pass");
+	});
+
+	it("runs without env vars when env is undefined", async () => {
+		const outcome = await runVerifyCommand(commandStep('node -e "process.exit(0)"'), { cwd: process.cwd() });
+		expect(outcome.kind).toBe("pass");
+	});
 });

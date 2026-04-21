@@ -859,6 +859,103 @@ describe("Scheduler — terminal routes", () => {
 	});
 });
 
+describe("Scheduler — verify step artifact reads", () => {
+	it("injects artifact values as env vars into verify commands", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Action writes, verify reads via env var.",
+			artifacts: [{ id: "candidate", description: "test value" }],
+			steps: [
+				{
+					kind: "action",
+					id: "produce",
+					actor: "worker",
+					instruction: "Write candidate.",
+					writes: ["candidate"],
+					routes: { done: "check" },
+				},
+				{
+					kind: "verify_command",
+					id: "check",
+					command: "node -e \"process.exit(process.env.candidate === 'hello' ? 0 : 1)\"",
+					reads: ["candidate"],
+					onPass: "done",
+					onFail: "failed",
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ kind: "terminal", id: "failed", outcome: "failure", summary: "bad" },
+			],
+		};
+		const engine = new ScriptedActorEngine(new Map([["produce", [completed("done", { candidate: "hello" })]]]));
+		const { scheduler } = buildScheduler(plan, engine);
+		const report = await scheduler.run();
+		expect(report.outcome).toBe("success");
+	});
+
+	it("serializes structured artifacts as JSON in env vars", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Action writes record, verify reads JSON.",
+			artifacts: [{ id: "result", description: "structured", fields: ["score", "label"] }],
+			steps: [
+				{
+					kind: "action",
+					id: "produce",
+					actor: "worker",
+					instruction: "Write result.",
+					writes: ["result"],
+					routes: { done: "check" },
+				},
+				{
+					kind: "verify_command",
+					id: "check",
+					command: 'node -e "const v = JSON.parse(process.env.result); process.exit(v.score === 42 ? 0 : 1)"',
+					reads: ["result"],
+					onPass: "done",
+					onFail: "failed",
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ kind: "terminal", id: "failed", outcome: "failure", summary: "bad" },
+			],
+		};
+		const engine = new ScriptedActorEngine(
+			new Map([["produce", [completed("done", { result: { score: 42, label: "good" } })]]]),
+		);
+		const { scheduler } = buildScheduler(plan, engine);
+		const report = await scheduler.run();
+		expect(report.outcome).toBe("success");
+	});
+
+	it("omits env vars for artifacts not yet committed", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Verify reads uncommitted artifact.",
+			artifacts: [{ id: "data", description: "d" }],
+			steps: [
+				{
+					kind: "action",
+					id: "work",
+					actor: "worker",
+					instruction: "Do not write data.",
+					writes: ["data"],
+					routes: { skip: "check" },
+				},
+				{
+					kind: "verify_command",
+					id: "check",
+					command: 'node -e "process.exit(process.env.data === undefined ? 0 : 1)"',
+					reads: ["data"],
+					onPass: "done",
+					onFail: "failed",
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ kind: "terminal", id: "failed", outcome: "failure", summary: "bad" },
+			],
+		};
+		const engine = new ScriptedActorEngine(new Map([["work", [completed("skip")]]]));
+		const { scheduler } = buildScheduler(plan, engine);
+		const report = await scheduler.run();
+		expect(report.outcome).toBe("success");
+	});
+});
+
 describe("Scheduler — check result forwarding", () => {
 	it("passes the prior check result to the next action step on failure", async () => {
 		let capturedCheckResult: ActionRequest["priorCheckResult"] | undefined;

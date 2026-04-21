@@ -32,6 +32,7 @@ const ops = createLocalBashOperations();
 export interface CheckContext {
 	readonly cwd: string;
 	readonly signal?: AbortSignal;
+	readonly env?: Readonly<Record<string, string>>;
 }
 
 export type CheckOutcome = { readonly kind: "pass" } | { readonly kind: "fail"; readonly reason: string };
@@ -80,6 +81,7 @@ export const runVerifyCommand = async (
 			onData,
 			signal: ctx.signal,
 			timeout: timeoutMs / 1000,
+			env: ctx.env ? { ...process.env, ...ctx.env } : undefined,
 		});
 
 		if (exitCode === 0) return { kind: "pass" };
