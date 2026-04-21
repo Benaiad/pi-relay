@@ -440,6 +440,82 @@ describe("compile", () => {
 		expect(isOk(result)).toBe(true);
 	});
 
+	it("accepts a verify_command step with reads", () => {
+		const plan: PlanDraftDoc = {
+			task: "Action writes, verify reads.",
+			artifacts: [{ id: "result", description: "result" }],
+			steps: [
+				{
+					kind: "action",
+					id: "produce",
+					actor: "worker",
+					instruction: "Write result.",
+					writes: ["result"],
+					routes: { done: "check" },
+				},
+				{
+					kind: "verify_command",
+					id: "check",
+					command: "echo $result",
+					reads: ["result"],
+					onPass: "done",
+					onFail: "failed",
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ kind: "terminal", id: "failed", outcome: "failure", summary: "bad" },
+			],
+		};
+		const result = compile(plan, defaultActors, fixedIdOptions);
+		expect(isOk(result)).toBe(true);
+		if (!isOk(result)) return;
+		expect(result.value.readers.get(ArtifactId("result"))).toEqual(new Set([StepId("check")]));
+	});
+
+	it("rejects a verify_command step reading an undeclared artifact", () => {
+		const plan: PlanDraftDoc = {
+			task: "Verify reads ghost.",
+			artifacts: [],
+			steps: [
+				{
+					kind: "verify_command",
+					id: "check",
+					command: "echo $ghost",
+					reads: ["ghost"],
+					onPass: "done",
+					onFail: "done",
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+			],
+		};
+		const result = compile(plan, defaultActors, fixedIdOptions);
+		if (!isErr(result)) throw new Error("expected error");
+		expect(result.error.kind).toBe("missing_artifact_contract");
+		if (result.error.kind === "missing_artifact_contract") {
+			expect(unwrap(result.error.stepId)).toBe("check");
+			expect(result.error.direction).toBe("read");
+		}
+	});
+
+	it("compiles a verify_command step with empty reads", () => {
+		const plan: PlanDraftDoc = {
+			task: "Verify with no reads.",
+			artifacts: [],
+			steps: [
+				{
+					kind: "verify_command",
+					id: "check",
+					command: "echo hello",
+					reads: [],
+					onPass: "done",
+					onFail: "done",
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+			],
+		};
+		const result = compile(plan, defaultActors, fixedIdOptions);
+		expect(isOk(result)).toBe(true);
+	});
+
 	it("formats compile errors into readable messages", () => {
 		const result = compile({ ...basicPlan, entryStep: "nonexistent" }, defaultActors, fixedIdOptions);
 		if (!isErr(result)) throw new Error("expected error");

@@ -94,6 +94,13 @@ const VerifyCommandStepSchema = Type.Object(
 			minLength: 1,
 			description: "Shell command to run, e.g. 'npm test' or 'cargo test && cargo clippy'. " + "Executed via bash.",
 		}),
+		reads: Type.Optional(
+			Type.Array(ArtifactIdField("An artifact ID this verify step may access."), {
+				description:
+					"Artifacts injected as environment variables when the command runs. " +
+					"Each artifact's value is set as an env var named after the artifact ID. Defaults to none.",
+			}),
+		),
 		timeoutMs: Type.Optional(
 			Type.Integer({
 				minimum: 100,
@@ -107,7 +114,8 @@ const VerifyCommandStepSchema = Type.Object(
 	{
 		description:
 			"A deterministic verification step that runs a shell command. Pass iff the command exits 0 within " +
-			"the timeout. Stdout and stderr are captured for the failure reason. Neither reads nor writes artifacts.",
+			"the timeout. Stdout and stderr are captured for the failure reason. " +
+			"Reads artifacts as environment variables but never writes them.",
 	},
 );
 

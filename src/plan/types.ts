@@ -56,6 +56,7 @@ export interface VerifyCommandStep {
 	readonly kind: "verify_command";
 	readonly id: StepId;
 	readonly command: string;
+	readonly reads: readonly ArtifactId[];
 	readonly timeoutMs?: number;
 	readonly onPass: StepId;
 	readonly onFail: StepId;

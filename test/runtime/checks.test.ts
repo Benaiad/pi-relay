@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { StepId } from "../../src/plan/ids.js";
+import { type ArtifactId, StepId } from "../../src/plan/ids.js";
 import { runFilesExist, runVerifyCommand } from "../../src/runtime/checks.js";
 
 describe("runFilesExist", () => {
@@ -96,6 +96,7 @@ describe("runVerifyCommand", () => {
 		kind: "verify_command" as const,
 		id: StepId("check"),
 		command,
+		reads: [] as readonly ArtifactId[],
 		timeoutMs,
 		onPass: StepId("ok"),
 		onFail: StepId("bad"),
