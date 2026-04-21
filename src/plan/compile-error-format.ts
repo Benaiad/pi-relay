@@ -62,5 +62,11 @@ export const formatCompileError = (error: CompileError): string => {
 				`Artifact '${unwrap(error.artifactId)}' is declared in the plan's artifacts list but no step writes it. ` +
 				`Either have a step declare it in its 'writes' or remove the contract.`
 			);
+
+		case "invalid_artifact_id":
+			return (
+				`Artifact id '${unwrap(error.artifactId)}' is invalid: ${error.reason}. ` +
+				`Artifact ids must be snake_case (lowercase letters, digits, underscores; must start with a letter).`
+			);
 	}
 };

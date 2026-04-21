@@ -360,6 +360,86 @@ describe("compile", () => {
 		expect(result.error.kind).toBe("missing_route_target");
 	});
 
+	it("rejects an artifact id with hyphens", () => {
+		const bad: PlanDraftDoc = {
+			...basicPlan,
+			artifacts: [
+				{ id: "my-artifact", description: "bad" },
+				{ id: "notes", description: "notes" },
+			],
+			steps: [
+				{
+					kind: "action",
+					id: "plan",
+					actor: "planner",
+					instruction: "Write.",
+					writes: ["my-artifact"],
+					routes: { next: "implement" },
+				},
+				basicPlan.steps[1]!,
+				basicPlan.steps[2]!,
+			],
+		};
+		const result = compile(bad, defaultActors, fixedIdOptions);
+		if (!isErr(result)) throw new Error("expected error");
+		expect(result.error.kind).toBe("invalid_artifact_id");
+	});
+
+	it("rejects an artifact id with uppercase letters", () => {
+		const bad: PlanDraftDoc = {
+			...basicPlan,
+			artifacts: [
+				{ id: "MyArtifact", description: "bad" },
+				{ id: "notes", description: "notes" },
+			],
+			steps: [
+				{
+					kind: "action",
+					id: "plan",
+					actor: "planner",
+					instruction: "Write.",
+					writes: ["MyArtifact"],
+					routes: { next: "implement" },
+				},
+				basicPlan.steps[1]!,
+				basicPlan.steps[2]!,
+			],
+		};
+		const result = compile(bad, defaultActors, fixedIdOptions);
+		if (!isErr(result)) throw new Error("expected error");
+		expect(result.error.kind).toBe("invalid_artifact_id");
+	});
+
+	it("rejects an artifact id starting with a digit", () => {
+		const bad: PlanDraftDoc = {
+			...basicPlan,
+			artifacts: [
+				{ id: "123bad", description: "bad" },
+				{ id: "notes", description: "notes" },
+			],
+			steps: [
+				{
+					kind: "action",
+					id: "plan",
+					actor: "planner",
+					instruction: "Write.",
+					writes: ["123bad"],
+					routes: { next: "implement" },
+				},
+				basicPlan.steps[1]!,
+				basicPlan.steps[2]!,
+			],
+		};
+		const result = compile(bad, defaultActors, fixedIdOptions);
+		if (!isErr(result)) throw new Error("expected error");
+		expect(result.error.kind).toBe("invalid_artifact_id");
+	});
+
+	it("accepts a valid snake_case artifact id", () => {
+		const result = compile(basicPlan, defaultActors, fixedIdOptions);
+		expect(isOk(result)).toBe(true);
+	});
+
 	it("formats compile errors into readable messages", () => {
 		const result = compile({ ...basicPlan, entryStep: "nonexistent" }, defaultActors, fixedIdOptions);
 		if (!isErr(result)) throw new Error("expected error");

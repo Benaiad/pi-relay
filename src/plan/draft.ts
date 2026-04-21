@@ -22,6 +22,14 @@ const IdField = (description: string) =>
 		pattern: "^[a-zA-Z0-9_.:-]+$",
 	});
 
+const ArtifactIdField = (description: string) =>
+	Type.String({
+		description,
+		minLength: 1,
+		maxLength: 128,
+		pattern: "^[a-z][a-z0-9_]*$",
+	});
+
 const ActionStepSchema = Type.Object(
 	{
 		kind: Type.Literal("action"),
@@ -35,13 +43,13 @@ const ActionStepSchema = Type.Object(
 			description: "Task instruction handed to the actor, describing exactly what to do.",
 		}),
 		reads: Type.Optional(
-			Type.Array(IdField("An ArtifactId this actor may read."), {
+			Type.Array(ArtifactIdField("An ArtifactId this actor may read."), {
 				description:
 					"Artifacts visible to this step's actor in its input snapshot. Every read must have a writer. Defaults to none.",
 			}),
 		),
 		writes: Type.Optional(
-			Type.Array(IdField("An ArtifactId this step may commit."), {
+			Type.Array(ArtifactIdField("An ArtifactId this step may commit."), {
 				description:
 					"Artifacts this step is allowed to produce. Each artifact has at most one writing step. Defaults to none.",
 			}),
@@ -154,7 +162,7 @@ const StepSchema = Type.Union(
 
 const ArtifactContractSchema = Type.Object(
 	{
-		id: IdField("Unique artifact identifier within this plan."),
+		id: ArtifactIdField("Unique artifact identifier within this plan. Must be snake_case (lowercase, digits, underscores)."),
 		description: Type.String({
 			minLength: 1,
 			maxLength: 1000,

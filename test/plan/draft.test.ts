@@ -11,7 +11,7 @@ const validPlan: PlanDraftDoc = {
 			description: "Parsed requirements",
 		},
 		{
-			id: "implementation-notes",
+			id: "implementation_notes",
 			description: "Notes from the implementer",
 		},
 	],
@@ -31,7 +31,7 @@ const validPlan: PlanDraftDoc = {
 			actor: "worker",
 			instruction: "Apply the changes described in requirements.",
 			reads: ["requirements"],
-			writes: ["implementation-notes"],
+			writes: ["implementation_notes"],
 			routes: { done: "run-tests" },
 		},
 		{
