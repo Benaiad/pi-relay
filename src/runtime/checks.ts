@@ -12,8 +12,9 @@
  *   - `runFilesExist`       — pass iff every listed path exists on the
  *                             filesystem
  *
- * Verify steps never call an LLM, never read or write artifacts, and always
- * terminate within their declared timeout. Command execution delegates to
+ * Verify steps never call an LLM and always terminate within their declared
+ * timeout. Verify command steps may read artifacts (injected as env vars)
+ * but never write them. Command execution delegates to
  * Pi's `createLocalBashOperations()` for process tree cleanup, cross-platform
  * shell resolution, and abort handling.
  */

@@ -40,7 +40,7 @@ Three things are added to pi:
 A plan is a DAG of steps. Four kinds:
 
 - **`action`** — an actor (LLM agent) runs with a restricted tool set and emits a route on completion.
-- **`verify_command`** — runs a shell command. Pass if exit 0, fail otherwise. Output is captured for the failure reason.
+- **`verify_command`** — runs a shell command. Pass if exit 0, fail otherwise. Output is captured for the failure reason. Can optionally read artifacts (injected as environment variables).
 - **`verify_files_exist`** — checks that all listed paths exist on the filesystem.
 - **`terminal`** — ends the run with a declared outcome: success or failure.
 
@@ -58,7 +58,20 @@ Verify steps route via fixed `onPass` / `onFail` fields.
 
 ### Artifacts
 
-Structured state passed between steps. Declared at the plan level with an id and description, then read and written by action steps. Artifacts can optionally declare `fields` (named keys the value must contain) and `list: true` (value is an array of objects with those fields). The runtime validates committed values against the declared shape and enforces that only declared writers commit. Artifacts accumulate across loop iterations with attribution metadata.
+Structured state passed between steps. Declared at the plan level with an id and description, then read and written by steps. Action steps read and write artifacts through the completion protocol. Verify command steps can read artifacts — each declared read is injected as an environment variable named after the artifact id:
+
+```yaml
+- kind: verify_command
+  id: grade
+  command: "./grader.sh"
+  reads: [candidate]
+  onPass: done
+  onFail: propose
+```
+
+The grader accesses `$candidate` directly. Text artifacts are raw strings; structured artifacts are JSON.
+
+Artifact ids must be snake_case (`^[a-z][a-z0-9_]*$`) since they double as env var names. Artifacts can optionally declare `fields` (named keys the value must contain) and `list: true` (value is an array of objects with those fields). The runtime validates committed values against the declared shape and enforces that only declared writers commit. Artifacts accumulate across loop iterations with attribution metadata.
 
 ### Back-edges and loops
 
