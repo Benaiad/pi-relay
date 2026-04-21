@@ -143,10 +143,14 @@ const buildVerifyCommandBlock = (
 ): string[] => {
 	const timeoutSuffix = step.timeoutMs ? `  (timeout ${Math.round(step.timeoutMs / 1000)}s)` : "";
 	const description = `$ ${step.command}${timeoutSuffix}`;
-	return [
+	const lines = [
 		`  ${theme.fg("warning", `${index}.`)} ${theme.fg("toolTitle", step.id)}  ${theme.fg("toolOutput", description)}`,
-		`     ${theme.fg("dim", `Pass → ${step.onPass}, fail → ${step.onFail}`)}`,
 	];
+	if (step.reads && step.reads.length > 0) {
+		lines.push(`     ${theme.fg("dim", `Uses: ${step.reads.join(", ")}`)}`);
+	}
+	lines.push(`     ${theme.fg("dim", `Pass → ${step.onPass}, fail → ${step.onFail}`)}`);
+	return lines;
 };
 
 const buildVerifyFilesExistBlock = (
