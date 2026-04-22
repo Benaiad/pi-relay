@@ -84,6 +84,33 @@ These appear in the `RelayEvent` union, the `applyEvent` reducer,
 the `buildAttemptTimeline` walker, and any test that matches on
 event kinds.
 
+### Attempt outcomes
+
+| Old | New |
+|-----|-----|
+| `"verify_pass"` (AttemptOutcome) | `"check_pass"` |
+| `"verify_fail"` (AttemptOutcome) | `"check_fail"` |
+
+These are the per-attempt outcome values in the run report, distinct
+from event kinds. They flow through:
+- `AttemptOutcome` type definition (`run-report.ts`)
+- `buildAttemptTimeline` — maps event kinds to outcomes
+- `formatTimelineEntry` — matches on outcome to render failure text
+- `iconForAttemptOutcome` (`run-result.ts`) — picks the glyph
+- `appendAttemptBlock` (`run-result.ts`) — renders failure text
+- `summarizePriorAttempt` (`scheduler.ts`) — builds the label the
+  actor sees on re-entry: `"check passed"` / `"check failed: ..."`
+
+### Generic route name sets
+
+`GENERIC_ROUTE_NAMES` (run-result.ts) and `GENERIC_ROUTE_NAMES_TEXT`
+(run-report.ts) currently contain `"pass"`. Since the internal route
+IDs change from `"pass"/"fail"` to `"success"/"failure"`:
+- Remove `"pass"` — no longer a route ID
+- `"success"` is already present
+- Do NOT add `"failure"` — if a step routes to failure, that's
+  meaningful information worth displaying
+
 ## File-by-file changes
 
 ### Source
