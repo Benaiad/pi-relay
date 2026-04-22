@@ -149,6 +149,9 @@ const buildCommandBlock = (
 	if (step.reads && step.reads.length > 0) {
 		lines.push(`     ${theme.fg("dim", `Uses: ${step.reads.join(", ")}`)}`);
 	}
+	if (step.writes && step.writes.length > 0) {
+		lines.push(`     ${theme.fg("dim", `Produces: ${step.writes.join(", ")}`)}`);
+	}
 	lines.push(`     ${theme.fg("dim", `Success → ${step.onSuccess}, failure → ${step.onFailure}`)}`);
 	return lines;
 };

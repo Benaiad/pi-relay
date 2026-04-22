@@ -51,7 +51,7 @@ Three things are added to pi:
 A plan is a DAG of steps. Four kinds:
 
 - **`action`** — an actor (LLM agent) runs with a restricted tool set and emits a route on completion.
-- **`command`** — runs a shell command. Pass if exit 0, fail otherwise. Output is captured for the failure reason. Can optionally read artifacts (injected as environment variables).
+- **`command`** — runs a shell command. Pass if exit 0, fail otherwise. Output is captured for the failure reason. Can read artifacts (injected as env vars) and write artifacts (via the `$RELAY_OUT` directory).
 - **`files_exist`** — checks that all listed paths exist on the filesystem.
 - **`terminal`** — ends the run with a declared outcome: success or failure.
 
@@ -69,18 +69,28 @@ Command and files_exist steps route via fixed `onSuccess` / `onFailure` fields.
 
 ### Artifacts
 
-Structured state passed between steps. Declared at the plan level with an id and description, then read and written by steps. Action steps read and write artifacts through the completion protocol. Command steps can read artifacts — each declared read is injected as an environment variable named after the artifact id:
+Structured state passed between steps. Declared at the plan level with an id and description, then read and written by steps. Action steps read and write artifacts through the completion protocol. Command steps read and write artifacts through the filesystem:
 
 ```yaml
 - kind: command
   id: grade
   command: "./grader.sh"
   reads: [candidate]
+  writes: [evaluation]
   onSuccess: done
   onFailure: propose
 ```
 
-The grader accesses `$candidate` directly. Text artifacts are raw strings; structured artifacts are JSON.
+**Reads:** Each declared read is injected as an env var named after the artifact id. The grader accesses `$candidate` directly.
+
+**Writes:** The runtime sets `$RELAY_OUT` to a temp directory. The command writes files named after artifact ids into it. After exit, the runtime reads them back and commits to the artifact store.
+
+```bash
+# grader.sh reads $candidate, writes evaluation
+echo "$candidate" | ./run-challenges.sh > "$RELAY_OUT/evaluation"
+```
+
+Text artifacts are raw strings; structured artifacts are JSON.
 
 Artifact ids must be snake_case (`^[a-z][a-z0-9_]*$`) since they double as env var names. Artifacts can optionally declare `fields` (named keys the value must contain) and `list: true` (value is an array of objects with those fields). The runtime validates committed values against the declared shape and enforces that only declared writers commit. Artifacts accumulate across loop iterations with attribution metadata.
 

@@ -13,8 +13,8 @@
  *                             filesystem
  *
  * These steps never call an LLM and always terminate within their declared
- * timeout. Command steps may read artifacts (injected as env vars) but
- * never write them. Command execution delegates to
+ * timeout. Command steps may read artifacts (injected as env vars) and
+ * write artifacts (via the $RELAY_OUT directory). Command execution delegates to
  * Pi's `createLocalBashOperations()` for process tree cleanup, cross-platform
  * shell resolution, and abort handling.
  */
