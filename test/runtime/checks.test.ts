@@ -191,7 +191,7 @@ describe("runCommand", () => {
 		expect(chunks.join("")).toContain("/tmp/test-input");
 	});
 
-	it("preserves standard env vars (PATH) when custom env is set", async () => {
+	it("preserves standard PATH when custom env is set", async () => {
 		const outcome = await runCommand(commandStep("node --version"), {
 			cwd: process.cwd(),
 			env: { RELAY_INPUT: "/tmp/test" },

@@ -42,7 +42,7 @@ export interface Program {
 	 * Edge index: `(fromStep, route)` → `toStep`.
 	 *
 	 * Contains one entry per outgoing edge declared by any action step plus
-	 * two entries per check step (`pass` and `fail`). Terminal steps contribute
+	 * two entries per command step (`success` and `failure`). Terminal steps contribute
 	 * no edges.
 	 */
 	readonly edges: ReadonlyMap<EdgeKey, StepId>;
