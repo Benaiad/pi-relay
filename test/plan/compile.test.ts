@@ -516,6 +516,66 @@ describe("compile", () => {
 		expect(isOk(result)).toBe(true);
 	});
 
+	it("accepts a command step with writes", () => {
+		const plan: PlanDraftDoc = {
+			task: "Command writes an artifact.",
+			artifacts: [
+				{ id: "input", description: "in" },
+				{ id: "output", description: "out" },
+			],
+			steps: [
+				{
+					kind: "action",
+					id: "produce",
+					actor: "worker",
+					instruction: "Write input.",
+					writes: ["input"],
+					routes: { done: "grade" },
+				},
+				{
+					kind: "command",
+					id: "grade",
+					command: "./grader.sh",
+					reads: ["input"],
+					writes: ["output"],
+					onSuccess: "done",
+					onFailure: "done",
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+			],
+		};
+		const result = compile(plan, defaultActors, fixedIdOptions);
+		expect(isOk(result)).toBe(true);
+		if (!isOk(result)) return;
+		expect(result.value.allowedWriters.get(ArtifactId("output"))).toEqual(new Set([StepId("grade")]));
+		expect(result.value.writers.get(ArtifactId("output"))).toEqual(StepId("grade"));
+	});
+
+	it("rejects a command step writing an undeclared artifact", () => {
+		const plan: PlanDraftDoc = {
+			task: "Command writes ghost.",
+			artifacts: [],
+			steps: [
+				{
+					kind: "command",
+					id: "grade",
+					command: "./grader.sh",
+					writes: ["ghost"],
+					onSuccess: "done",
+					onFailure: "done",
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+			],
+		};
+		const result = compile(plan, defaultActors, fixedIdOptions);
+		if (!isErr(result)) throw new Error("expected error");
+		expect(result.error.kind).toBe("missing_artifact_contract");
+		if (result.error.kind === "missing_artifact_contract") {
+			expect(unwrap(result.error.stepId)).toBe("grade");
+			expect(result.error.direction).toBe("write");
+		}
+	});
+
 	it("formats compile errors into readable messages", () => {
 		const result = compile({ ...basicPlan, entryStep: "nonexistent" }, defaultActors, fixedIdOptions);
 		if (!isErr(result)) throw new Error("expected error");

@@ -101,6 +101,13 @@ const CommandStepSchema = Type.Object(
 					"Each artifact's value is set as an env var named after the artifact ID. Defaults to none.",
 			}),
 		),
+		writes: Type.Optional(
+			Type.Array(ArtifactIdField("An artifact ID this command step may produce."), {
+				description:
+					"Artifacts this step may write. The command writes files named after the artifact ID " +
+					"into the $RELAY_OUT directory. The runtime reads them back after exit. Defaults to none.",
+			}),
+		),
 		timeoutMs: Type.Optional(
 			Type.Integer({
 				minimum: 100,
@@ -115,7 +122,7 @@ const CommandStepSchema = Type.Object(
 		description:
 			"A deterministic step that runs a shell command. Succeeds iff the command exits 0 within " +
 			"the timeout. Stdout and stderr are captured for the failure reason. " +
-			"Reads artifacts as environment variables but never writes them.",
+			"Reads artifacts as env vars, writes artifacts via the $RELAY_OUT directory.",
 	},
 );
 

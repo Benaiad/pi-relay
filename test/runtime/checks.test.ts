@@ -97,6 +97,7 @@ describe("runCommand", () => {
 		id: StepId("check"),
 		command,
 		reads: [] as readonly ArtifactId[],
+		writes: [] as readonly ArtifactId[],
 		timeoutMs,
 		onSuccess: StepId("ok"),
 		onFailure: StepId("bad"),

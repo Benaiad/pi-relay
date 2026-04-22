@@ -158,6 +158,7 @@ const brandCommand = (doc: Extract<PlanDraftDoc["steps"][number], { kind: "comma
 	id: StepId(doc.id),
 	command: doc.command,
 	reads: (doc.reads ?? []).map((r) => ArtifactId(r)),
+	writes: (doc.writes ?? []).map((w) => ArtifactId(w)),
 	timeoutMs: doc.timeoutMs,
 	onSuccess: StepId(doc.onSuccess),
 	onFailure: StepId(doc.onFailure),
@@ -295,53 +296,37 @@ const buildArtifacts = (
 	const readers = new Map<ArtifactId, Set<StepId>>();
 
 	for (const step of steps.values()) {
-		if (step.kind === "action") {
-			for (const writeId of step.writes) {
-				const contract = artifacts.get(writeId);
-				if (contract === undefined) {
-					return err({
-						kind: "missing_artifact_contract",
-						artifactId: writeId,
-						stepId: step.id,
-						direction: "write",
-					});
-				}
-				const prior = writers.get(writeId);
-				if (prior === undefined) writers.set(writeId, step.id);
-				const bucket = allowedWriters.get(writeId) ?? new Set<StepId>();
-				bucket.add(step.id);
-				allowedWriters.set(writeId, bucket);
-			}
+		if (step.kind !== "action" && step.kind !== "command") continue;
 
-			for (const readId of step.reads) {
-				if (!artifacts.has(readId)) {
-					return err({
-						kind: "missing_artifact_contract",
-						artifactId: readId,
-						stepId: step.id,
-						direction: "read",
-					});
-				}
-				const set = readers.get(readId) ?? new Set<StepId>();
-				set.add(step.id);
-				readers.set(readId, set);
+		for (const writeId of step.writes) {
+			const contract = artifacts.get(writeId);
+			if (contract === undefined) {
+				return err({
+					kind: "missing_artifact_contract",
+					artifactId: writeId,
+					stepId: step.id,
+					direction: "write",
+				});
 			}
+			const prior = writers.get(writeId);
+			if (prior === undefined) writers.set(writeId, step.id);
+			const bucket = allowedWriters.get(writeId) ?? new Set<StepId>();
+			bucket.add(step.id);
+			allowedWriters.set(writeId, bucket);
 		}
 
-		if (step.kind === "command") {
-			for (const readId of step.reads) {
-				if (!artifacts.has(readId)) {
-					return err({
-						kind: "missing_artifact_contract",
-						artifactId: readId,
-						stepId: step.id,
-						direction: "read",
-					});
-				}
-				const set = readers.get(readId) ?? new Set<StepId>();
-				set.add(step.id);
-				readers.set(readId, set);
+		for (const readId of step.reads) {
+			if (!artifacts.has(readId)) {
+				return err({
+					kind: "missing_artifact_contract",
+					artifactId: readId,
+					stepId: step.id,
+					direction: "read",
+				});
 			}
+			const set = readers.get(readId) ?? new Set<StepId>();
+			set.add(step.id);
+			readers.set(readId, set);
 		}
 	}
 

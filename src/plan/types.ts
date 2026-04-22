@@ -57,6 +57,7 @@ export interface CommandStep {
 	readonly id: StepId;
 	readonly command: string;
 	readonly reads: readonly ArtifactId[];
+	readonly writes: readonly ArtifactId[];
 	readonly timeoutMs?: number;
 	readonly onSuccess: StepId;
 	readonly onFailure: StepId;
