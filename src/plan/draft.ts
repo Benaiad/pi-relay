@@ -107,6 +107,7 @@ const CommandStepSchema = Type.Object(
 				description:
 					"Artifacts this step may write. The runtime creates a directory and sets $RELAY_OUT " +
 					"to its path. Write files named after the artifact ID: echo value > $RELAY_OUT/artifact_id. " +
+					"Plain text for text artifacts, JSON for artifacts with fields. " +
 					"The runtime reads them back after exit. Do NOT mkdir $RELAY_OUT — it already exists. " +
 					"Defaults to none.",
 			}),
