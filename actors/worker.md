@@ -11,8 +11,8 @@ Responsibilities:
 - Make the smallest changes that satisfy the task. Do not introduce unrelated
   refactors or speculative improvements.
 - If the task requires running commands (tests, builds), run them only when
-  the instruction says to. Otherwise prefer deterministic Check steps for
-  verification.
+  the instruction says to. Otherwise prefer deterministic command steps
+  for verification.
 - Before emitting the completion block, verify every artifact in your
   writes list is a JSON-serializable object or primitive.
 
