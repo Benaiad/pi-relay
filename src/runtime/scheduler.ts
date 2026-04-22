@@ -32,7 +32,7 @@
  * never calls `Date.now` directly.
  */
 
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stripCompletionTag } from "../actors/complete-step.js";
@@ -496,16 +496,19 @@ export class Scheduler {
 			this.notifyOutputHandlers();
 		};
 
-		const outDir = step.writes.length > 0 ? await mkdtemp(join(tmpdir(), "pi-relay-out-")) : undefined;
+		const inputDir = await this.writeArtifactInputDir(step.reads);
+		const outputDir = step.writes.length > 0 ? await mkdtemp(join(tmpdir(), "pi-relay-output-")) : undefined;
 		try {
-			const env = this.buildArtifactEnv(step.reads);
-			const mergedEnv = outDir ? { ...env, RELAY_OUT: outDir } : env;
-			const outcome = await runCommand(step, { cwd: this.cwd, signal: this.signal, env: mergedEnv }, onOutput);
+			const env: Record<string, string> = {};
+			if (inputDir) env.RELAY_INPUT = inputDir;
+			if (outputDir) env.RELAY_OUTPUT = outputDir;
+			const envOrUndefined = Object.keys(env).length > 0 ? env : undefined;
+			const outcome = await runCommand(step, { cwd: this.cwd, signal: this.signal, env: envOrUndefined }, onOutput);
 			this.checkOutputChunks.delete(step.id);
 			this.checkOutputLens.delete(step.id);
 
-			if (outDir) {
-				await this.commitCommandWrites(step, outDir, attempt);
+			if (outputDir) {
+				await this.commitCommandWrites(step, outputDir, attempt);
 			}
 
 			const description = describeCommandStep(step);
@@ -533,9 +536,8 @@ export class Scheduler {
 				this.followRoute(step.id, makeRouteId("failure"));
 			}
 		} finally {
-			if (outDir) {
-				await rm(outDir, { recursive: true, force: true }).catch(() => {});
-			}
+			if (inputDir) await rm(inputDir, { recursive: true, force: true }).catch(() => {});
+			if (outputDir) await rm(outputDir, { recursive: true, force: true }).catch(() => {});
 		}
 	}
 
@@ -691,19 +693,21 @@ export class Scheduler {
 		this.enqueueReady(target);
 	}
 
-	private buildArtifactEnv(reads: readonly ArtifactId[]): Record<string, string> | undefined {
+	private async writeArtifactInputDir(reads: readonly ArtifactId[]): Promise<string | undefined> {
 		if (reads.length === 0) return undefined;
 		const snapshot = this.artifactStore.snapshot(reads);
-		const env: Record<string, string> = {};
+		if (snapshot.ids().length === 0) return undefined;
+		const dir = await mkdtemp(join(tmpdir(), "pi-relay-input-"));
 		for (const id of reads) {
 			if (!snapshot.has(id)) continue;
-			env[unwrap(id)] = serializeForEnv(snapshot.get(id));
+			const content = serializeForFile(snapshot.get(id));
+			await writeFile(join(dir, unwrap(id)), content, "utf-8");
 		}
-		return Object.keys(env).length > 0 ? env : undefined;
+		return dir;
 	}
 }
 
-const serializeForEnv = (value: unknown): string => {
+const serializeForFile = (value: unknown): string => {
 	if (isAccumulatedEntryArray(value)) {
 		const latest = value[value.length - 1]!.value;
 		return typeof latest === "string" ? latest : JSON.stringify(latest);

@@ -859,10 +859,10 @@ describe("Scheduler — terminal routes", () => {
 	});
 });
 
-describe("Scheduler — verify step artifact reads", () => {
-	it("injects artifact values as env vars into verify commands", async () => {
+describe("Scheduler — command step artifact reads", () => {
+	it("provides read artifacts as files in RELAY_INPUT", async () => {
 		const plan: PlanDraftDoc = {
-			task: "Action writes, verify reads via env var.",
+			task: "Action writes, command reads from RELAY_INPUT.",
 			artifacts: [{ id: "candidate", description: "test value" }],
 			steps: [
 				{
@@ -876,7 +876,8 @@ describe("Scheduler — verify step artifact reads", () => {
 				{
 					kind: "command",
 					id: "check",
-					command: "node -e \"process.exit(process.env.candidate === 'hello' ? 0 : 1)\"",
+					command:
+						"node -e \"const v = require('fs').readFileSync(require('path').join(process.env.RELAY_INPUT, 'candidate'), 'utf-8'); process.exit(v === 'hello' ? 0 : 1)\"",
 					reads: ["candidate"],
 					onSuccess: "done",
 					onFailure: "failed",
@@ -891,9 +892,9 @@ describe("Scheduler — verify step artifact reads", () => {
 		expect(report.outcome).toBe("success");
 	});
 
-	it("serializes structured artifacts as JSON in env vars", async () => {
+	it("serializes structured artifacts as JSON files in RELAY_INPUT", async () => {
 		const plan: PlanDraftDoc = {
-			task: "Action writes record, verify reads JSON.",
+			task: "Action writes record, command reads JSON from RELAY_INPUT.",
 			artifacts: [{ id: "result", description: "structured", fields: ["score", "label"] }],
 			steps: [
 				{
@@ -907,7 +908,8 @@ describe("Scheduler — verify step artifact reads", () => {
 				{
 					kind: "command",
 					id: "check",
-					command: 'node -e "const v = JSON.parse(process.env.result); process.exit(v.score === 42 ? 0 : 1)"',
+					command:
+						"node -e \"const v = JSON.parse(require('fs').readFileSync(require('path').join(process.env.RELAY_INPUT, 'result'), 'utf-8')); process.exit(v.score === 42 ? 0 : 1)\"",
 					reads: ["result"],
 					onSuccess: "done",
 					onFailure: "failed",
@@ -924,9 +926,9 @@ describe("Scheduler — verify step artifact reads", () => {
 		expect(report.outcome).toBe("success");
 	});
 
-	it("omits env vars for artifacts not yet committed", async () => {
+	it("omits input files for artifacts not yet committed", async () => {
 		const plan: PlanDraftDoc = {
-			task: "Verify reads artifact that another step writes but hasn't run yet.",
+			task: "Command reads artifact that hasn't been written yet.",
 			artifacts: [{ id: "data", description: "d" }],
 			steps: [
 				{
@@ -939,7 +941,8 @@ describe("Scheduler — verify step artifact reads", () => {
 				{
 					kind: "command",
 					id: "check",
-					command: 'node -e "process.exit(process.env.data === undefined ? 0 : 1)"',
+					command:
+						"node -e \"const fs = require('fs'); const p = require('path').join(process.env.RELAY_INPUT || '/nonexistent', 'data'); process.exit(fs.existsSync(p) ? 1 : 0)\"",
 					reads: ["data"],
 					onSuccess: "done",
 					onFailure: "failed",
@@ -964,7 +967,7 @@ describe("Scheduler — verify step artifact reads", () => {
 });
 
 describe("Scheduler — command step writes", () => {
-	it("commits a text artifact written to RELAY_OUT by a command step", async () => {
+	it("commits a text artifact written to RELAY_OUTPUT by a command step", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Command writes a text artifact.",
 			artifacts: [{ id: "score", description: "score" }],
@@ -973,7 +976,7 @@ describe("Scheduler — command step writes", () => {
 					kind: "command",
 					id: "grade",
 					command:
-						"node -e \"require('fs').writeFileSync(require('path').join(process.env.RELAY_OUT, 'score'), '0.85')\"",
+						"node -e \"require('fs').writeFileSync(require('path').join(process.env.RELAY_OUTPUT, 'score'), '0.85')\"",
 					writes: ["score"],
 					onSuccess: "done",
 					onFailure: "done",
@@ -990,7 +993,7 @@ describe("Scheduler — command step writes", () => {
 		expect(events.some((e) => e.kind === "artifact_committed")).toBe(true);
 	});
 
-	it("commits a JSON artifact written to RELAY_OUT for a record-shaped contract", async () => {
+	it("commits a JSON artifact written to RELAY_OUTPUT for a record-shaped contract", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Command writes a JSON artifact.",
 			artifacts: [{ id: "result", description: "result", fields: ["value", "label"] }],
@@ -999,7 +1002,7 @@ describe("Scheduler — command step writes", () => {
 					kind: "command",
 					id: "grade",
 					command:
-						"node -e \"require('fs').writeFileSync(require('path').join(process.env.RELAY_OUT, 'result'), JSON.stringify({value: 42, label: 'good'}))\"",
+						"node -e \"require('fs').writeFileSync(require('path').join(process.env.RELAY_OUTPUT, 'result'), JSON.stringify({value: 42, label: 'good'}))\"",
 					writes: ["result"],
 					onSuccess: "done",
 					onFailure: "done",
@@ -1023,7 +1026,7 @@ describe("Scheduler — command step writes", () => {
 					kind: "command",
 					id: "grade",
 					command:
-						"node -e \"require('fs').writeFileSync(require('path').join(process.env.RELAY_OUT, 'feedback'), 'needs work'); process.exit(1)\"",
+						"node -e \"require('fs').writeFileSync(require('path').join(process.env.RELAY_OUTPUT, 'feedback'), 'needs work'); process.exit(1)\"",
 					writes: ["feedback"],
 					onSuccess: "ok",
 					onFailure: "retry",
@@ -1041,7 +1044,7 @@ describe("Scheduler — command step writes", () => {
 		expect(events.some((e) => e.kind === "artifact_committed")).toBe(true);
 	});
 
-	it("does not commit when the command writes nothing to RELAY_OUT", async () => {
+	it("does not commit when the command writes nothing to RELAY_OUTPUT", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Command declares writes but produces nothing.",
 			artifacts: [{ id: "output", description: "out" }],
@@ -1084,7 +1087,7 @@ describe("Scheduler — command step writes", () => {
 					kind: "command",
 					id: "grade",
 					command:
-						"node -e \"require('fs').writeFileSync(require('path').join(process.env.RELAY_OUT, 'result'), 'not json')\"",
+						"node -e \"require('fs').writeFileSync(require('path').join(process.env.RELAY_OUTPUT, 'result'), 'not json')\"",
 					writes: ["result"],
 					onSuccess: "done",
 					onFailure: "done",

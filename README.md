@@ -51,7 +51,7 @@ Three things are added to pi:
 A plan is a DAG of steps. Four kinds:
 
 - **`action`** — an actor (LLM agent) runs with a restricted tool set and emits a route on completion.
-- **`command`** — runs a shell command. Pass if exit 0, fail otherwise. Output is captured for the failure reason. Can read artifacts (injected as env vars) and write artifacts (via the `$RELAY_OUT` directory).
+- **`command`** — runs a shell command. Pass if exit 0, fail otherwise. Output is captured for the failure reason. Reads artifacts from `$RELAY_INPUT`, writes artifacts to `$RELAY_OUTPUT`.
 - **`files_exist`** — checks that all listed paths exist on the filesystem.
 - **`terminal`** — ends the run with a declared outcome: success or failure.
 
@@ -81,18 +81,17 @@ Structured state passed between steps. Declared at the plan level with an id and
   onFailure: propose
 ```
 
-**Reads:** Each declared read is injected as an env var named after the artifact id. The grader accesses `$candidate` directly.
-
-**Writes:** The runtime sets `$RELAY_OUT` to a temp directory. The command writes files named after artifact ids into it. After exit, the runtime reads them back and commits to the artifact store.
+The runtime creates two directories and sets `$RELAY_INPUT` and `$RELAY_OUTPUT` as env vars. Both use the same interface — files named after artifact ids:
 
 ```bash
-# grader.sh reads $candidate, writes evaluation
-echo "$candidate" | ./run-challenges.sh > "$RELAY_OUT/evaluation"
+# grader.sh — read from $RELAY_INPUT, write to $RELAY_OUTPUT
+candidate=$(cat "$RELAY_INPUT/candidate")
+echo "$candidate" | ./run-challenges.sh > "$RELAY_OUTPUT/evaluation"
 ```
 
-Text artifacts are raw strings; structured artifacts are JSON.
+Format: plain text (no fields), JSON object (fields), JSON array (fields + list). Both directories are created by the runtime — do not mkdir them.
 
-Artifact ids must be snake_case (`^[a-z][a-z0-9_]*$`) since they double as env var names. Artifacts can optionally declare `fields` (named keys the value must contain) and `list: true` (value is an array of objects with those fields). The runtime validates committed values against the declared shape and enforces that only declared writers commit. Artifacts accumulate across loop iterations with attribution metadata.
+Artifacts can optionally declare `fields` (named keys the value must contain) and `list: true` (value is an array of objects with those fields). The runtime validates committed values against the declared shape and enforces that only declared writers commit. Artifacts accumulate across loop iterations with attribution metadata.
 
 ### Back-edges and loops
 

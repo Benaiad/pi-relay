@@ -89,8 +89,8 @@ const CommandStepSchema = Type.Object(
 		reads: Type.Optional(
 			Type.Array(IdField("An artifact ID this command step may access."), {
 				description:
-					"Artifacts injected as environment variables when the command runs. " +
-					"Each read artifact is available as $artifact_id. " +
+					"Artifacts available as files in the $RELAY_INPUT directory. " +
+					"Read: cat $RELAY_INPUT/artifact_id. " +
 					"Format: plain text (no fields), JSON object (fields), JSON array (fields + list). " +
 					"Defaults to none.",
 			}),
@@ -98,10 +98,10 @@ const CommandStepSchema = Type.Object(
 		writes: Type.Optional(
 			Type.Array(IdField("An artifact ID this command step may produce."), {
 				description:
-					"Artifacts this step may write. The runtime creates $RELAY_OUT directory. " +
-					"Write: echo value > $RELAY_OUT/artifact_id. " +
+					"Artifacts this step may write to the $RELAY_OUTPUT directory. " +
+					"Write: echo value > $RELAY_OUTPUT/artifact_id. " +
 					"Format: plain text (no fields), JSON object (fields), JSON array (fields + list). " +
-					"Do NOT mkdir $RELAY_OUT — it already exists. Defaults to none.",
+					"Both directories are created by the runtime — do NOT mkdir them. Defaults to none.",
 			}),
 		),
 		timeoutMs: Type.Optional(
@@ -118,7 +118,7 @@ const CommandStepSchema = Type.Object(
 		description:
 			"A deterministic step that runs a shell command. Succeeds iff the command exits 0 within " +
 			"the timeout. Stdout and stderr are captured for the failure reason. " +
-			"Reads artifacts as env vars, writes artifacts via the $RELAY_OUT directory.",
+			"Reads artifacts from $RELAY_INPUT, writes artifacts to $RELAY_OUTPUT.",
 	},
 );
 
@@ -170,9 +170,7 @@ const StepSchema = Type.Union([ActionStepSchema, CommandStepSchema, FilesExistSt
 
 const ArtifactContractSchema = Type.Object(
 	{
-		id: IdField(
-			"Unique artifact identifier within this plan. Must be snake_case (lowercase, digits, underscores).",
-		),
+		id: IdField("Unique artifact identifier within this plan."),
 		description: Type.String({
 			minLength: 1,
 			maxLength: 1000,

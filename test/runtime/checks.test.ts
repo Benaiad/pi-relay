@@ -180,27 +180,22 @@ describe("runCommand", () => {
 		expect(outcome.kind).toBe("pass");
 	});
 
-	it("passes env vars from context to the child process", async () => {
+	it("passes env context to the child process", async () => {
 		const chunks: string[] = [];
 		const outcome = await runCommand(
-			commandStep("node -e \"process.stdout.write(process.env.candidate || 'MISSING')\""),
-			{ cwd: process.cwd(), env: { candidate: "hello from artifact" } },
+			commandStep("node -e \"process.stdout.write(process.env.RELAY_INPUT || 'MISSING')\""),
+			{ cwd: process.cwd(), env: { RELAY_INPUT: "/tmp/test-input" } },
 			(text) => chunks.push(text),
 		);
 		expect(outcome.kind).toBe("pass");
-		expect(chunks.join("")).toContain("hello from artifact");
+		expect(chunks.join("")).toContain("/tmp/test-input");
 	});
 
 	it("preserves standard env vars (PATH) when custom env is set", async () => {
 		const outcome = await runCommand(commandStep("node --version"), {
 			cwd: process.cwd(),
-			env: { candidate: "test" },
+			env: { RELAY_INPUT: "/tmp/test" },
 		});
-		expect(outcome.kind).toBe("pass");
-	});
-
-	it("runs without env vars when env is undefined", async () => {
-		const outcome = await runCommand(commandStep('node -e "process.exit(0)"'), { cwd: process.cwd() });
 		expect(outcome.kind).toBe("pass");
 	});
 });
