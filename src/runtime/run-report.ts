@@ -81,8 +81,8 @@ export interface StepSummary {
 	readonly usage: ActorUsage;
 	/** Present for action steps — the actor this step delegates to. */
 	readonly actorName?: string;
-	/** Present for verify steps — a human-readable description of what the verification runs. */
-	readonly verifyDescription?: string;
+	/** Present for command/files_exist steps — a human-readable description of what the step runs. */
+	readonly commandDescription?: string;
 	/** Present for terminal steps — the success/failure outcome declared on the step. */
 	readonly terminalOutcome?: TerminalOutcome;
 	/** Present for terminal steps — the summary prose declared on the step. */
@@ -182,7 +182,8 @@ const buildStepSummary = (stepId: StepId, state: RelayRunState, attempts: readon
 		lastReason: runtime.lastReason,
 		usage: runtime.usage,
 		actorName: step.kind === "action" ? unwrap(step.actor) : undefined,
-		verifyDescription: step.kind === "command" || step.kind === "files_exist" ? describeCommandStep(step) : undefined,
+		commandDescription:
+			step.kind === "command" || step.kind === "files_exist" ? describeCommandStep(step) : undefined,
 		terminalOutcome: step.kind === "terminal" ? step.outcome : undefined,
 		terminalSummary: step.kind === "terminal" ? step.summary : undefined,
 	};
@@ -513,7 +514,7 @@ const formatTimelineEntry = (
 			lines.push(`  "${oneLine(finalText)}"`);
 		}
 	} else if (step.kind === "command" || step.kind === "files_exist") {
-		if (step.verifyDescription) lines.push(`  ${step.verifyDescription}`);
+		if (step.commandDescription) lines.push(`  ${step.commandDescription}`);
 	} else if (step.kind === "terminal") {
 		if (step.terminalSummary) lines.push(`  ${oneLine(step.terminalSummary)}`);
 	}

@@ -41,7 +41,7 @@ Three things are added to pi:
 1. The assistant calls `relay` (ad-hoc plan) or `replay` (saved template) based on the task.
 2. The plan is compiled — actor references, route targets, and artifact contracts are validated.
 3. You review the plan and choose: **Run**, **Refine**, or **Cancel**.
-4. The scheduler executes steps sequentially. Action steps spawn isolated agent subprocesses. Verify steps run shell commands or check file existence and route on the outcome — pass or fail, no interpretation.
+4. The scheduler executes steps sequentially. Action steps spawn isolated agent subprocesses. Command steps run shell commands or check file existence and route on the outcome — pass or fail, no interpretation.
 5. The run report shows what happened: per-step outcomes, tool calls, and actor transcripts. Press `Ctrl+O` to expand the full step-by-step detail.
 
 ## Core concepts
@@ -65,11 +65,11 @@ routes: { done: verify, failure: failed }
 
 The actor chooses which route to emit on completion. Multi-way branching is supported — a judge step might route to `resolved` or `unresolved`, each pointing to a different next step.
 
-Verify steps route via fixed `onSuccess` / `onFailure` fields.
+Command and files_exist steps route via fixed `onSuccess` / `onFailure` fields.
 
 ### Artifacts
 
-Structured state passed between steps. Declared at the plan level with an id and description, then read and written by steps. Action steps read and write artifacts through the completion protocol. Verify command steps can read artifacts — each declared read is injected as an environment variable named after the artifact id:
+Structured state passed between steps. Declared at the plan level with an id and description, then read and written by steps. Action steps read and write artifacts through the completion protocol. Command steps can read artifacts — each declared read is injected as an environment variable named after the artifact id:
 
 ```yaml
 - kind: command
@@ -86,7 +86,7 @@ Artifact ids must be snake_case (`^[a-z][a-z0-9_]*$`) since they double as env v
 
 ### Back-edges and loops
 
-Routes can point to earlier steps, creating loops. A verify step that fails can route back to an action step, which re-runs with the failure reason in its prompt. The `maxRuns` field on action steps caps iterations to prevent runaway loops.
+Routes can point to earlier steps, creating loops. A command step that fails can route back to an action step, which re-runs with the failure reason in its prompt. The `maxRuns` field on action steps caps iterations to prevent runaway loops.
 
 ## Included templates
 
@@ -265,7 +265,7 @@ steps:
     summary: Verification failed.
 ```
 
-Verify commands run through pi's shell backend (respects `shellPath` in settings, defaults to `/bin/bash` on Unix, Git Bash on Windows). Integer and boolean parameters are coerced automatically.
+Commands run through pi's shell backend (respects `shellPath` in settings, defaults to `/bin/bash` on Unix, Git Bash on Windows). Integer and boolean parameters are coerced automatically.
 
 ## Actors
 

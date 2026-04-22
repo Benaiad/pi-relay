@@ -178,7 +178,7 @@ const CHOICE_CANCEL = "Cancel";
 
 export interface PlanImpact {
 	readonly actionStepCount: number;
-	readonly verifyStepCount: number;
+	readonly commandStepCount: number;
 	readonly terminalStepCount: number;
 	readonly artifactCount: number;
 	readonly uniqueActors: readonly string[];
@@ -196,7 +196,7 @@ export const summarizePlanImpact = (
 	actorsByName: ReadonlyMap<ReturnType<typeof ActorId>, ActorConfig>,
 ): PlanImpact => {
 	let actionStepCount = 0;
-	let verifyStepCount = 0;
+	let commandStepCount = 0;
 	let terminalStepCount = 0;
 	const uniqueActors = new Set<string>();
 	const unknownActors = new Set<string>();
@@ -219,12 +219,12 @@ export const summarizePlanImpact = (
 				if (COMMAND_TOOLS.has(tool)) mayRunCommands = true;
 			}
 		} else if (step.kind === "command") {
-			verifyStepCount += 1;
+			commandStepCount += 1;
 			const cmd = step.command;
 			commandChecks.push(cmd.length > 80 ? `${cmd.slice(0, 80)}…` : cmd);
 			mayRunCommands = true;
 		} else if (step.kind === "files_exist") {
-			verifyStepCount += 1;
+			commandStepCount += 1;
 		} else {
 			terminalStepCount += 1;
 		}
@@ -232,7 +232,7 @@ export const summarizePlanImpact = (
 
 	return {
 		actionStepCount,
-		verifyStepCount,
+		commandStepCount,
 		terminalStepCount,
 		artifactCount: (plan.artifacts ?? []).length,
 		uniqueActors: Array.from(uniqueActors),

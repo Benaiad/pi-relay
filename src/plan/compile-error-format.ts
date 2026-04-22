@@ -23,7 +23,7 @@ export const formatCompileError = (error: CompileError): string => {
 			return "Plan has no terminal step. Add at least one step with kind 'terminal' so the plan can complete.";
 
 		case "terminal_entry":
-			return `Entry step '${unwrap(error.entryStep)}' is a terminal. The plan would end immediately without doing any work. Use an action or verify step as the entry point.`;
+			return `Entry step '${unwrap(error.entryStep)}' is a terminal. The plan would end immediately without doing any work. Use an action or command step as the entry point.`;
 
 		case "duplicate_step":
 			return `Step id '${unwrap(error.stepId)}' appears more than once. Every step id must be unique within the plan.`;

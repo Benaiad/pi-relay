@@ -12,7 +12,7 @@
  *   1. Seed the ready queue with the program's entry step.
  *   2. While the queue is non-empty and not aborted:
  *      a. Pop the next step.
- *      b. Dispatch by kind. Action → actor engine. Verify → verify engine.
+ *      b. Dispatch by kind. Action → actor engine. Command → check engine.
  *         Terminal → emit `terminal_reached` and stop.
  *      c. On action failure (`no_completion` or `engine_error`), retry
  *         implicitly up to 3 times before following the failure route.
