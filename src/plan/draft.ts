@@ -22,14 +22,6 @@ const IdField = (description: string) =>
 		pattern: "^[a-zA-Z0-9_.:-]+$",
 	});
 
-const ArtifactIdField = (description: string) =>
-	Type.String({
-		description,
-		minLength: 1,
-		maxLength: 128,
-		pattern: "^[a-z][a-z0-9_]*$",
-	});
-
 const ActionStepSchema = Type.Object(
 	{
 		kind: Type.Literal("action"),
@@ -43,13 +35,13 @@ const ActionStepSchema = Type.Object(
 			description: "Task instruction handed to the actor, describing exactly what to do.",
 		}),
 		reads: Type.Optional(
-			Type.Array(ArtifactIdField("An ArtifactId this actor may read."), {
+			Type.Array(IdField("An ArtifactId this actor may read."), {
 				description:
 					"Artifacts visible to this step's actor in its input snapshot. Every read must have a writer. Defaults to none.",
 			}),
 		),
 		writes: Type.Optional(
-			Type.Array(ArtifactIdField("An ArtifactId this step may commit."), {
+			Type.Array(IdField("An ArtifactId this step may commit."), {
 				description:
 					"Artifacts this step is allowed to produce. Each artifact has at most one writing step. Defaults to none.",
 			}),
@@ -95,7 +87,7 @@ const CommandStepSchema = Type.Object(
 			description: "Shell command to run, e.g. 'npm test' or 'cargo test && cargo clippy'. " + "Executed via bash.",
 		}),
 		reads: Type.Optional(
-			Type.Array(ArtifactIdField("An artifact ID this command step may access."), {
+			Type.Array(IdField("An artifact ID this command step may access."), {
 				description:
 					"Artifacts injected as environment variables when the command runs. " +
 					"Each read artifact is available as $artifact_id. " +
@@ -104,7 +96,7 @@ const CommandStepSchema = Type.Object(
 			}),
 		),
 		writes: Type.Optional(
-			Type.Array(ArtifactIdField("An artifact ID this command step may produce."), {
+			Type.Array(IdField("An artifact ID this command step may produce."), {
 				description:
 					"Artifacts this step may write. The runtime creates $RELAY_OUT directory. " +
 					"Write: echo value > $RELAY_OUT/artifact_id. " +
@@ -178,7 +170,7 @@ const StepSchema = Type.Union([ActionStepSchema, CommandStepSchema, FilesExistSt
 
 const ArtifactContractSchema = Type.Object(
 	{
-		id: ArtifactIdField(
+		id: IdField(
 			"Unique artifact identifier within this plan. Must be snake_case (lowercase, digits, underscores).",
 		),
 		description: Type.String({

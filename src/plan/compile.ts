@@ -263,8 +263,6 @@ interface ArtifactIndices {
 	readers: ReadonlyMap<ArtifactId, ReadonlySet<StepId>>;
 }
 
-const ARTIFACT_ID_RE = /^[a-z][a-z0-9_]*$/;
-
 const buildArtifacts = (
 	contracts: NonNullable<PlanDraftDoc["artifacts"]>,
 	steps: ReadonlyMap<StepId, Step>,
@@ -272,13 +270,6 @@ const buildArtifacts = (
 	const artifacts = new Map<ArtifactId, ArtifactContract>();
 	for (const c of contracts) {
 		const id = ArtifactId(c.id);
-		if (!ARTIFACT_ID_RE.test(c.id)) {
-			return err({
-				kind: "invalid_artifact_id",
-				artifactId: id,
-				reason: "must match ^[a-z][a-z0-9_]*$",
-			});
-		}
 		if (artifacts.has(id)) {
 			return err({ kind: "duplicate_artifact", artifactId: id });
 		}

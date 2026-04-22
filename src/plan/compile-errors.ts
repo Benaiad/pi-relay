@@ -46,9 +46,4 @@ export type CompileError =
 	| {
 			readonly kind: "missing_artifact_producer";
 			readonly artifactId: ArtifactId;
-	  }
-	| {
-			readonly kind: "invalid_artifact_id";
-			readonly artifactId: ArtifactId;
-			readonly reason: string;
 	  };
