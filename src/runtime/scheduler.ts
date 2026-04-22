@@ -32,6 +32,9 @@
  * never calls `Date.now` directly.
  */
 
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { stripCompletionTag } from "../actors/complete-step.js";
 import type {
 	ActionOutcome,
@@ -44,9 +47,9 @@ import type {
 } from "../actors/types.js";
 import { emptyUsage } from "../actors/types.js";
 import type { ActorId, ArtifactId, RouteId, StepId } from "../plan/ids.js";
-import { edgeKey, RouteId as makeRouteId, unwrap } from "../plan/ids.js";
+import { edgeKey, ArtifactId as makeArtifactId, RouteId as makeRouteId, unwrap } from "../plan/ids.js";
 import type { Program } from "../plan/program.js";
-import type { ActionStep, CommandStep, FilesExistStep, Step, TerminalStep } from "../plan/types.js";
+import type { ActionStep, ArtifactShape, CommandStep, FilesExistStep, Step, TerminalStep } from "../plan/types.js";
 import { isAccumulatedEntryArray } from "./accumulated-entry.js";
 import { ArtifactStore } from "./artifacts.js";
 import { AuditLog } from "./audit.js";
@@ -493,33 +496,96 @@ export class Scheduler {
 			this.notifyOutputHandlers();
 		};
 
-		const env = this.buildArtifactEnv(step.reads);
-		const outcome = await runCommand(step, { cwd: this.cwd, signal: this.signal, env }, onOutput);
-		this.checkOutputChunks.delete(step.id);
-		this.checkOutputLens.delete(step.id);
-		const description = describeCommandStep(step);
+		const outDir = step.writes.length > 0 ? await mkdtemp(join(tmpdir(), "pi-relay-out-")) : undefined;
+		try {
+			const env = this.buildArtifactEnv(step.reads);
+			const mergedEnv = outDir ? { ...env, RELAY_OUT: outDir } : env;
+			const outcome = await runCommand(step, { cwd: this.cwd, signal: this.signal, env: mergedEnv }, onOutput);
+			this.checkOutputChunks.delete(step.id);
+			this.checkOutputLens.delete(step.id);
 
-		if (outcome.kind === "pass") {
-			this.lastCheckResult = {
-				stepId: step.id,
-				outcome: "passed",
-				description,
-			};
-			this.emit({ kind: "check_passed", at: this.clock(), stepId: step.id });
-			this.followRoute(step.id, makeRouteId("success"));
-		} else {
-			this.lastCheckResult = {
-				stepId: step.id,
-				outcome: "failed",
-				description,
-			};
+			if (outDir) {
+				await this.commitCommandWrites(step, outDir, attempt);
+			}
+
+			const description = describeCommandStep(step);
+
+			if (outcome.kind === "pass") {
+				this.lastCheckResult = {
+					stepId: step.id,
+					outcome: "passed",
+					description,
+				};
+				this.emit({ kind: "check_passed", at: this.clock(), stepId: step.id });
+				this.followRoute(step.id, makeRouteId("success"));
+			} else {
+				this.lastCheckResult = {
+					stepId: step.id,
+					outcome: "failed",
+					description,
+				};
+				this.emit({
+					kind: "check_failed",
+					at: this.clock(),
+					stepId: step.id,
+					reason: outcome.reason,
+				});
+				this.followRoute(step.id, makeRouteId("failure"));
+			}
+		} finally {
+			if (outDir) {
+				await rm(outDir, { recursive: true, force: true }).catch(() => {});
+			}
+		}
+	}
+
+	private async commitCommandWrites(step: CommandStep, outDir: string, attempt: number): Promise<void> {
+		const declaredWrites = new Set(step.writes.map(unwrap));
+		let entries: string[];
+		try {
+			entries = await readdir(outDir);
+		} catch {
+			return;
+		}
+
+		const writes = new Map<ArtifactId, unknown>();
+		for (const fileName of entries) {
+			if (!declaredWrites.has(fileName)) continue;
+			const artifactId = makeArtifactId(fileName);
+			const contract = this.program.artifacts.get(artifactId);
+			if (!contract) continue;
+
+			let raw: string;
+			try {
+				raw = await readFile(join(outDir, fileName), "utf-8");
+			} catch {
+				continue;
+			}
+
+			const value = parseCommandOutput(raw, contract.shape.kind);
+			if (value === undefined) continue;
+			writes.set(artifactId, value);
+		}
+
+		if (writes.size === 0) return;
+
+		const commitResult = this.artifactStore.commit(step.id, writes, attempt);
+		if (!commitResult.ok) {
 			this.emit({
-				kind: "check_failed",
+				kind: "artifact_rejected",
 				at: this.clock(),
 				stepId: step.id,
-				reason: outcome.reason,
+				violation: commitResult.error,
 			});
-			this.followRoute(step.id, makeRouteId("failure"));
+			return;
+		}
+		for (const artifactId of writes.keys()) {
+			this.emit({
+				kind: "artifact_committed",
+				at: this.clock(),
+				artifactId,
+				writerStep: step.id,
+			});
 		}
 	}
 
@@ -644,4 +710,13 @@ const serializeForEnv = (value: unknown): string => {
 	}
 	if (typeof value === "string") return value;
 	return JSON.stringify(value);
+};
+
+const parseCommandOutput = (raw: string, shapeKind: ArtifactShape["kind"]): unknown | undefined => {
+	if (shapeKind === "text") return raw;
+	try {
+		return JSON.parse(raw);
+	} catch {
+		return undefined;
+	}
 };

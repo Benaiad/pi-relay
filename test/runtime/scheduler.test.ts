@@ -963,6 +963,146 @@ describe("Scheduler — verify step artifact reads", () => {
 	});
 });
 
+describe("Scheduler — command step writes", () => {
+	it("commits a text artifact written to RELAY_OUT by a command step", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Command writes a text artifact.",
+			artifacts: [{ id: "score", description: "score" }],
+			steps: [
+				{
+					kind: "command",
+					id: "grade",
+					command:
+						"node -e \"require('fs').writeFileSync(require('path').join(process.env.RELAY_OUT, 'score'), '0.85')\"",
+					writes: ["score"],
+					onSuccess: "done",
+					onFailure: "done",
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+			],
+		};
+		const engine = new ScriptedActorEngine(new Map());
+		const { scheduler } = buildScheduler(plan, engine);
+		const events: RelayEvent[] = [];
+		scheduler.subscribe((e) => events.push(e));
+		const report = await scheduler.run();
+		expect(report.outcome).toBe("success");
+		expect(events.some((e) => e.kind === "artifact_committed")).toBe(true);
+	});
+
+	it("commits a JSON artifact written to RELAY_OUT for a record-shaped contract", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Command writes a JSON artifact.",
+			artifacts: [{ id: "result", description: "result", fields: ["value", "label"] }],
+			steps: [
+				{
+					kind: "command",
+					id: "grade",
+					command:
+						"node -e \"require('fs').writeFileSync(require('path').join(process.env.RELAY_OUT, 'result'), JSON.stringify({value: 42, label: 'good'}))\"",
+					writes: ["result"],
+					onSuccess: "done",
+					onFailure: "done",
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+			],
+		};
+		const engine = new ScriptedActorEngine(new Map());
+		const { scheduler } = buildScheduler(plan, engine);
+		const report = await scheduler.run();
+		expect(report.outcome).toBe("success");
+		expect(report.artifacts.map((a) => unwrap(a.artifactId))).toEqual(["result"]);
+	});
+
+	it("commits artifacts even when the command exits non-zero", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Command fails but still writes.",
+			artifacts: [{ id: "feedback", description: "feedback" }],
+			steps: [
+				{
+					kind: "command",
+					id: "grade",
+					command:
+						"node -e \"require('fs').writeFileSync(require('path').join(process.env.RELAY_OUT, 'feedback'), 'needs work'); process.exit(1)\"",
+					writes: ["feedback"],
+					onSuccess: "ok",
+					onFailure: "retry",
+				},
+				{ kind: "terminal", id: "ok", outcome: "success", summary: "ok" },
+				{ kind: "terminal", id: "retry", outcome: "failure", summary: "failed" },
+			],
+		};
+		const engine = new ScriptedActorEngine(new Map());
+		const { scheduler } = buildScheduler(plan, engine);
+		const events: RelayEvent[] = [];
+		scheduler.subscribe((e) => events.push(e));
+		const report = await scheduler.run();
+		expect(report.outcome).toBe("failure");
+		expect(events.some((e) => e.kind === "artifact_committed")).toBe(true);
+	});
+
+	it("does not commit when the command writes nothing to RELAY_OUT", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Command declares writes but produces nothing.",
+			artifacts: [{ id: "output", description: "out" }],
+			steps: [
+				{
+					kind: "action",
+					id: "setup",
+					actor: "worker",
+					instruction: "Write output so the artifact has a producer.",
+					writes: ["output"],
+					routes: { done: "grade" },
+				},
+				{
+					kind: "command",
+					id: "grade",
+					command: 'node -e "process.exit(0)"',
+					writes: ["output"],
+					onSuccess: "done",
+					onFailure: "done",
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+			],
+		};
+		const engine = new ScriptedActorEngine(new Map([["setup", [completed("done", { output: "initial" })]]]));
+		const { scheduler } = buildScheduler(plan, engine);
+		const events: RelayEvent[] = [];
+		scheduler.subscribe((e) => events.push(e));
+		const report = await scheduler.run();
+		expect(report.outcome).toBe("success");
+		const commandCommits = events.filter((e) => e.kind === "artifact_committed" && unwrap(e.writerStep) === "grade");
+		expect(commandCommits.length).toBe(0);
+	});
+
+	it("skips malformed JSON for record-shaped artifacts without failing the run", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Command writes invalid JSON for a record artifact.",
+			artifacts: [{ id: "result", description: "result", fields: ["score"] }],
+			steps: [
+				{
+					kind: "command",
+					id: "grade",
+					command:
+						"node -e \"require('fs').writeFileSync(require('path').join(process.env.RELAY_OUT, 'result'), 'not json')\"",
+					writes: ["result"],
+					onSuccess: "done",
+					onFailure: "done",
+				},
+				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+			],
+		};
+		const engine = new ScriptedActorEngine(new Map());
+		const { scheduler } = buildScheduler(plan, engine);
+		const events: RelayEvent[] = [];
+		scheduler.subscribe((e) => events.push(e));
+		const report = await scheduler.run();
+		expect(report.outcome).toBe("success");
+		const commits = events.filter((e) => e.kind === "artifact_committed");
+		expect(commits.length).toBe(0);
+	});
+});
+
 describe("Scheduler — verify reader write enforcement", () => {
 	it("retries when action routes to a verify reader without writing the required artifact", async () => {
 		const plan: PlanDraftDoc = {
