@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import factory from "../src/index.js";
+import factory from "../src/pi-relay.js";
 
 /**
  * Smoke test for the extension entry.

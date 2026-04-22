@@ -14,7 +14,7 @@ import type { AgentToolResult, AgentToolUpdateCallback, ExtensionContext } from 
 import { actorRegistryFromDiscovery } from "./actors/discovery.js";
 import { createSubprocessActorEngine } from "./actors/engine.js";
 import type { ActorConfig, ActorDiscovery } from "./actors/types.js";
-import type { RelayDetails } from "./index.js";
+import type { RelayDetails } from "./pi-relay.js";
 import { compile } from "./plan/compile.js";
 import { formatCompileError } from "./plan/compile-error-format.js";
 import type { PlanDraftDoc } from "./plan/draft.js";

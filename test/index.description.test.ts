@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActorConfig } from "../src/actors/types.js";
-import { buildToolDescription } from "../src/index.js";
+import { buildToolDescription } from "../src/pi-relay.js";
 
 const worker: ActorConfig = {
 	name: "worker",

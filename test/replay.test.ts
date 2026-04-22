@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import factory from "../src/index.js";
+import factory from "../src/pi-relay.js";
 import { buildReplayToolDescription } from "../src/replay.js";
 import type { PlanTemplate } from "../src/templates/types.js";
 
