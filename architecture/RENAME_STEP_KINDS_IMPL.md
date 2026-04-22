@@ -1,32 +1,37 @@
 # Rename Step Kinds — Implementation Plan
 
-Rename `verify_command` → `command` and `verify_files_exist` →
-`files_exist`. These steps are no longer pure verification gates —
-they read artifacts, run arbitrary computation, and will soon write
-artifacts. The "verify" prefix is a misnomer that actively misleads
-about what the steps can do.
+Break free of the verification-gate naming. These steps are
+general-purpose deterministic computation nodes — they read
+artifacts, run arbitrary commands, and route on outcomes. Three
+groups of renames:
+
+1. **Step kinds:** `verify_command` → `command`,
+   `verify_files_exist` → `files_exist`
+2. **Routing fields:** `onPass` → `onSuccess`, `onFail` → `onFailure`
+   (matches terminal step vocabulary: `outcome: "success" | "failure"`)
+3. **Event kinds:** `verify_passed` → `check_passed`,
+   `verify_failed` → `check_failed`
 
 ## Scope
 
 Clean break, no deprecation aliases. pi-relay is v0.1.0 with no
-published API stability guarantees. User templates that reference the
-old kind names will get a clear schema validation error with the
-correct kind listed.
+published API stability guarantees. User templates that reference old
+names will get clear schema validation errors.
 
 ## What does NOT rename
 
-- **Event kinds** `verify_passed` / `verify_failed` — these describe
-  outcomes, not step kinds. A command step still "passes" or "fails."
-- **`PriorCheckResult`** and `lastCheckResult` — these describe the
-  concept (a check was performed), not the step kind.
+- **`PriorCheckResult`**, `lastCheckResult`, `priorCheckResult` —
+  "check" is the right abstraction for "run something deterministic
+  and report the outcome."
 - **`CheckOutcome`**, `CheckContext`, `CheckOutputCallback` in
-  `checks.ts` — "check" is the right abstraction for "run and report
-  pass/fail."
-- **Architecture docs** — historical documents. They describe the
-  design as it was when written. Updating them retroactively falsifies
-  the record. New docs use the new names.
+  `checks.ts` — same reasoning.
+- **`runFilesExist`** in `checks.ts` — already clean, no "verify"
+  prefix.
+- **Architecture docs** — historical. New docs use the new names.
 
 ## Rename map
+
+### Step kinds and types
 
 | Old | New |
 |-----|-----|
@@ -45,127 +50,178 @@ correct kind listed.
 | `describeVerifyStep` (scheduler) | `describeCommandStep` |
 | `describeVerifyStep` (run-report) | `describeCommandStep` |
 | `describeVerifyStepInline` (run-result) | `describeCommandStepInline` |
+| `describeVerifyStepShort` (run-result) | `describeCommandStepShort` |
 | `runVerifyCommand` (checks.ts) | `runCommand` |
+
+### Routing fields
+
+| Old | New |
+|-----|-----|
+| `onPass` (schema field) | `onSuccess` |
+| `onFail` (schema field) | `onFailure` |
+| `VERIFY_PASS_ROUTE` (compile.ts constant) | `SUCCESS_ROUTE` |
+| `VERIFY_FAIL_ROUTE` (compile.ts constant) | `FAILURE_ROUTE` |
+| `VERIFY_PASS` (events.ts constant) | `CHECK_SUCCESS` |
+| `VERIFY_FAIL` (events.ts constant) | `CHECK_FAILURE` |
+
+The internal `RouteId` values also change:
+- `RouteId("pass")` → `RouteId("success")`
+- `RouteId("fail")` → `RouteId("failure")`
+
+These are edge keys in the compiled program. The scheduler uses them
+to look up the next step after a check. The values must match between
+compile.ts (which creates the edges) and scheduler.ts / events.ts
+(which look them up).
+
+### Event kinds
+
+| Old | New |
+|-----|-----|
+| `"verify_passed"` | `"check_passed"` |
+| `"verify_failed"` | `"check_failed"` |
+
+These appear in the `RelayEvent` union, the `applyEvent` reducer,
+the `buildAttemptTimeline` walker, and any test that matches on
+event kinds.
 
 ## File-by-file changes
 
-### Source (73 occurrences across 9 files)
+### Source
 
-**`src/plan/draft.ts`** (6)
-- `Type.Literal("verify_command")` → `Type.Literal("command")`
-- `Type.Literal("verify_files_exist")` → `Type.Literal("files_exist")`
-- `VerifyCommandStepSchema` → `CommandStepSchema`
-- `VerifyFilesExistStepSchema` → `FilesExistStepSchema`
-- Update descriptions: "A deterministic verification step" →
-  "A deterministic step"
-
-**`src/plan/types.ts`** (5)
-- `VerifyCommandStep` → `CommandStep`
-- `VerifyFilesExistStep` → `FilesExistStep`
-- Kind literals in both interfaces
-- `Step` union uses new names
-
-**`src/plan/compile.ts`** (17)
-- Import renames
-- `brandVerifyCommand` → `brandCommand`
-- `brandVerifyFilesExist` → `brandFilesExist`
-- `brandStep` switch cases: `"verify_command"` → `"command"`,
+**`src/plan/draft.ts`**
+- Kind literals: `"verify_command"` → `"command"`,
   `"verify_files_exist"` → `"files_exist"`
-- `buildEdges` switch cases
+- Schema names: `VerifyCommandStepSchema` → `CommandStepSchema`,
+  `VerifyFilesExistStepSchema` → `FilesExistStepSchema`
+- Field names: `onPass` → `onSuccess`, `onFail` → `onFailure`
+  (on both step schemas)
+- Update descriptions
+
+**`src/plan/types.ts`**
+- Interface renames + kind literals
+- Field renames: `onPass` → `onSuccess`, `onFail` → `onFailure`
+  (on both `CommandStep` and `FilesExistStep`)
+
+**`src/plan/compile.ts`**
+- Import renames
+- Function renames: `brandVerifyCommand` → `brandCommand`, etc.
+- `brandStep` switch cases
+- `brandCommand`: `doc.onPass` → `doc.onSuccess`,
+  `doc.onFail` → `doc.onFailure`
+- `brandFilesExist`: same field renames
+- `buildEdges` switch cases + field access:
+  `step.onPass` → `step.onSuccess`, `step.onFail` → `step.onFailure`
+- Route constants: `VERIFY_PASS_ROUTE` → `SUCCESS_ROUTE`,
+  `VERIFY_FAIL_ROUTE` → `FAILURE_ROUTE`, values change to
+  `RouteId("success")` / `RouteId("failure")`
 - `buildArtifacts` kind check
 
-**`src/runtime/scheduler.ts`** (15)
+**`src/runtime/events.ts`**
+- Event union: `"verify_passed"` → `"check_passed"`,
+  `"verify_failed"` → `"check_failed"`
+- Reducer cases in `applyEvent`
+- Constants: `VERIFY_PASS` → `CHECK_SUCCESS`,
+  `VERIFY_FAIL` → `CHECK_FAILURE`, values change to
+  `RouteId("success")` / `RouteId("failure")`
+
+**`src/runtime/scheduler.ts`**
 - Import renames
 - `executeStep` switch cases
-- `executeVerifyCommand` → `executeCommand`
-- `executeVerifyFilesExist` → `executeFilesExist`
+- Method renames
 - `describeVerifyStep` → `describeCommandStep`
+- Route ID usage: `makeRouteId("pass")` → `makeRouteId("success")`,
+  `makeRouteId("fail")` → `makeRouteId("failure")`
 - `handleActionCompleted` target kind check
 
-**`src/runtime/checks.ts`** (6)
+**`src/runtime/checks.ts`**
 - `runVerifyCommand` → `runCommand`
-- Parameter types import renames
+- Import renames
 - Doc comment updates
 
-**`src/runtime/run-report.ts`** (6)
-- Kind checks in `buildStepSummary`, `formatTimelineEntry`
-- `describeVerifyStep` → `describeCommandStep`
+**`src/runtime/run-report.ts`**
+- Kind checks
+- Function rename
+- Event kind matches in `buildAttemptTimeline`:
+  `"verify_passed"` → `"check_passed"`,
+  `"verify_failed"` → `"check_failed"`
 
-**`src/render/plan-preview.ts`** (8)
-- `buildVerifyCommandBlock` → `buildCommandBlock`
-- `buildVerifyFilesExistBlock` → `buildFilesExistBlock`
-- `buildStepBlock` switch cases
-- Extract type narrowing updates
+**`src/render/plan-preview.ts`**
+- Function renames + switch cases
+- Field access: `step.onPass` → `step.onSuccess`,
+  `step.onFail` → `step.onFailure`
 
-**`src/render/run-result.ts`** (8)
-- Kind checks in `appendAttemptBlock`, `describeActiveStep`
-- `describeVerifyStepInline` → `describeCommandStepInline`
-- `describeVerifyStepShort` → `describeCommandStepShort`
+**`src/render/run-result.ts`**
+- Kind checks + function renames
 
-**`src/execute.ts`** (2)
+**`src/execute.ts`**
 - Kind check in `summarizePlanImpact`
 
-### Templates (6 occurrences across 4 files)
+### Templates (all `.md` files)
 
-- `plans/verified-edit.md` — `kind: verify_command` → `kind: command`
-- `plans/bug-fix.md` — same
-- `plans/reviewed-edit.md` — same
-- `plans/multi-gate.md` — 3 occurrences, same
-- `examples/autoresearch/autoresearch.md` — 3 occurrences, same
+Every bundled template and example:
+- `kind: verify_command` → `kind: command`
+- `kind: verify_files_exist` → `kind: files_exist`
+- `onPass:` → `onSuccess:`
+- `onFail:` → `onFailure:`
 
-### Tests (53 occurrences across 8 files)
+Files: `plans/verified-edit.md`, `plans/bug-fix.md`,
+`plans/reviewed-edit.md`, `plans/multi-gate.md`,
+`examples/autoresearch/autoresearch.md`,
+`examples/sample-plan.json`.
 
-- `test/plan/draft.test.ts` — kind literal
-- `test/plan/compile.test.ts` — kind literals in plan fixtures
-- `test/runtime/checks.test.ts` — kind literals, function import
-  rename (`runVerifyCommand` → `runCommand`)
-- `test/runtime/scheduler.test.ts` — kind literals in plan fixtures
-- `test/templates/substitute.test.ts` — kind literal
-- `test/templates/discovery.test.ts` — kind literal
-- `test/replay.integration.test.ts` — kind literal
-- `test/index.confirmation.test.ts` — kind literals
+### Tests
 
-### README (4 occurrences)
+Every test file that constructs step objects or plan fixtures:
+- Kind literals
+- `onPass` → `onSuccess`, `onFail` → `onFailure`
+- Import renames (`runVerifyCommand` → `runCommand`)
+- Event kind matches (`"verify_passed"` → `"check_passed"`, etc.)
 
-- Step kinds section: `verify_command` → `command`,
-  `verify_files_exist` → `files_exist`
+Files: `test/plan/draft.test.ts`, `test/plan/compile.test.ts`,
+`test/runtime/checks.test.ts`, `test/runtime/scheduler.test.ts`,
+`test/templates/substitute.test.ts`,
+`test/templates/discovery.test.ts`,
+`test/replay.integration.test.ts`,
+`test/index.confirmation.test.ts`.
+
+### README
+
+- Step kinds section
 - Custom templates example
 - Core concepts descriptions
-
-### Incidental
-
-- `examples/sample-plan.json` — kind literal
+- Routes section (`onPass` / `onFail` → `onSuccess` / `onFailure`)
 
 ## Implementation strategy
 
-Single commit. The rename is purely mechanical — no logic changes,
-no new behavior, no new tests. Every occurrence of the old name is
-replaced with the new name. The rename map above is exhaustive.
+Single commit. Purely mechanical — no logic changes, no new
+behavior, no new tests.
 
-Order of edits within the commit:
+Order:
 
-1. Domain types (`types.ts`) — establishes the new names
-2. Schema (`draft.ts`) — wire format matches domain types
-3. Compiler (`compile.ts`) — bridges wire to domain
-4. Runtime (`checks.ts`, `scheduler.ts`) — execution layer
-5. Report + render (`run-report.ts`, `plan-preview.ts`,
-   `run-result.ts`, `execute.ts`) — presentation layer
-6. Templates and examples (`.md` files)
-7. Tests
-8. README
+1. Domain types (`types.ts`)
+2. Schema (`draft.ts`)
+3. Compiler (`compile.ts`)
+4. Events (`events.ts`)
+5. Runtime (`checks.ts`, `scheduler.ts`)
+6. Report + render (`run-report.ts`, `plan-preview.ts`,
+   `run-result.ts`, `execute.ts`)
+7. Templates and examples
+8. Tests
+9. README
 
-Verify after every layer: `npx tsc --noEmit`. Run full suite at the
-end: `npm run check && npm test`.
+Verify after every layer: `npx tsc --noEmit`. Full suite at the end:
+`npm run check && npm test`.
 
-**Commit:** `refactor: rename verify_command to command, verify_files_exist to files_exist`
+**Commit:** `refactor: rename verify steps to command/files_exist, onPass/onFail to onSuccess/onFailure`
 
 ## Risks
 
-- **User templates break.** Any user-created template with
-  `kind: verify_command` will fail schema validation. The TypeBox
-  schema error will say the kind is invalid and list the valid
-  options. Low risk given v0.1.0 adoption.
+- **User templates break.** Clear schema errors with valid options
+  listed. Low risk at v0.1.0.
 
-- **Muscle memory.** Contributors familiar with the codebase will
-  reach for `VerifyCommandStep` and autocomplete won't find it. The
-  compiler catches this immediately. No silent breakage.
+- **RouteId value change.** Internal edge keys change from
+  `"pass"/"fail"` to `"success"/"failure"`. Both compile.ts and
+  scheduler.ts/events.ts must agree. The compiler creates edges with
+  these values; the scheduler looks them up. If they mismatch, the
+  scheduler fails with "no edge from X on route Y" — loud, not
+  silent. Tests catch this.
