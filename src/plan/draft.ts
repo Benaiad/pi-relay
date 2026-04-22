@@ -86,16 +86,16 @@ const ActionStepSchema = Type.Object(
 	},
 );
 
-const VerifyCommandStepSchema = Type.Object(
+const CommandStepSchema = Type.Object(
 	{
-		kind: Type.Literal("verify_command"),
+		kind: Type.Literal("command"),
 		id: IdField("Unique step identifier within this plan."),
 		command: Type.String({
 			minLength: 1,
 			description: "Shell command to run, e.g. 'npm test' or 'cargo test && cargo clippy'. " + "Executed via bash.",
 		}),
 		reads: Type.Optional(
-			Type.Array(ArtifactIdField("An artifact ID this verify step may access."), {
+			Type.Array(ArtifactIdField("An artifact ID this command step may access."), {
 				description:
 					"Artifacts injected as environment variables when the command runs. " +
 					"Each artifact's value is set as an env var named after the artifact ID. Defaults to none.",
@@ -108,20 +108,20 @@ const VerifyCommandStepSchema = Type.Object(
 				description: "Timeout in milliseconds. Defaults to 600000 (10 minutes).",
 			}),
 		),
-		onPass: IdField("StepId transitioned to when the command exits 0."),
-		onFail: IdField("StepId transitioned to when the command exits non-zero or times out."),
+		onSuccess: IdField("StepId transitioned to when the command exits 0."),
+		onFailure: IdField("StepId transitioned to when the command exits non-zero or times out."),
 	},
 	{
 		description:
-			"A deterministic verification step that runs a shell command. Pass iff the command exits 0 within " +
+			"A deterministic step that runs a shell command. Succeeds iff the command exits 0 within " +
 			"the timeout. Stdout and stderr are captured for the failure reason. " +
 			"Reads artifacts as environment variables but never writes them.",
 	},
 );
 
-const VerifyFilesExistStepSchema = Type.Object(
+const FilesExistStepSchema = Type.Object(
 	{
-		kind: Type.Literal("verify_files_exist"),
+		kind: Type.Literal("files_exist"),
 		id: IdField("Unique step identifier within this plan."),
 		paths: Type.Array(
 			Type.String({
@@ -133,12 +133,12 @@ const VerifyFilesExistStepSchema = Type.Object(
 				description: "Paths that must all exist for the check to pass. Failure reason lists which are missing.",
 			},
 		),
-		onPass: IdField("StepId transitioned to when all paths exist."),
-		onFail: IdField("StepId transitioned to when one or more paths are missing."),
+		onSuccess: IdField("StepId transitioned to when all paths exist."),
+		onFailure: IdField("StepId transitioned to when one or more paths are missing."),
 	},
 	{
 		description:
-			"A deterministic verification step that checks filesystem paths. Pass iff every listed path exists. " +
+			"A deterministic step that checks filesystem paths. Succeeds iff every listed path exists. " +
 			"Neither reads nor writes artifacts.",
 	},
 );
@@ -161,12 +161,9 @@ const TerminalStepSchema = Type.Object(
 	},
 );
 
-const StepSchema = Type.Union(
-	[ActionStepSchema, VerifyCommandStepSchema, VerifyFilesExistStepSchema, TerminalStepSchema],
-	{
-		description: "One node in the plan DAG. Exactly one of: action, verify_command, verify_files_exist, or terminal.",
-	},
-);
+const StepSchema = Type.Union([ActionStepSchema, CommandStepSchema, FilesExistStepSchema, TerminalStepSchema], {
+	description: "One node in the plan DAG. Exactly one of: action, command, files_exist, or terminal.",
+});
 
 const ArtifactContractSchema = Type.Object(
 	{

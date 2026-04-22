@@ -21,12 +21,12 @@
 			}
 		},
 		{
-			"kind": "verify_command",
+			"kind": "command",
 			"id": "run-tests",
 			"command": "npm test",
 			"timeoutMs": 120000,
-			"onPass": "done",
-			"onFail": "failed"
+			"onSuccess": "done",
+			"onFailure": "failed"
 		},
 		{
 			"kind": "terminal",

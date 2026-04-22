@@ -58,21 +58,21 @@ steps:
     writes: [experiment_log]
     routes: { done: benchmark }
     maxRuns: "{{max_experiments}}"
-  - kind: verify_command
+  - kind: command
     id: benchmark
     command: "{{benchmark}}"
-    onPass: evaluate
-    onFail: recover
-  - kind: verify_command
+    onSuccess: evaluate
+    onFailure: recover
+  - kind: command
     id: evaluate
     command: "{{evaluate}}"
-    onPass: experiment
-    onFail: experiment
-  - kind: verify_command
+    onSuccess: experiment
+    onFailure: experiment
+  - kind: command
     id: recover
     command: "{{recover}}"
-    onPass: experiment
-    onFail: failed
+    onSuccess: experiment
+    onFailure: failed
   - kind: terminal
     id: failed
     outcome: failure

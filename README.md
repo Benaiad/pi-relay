@@ -51,8 +51,8 @@ Three things are added to pi:
 A plan is a DAG of steps. Four kinds:
 
 - **`action`** — an actor (LLM agent) runs with a restricted tool set and emits a route on completion.
-- **`verify_command`** — runs a shell command. Pass if exit 0, fail otherwise. Output is captured for the failure reason. Can optionally read artifacts (injected as environment variables).
-- **`verify_files_exist`** — checks that all listed paths exist on the filesystem.
+- **`command`** — runs a shell command. Pass if exit 0, fail otherwise. Output is captured for the failure reason. Can optionally read artifacts (injected as environment variables).
+- **`files_exist`** — checks that all listed paths exist on the filesystem.
 - **`terminal`** — ends the run with a declared outcome: success or failure.
 
 ### Routes
@@ -65,19 +65,19 @@ routes: { done: verify, failure: failed }
 
 The actor chooses which route to emit on completion. Multi-way branching is supported — a judge step might route to `resolved` or `unresolved`, each pointing to a different next step.
 
-Verify steps route via fixed `onPass` / `onFail` fields.
+Verify steps route via fixed `onSuccess` / `onFailure` fields.
 
 ### Artifacts
 
 Structured state passed between steps. Declared at the plan level with an id and description, then read and written by steps. Action steps read and write artifacts through the completion protocol. Verify command steps can read artifacts — each declared read is injected as an environment variable named after the artifact id:
 
 ```yaml
-- kind: verify_command
+- kind: command
   id: grade
   command: "./grader.sh"
   reads: [candidate]
-  onPass: done
-  onFail: propose
+  onSuccess: done
+  onFailure: propose
 ```
 
 The grader accesses `$candidate` directly. Text artifacts are raw strings; structured artifacts are JSON.
@@ -250,11 +250,11 @@ steps:
     actor: worker
     instruction: "{{task}}"
     routes: { done: verify }
-  - kind: verify_command
+  - kind: command
     id: verify
     command: "{{verify}}"
-    onPass: done
-    onFail: failed
+    onSuccess: done
+    onFailure: failed
   - kind: terminal
     id: done
     outcome: success

@@ -49,29 +49,29 @@ export interface ActionStep {
 }
 
 /**
- * A verify step that runs a shell command and routes based on exit code.
- * Pass iff the command exits 0 within the timeout.
+ * A command step that runs a shell command and routes based on exit code.
+ * Succeeds iff the command exits 0 within the timeout.
  */
-export interface VerifyCommandStep {
-	readonly kind: "verify_command";
+export interface CommandStep {
+	readonly kind: "command";
 	readonly id: StepId;
 	readonly command: string;
 	readonly reads: readonly ArtifactId[];
 	readonly timeoutMs?: number;
-	readonly onPass: StepId;
-	readonly onFail: StepId;
+	readonly onSuccess: StepId;
+	readonly onFailure: StepId;
 }
 
 /**
- * A verify step that checks whether all listed paths exist on the filesystem.
- * Pass iff every path exists. Failure reason lists which paths are missing.
+ * A step that checks whether all listed paths exist on the filesystem.
+ * Succeeds iff every path exists. Failure reason lists which paths are missing.
  */
-export interface VerifyFilesExistStep {
-	readonly kind: "verify_files_exist";
+export interface FilesExistStep {
+	readonly kind: "files_exist";
 	readonly id: StepId;
 	readonly paths: readonly string[];
-	readonly onPass: StepId;
-	readonly onFail: StepId;
+	readonly onSuccess: StepId;
+	readonly onFailure: StepId;
 }
 
 /**
@@ -88,7 +88,7 @@ export interface TerminalStep {
 export type TerminalOutcome = "success" | "failure";
 
 /** The discriminated union of every step kind. Exhaustive matching is enforced. */
-export type Step = ActionStep | VerifyCommandStep | VerifyFilesExistStep | TerminalStep;
+export type Step = ActionStep | CommandStep | FilesExistStep | TerminalStep;
 
 /**
  * A plan as the compiler understands it — branded IDs, frozen arrays.

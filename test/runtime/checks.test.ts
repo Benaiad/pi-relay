@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type ArtifactId, StepId } from "../../src/plan/ids.js";
-import { runFilesExist, runVerifyCommand } from "../../src/runtime/checks.js";
+import { runCommand, runFilesExist } from "../../src/runtime/checks.js";
 
 describe("runFilesExist", () => {
 	let tmp = "";
@@ -20,11 +20,11 @@ describe("runFilesExist", () => {
 		const target = path.join(tmp, "present.txt");
 		await writeFile(target, "hello");
 		const step = {
-			kind: "verify_files_exist" as const,
+			kind: "files_exist" as const,
 			id: StepId("check"),
 			paths: [target],
-			onPass: StepId("ok"),
-			onFail: StepId("bad"),
+			onSuccess: StepId("ok"),
+			onFailure: StepId("bad"),
 		};
 		const outcome = await runFilesExist(step, { cwd: tmp });
 		expect(outcome.kind).toBe("pass");
@@ -33,11 +33,11 @@ describe("runFilesExist", () => {
 	it("passes when a cwd-relative path exists", async () => {
 		await writeFile(path.join(tmp, "relative.txt"), "hi");
 		const step = {
-			kind: "verify_files_exist" as const,
+			kind: "files_exist" as const,
 			id: StepId("check"),
 			paths: ["relative.txt"],
-			onPass: StepId("ok"),
-			onFail: StepId("bad"),
+			onSuccess: StepId("ok"),
+			onFailure: StepId("bad"),
 		};
 		const outcome = await runFilesExist(step, { cwd: tmp });
 		expect(outcome.kind).toBe("pass");
@@ -45,11 +45,11 @@ describe("runFilesExist", () => {
 
 	it("fails with a readable reason when the path does not exist", async () => {
 		const step = {
-			kind: "verify_files_exist" as const,
+			kind: "files_exist" as const,
 			id: StepId("check"),
 			paths: ["no-such-file"],
-			onPass: StepId("ok"),
-			onFail: StepId("bad"),
+			onSuccess: StepId("ok"),
+			onFailure: StepId("bad"),
 		};
 		const outcome = await runFilesExist(step, { cwd: tmp });
 		expect(outcome.kind).toBe("fail");
@@ -62,11 +62,11 @@ describe("runFilesExist", () => {
 		await writeFile(path.join(tmp, "a.txt"), "a");
 		await writeFile(path.join(tmp, "b.txt"), "b");
 		const step = {
-			kind: "verify_files_exist" as const,
+			kind: "files_exist" as const,
 			id: StepId("check"),
 			paths: ["a.txt", "b.txt"],
-			onPass: StepId("ok"),
-			onFail: StepId("bad"),
+			onSuccess: StepId("ok"),
+			onFailure: StepId("bad"),
 		};
 		const outcome = await runFilesExist(step, { cwd: tmp });
 		expect(outcome.kind).toBe("pass");
@@ -75,11 +75,11 @@ describe("runFilesExist", () => {
 	it("fails listing the missing paths when some exist and some do not", async () => {
 		await writeFile(path.join(tmp, "exists.txt"), "yes");
 		const step = {
-			kind: "verify_files_exist" as const,
+			kind: "files_exist" as const,
 			id: StepId("check"),
 			paths: ["exists.txt", "missing-a.txt", "missing-b.txt"],
-			onPass: StepId("ok"),
-			onFail: StepId("bad"),
+			onSuccess: StepId("ok"),
+			onFailure: StepId("bad"),
 		};
 		const outcome = await runFilesExist(step, { cwd: tmp });
 		expect(outcome.kind).toBe("fail");
@@ -91,27 +91,26 @@ describe("runFilesExist", () => {
 	});
 });
 
-describe("runVerifyCommand", () => {
+describe("runCommand", () => {
 	const commandStep = (command: string, timeoutMs?: number) => ({
-		kind: "verify_command" as const,
+		kind: "command" as const,
 		id: StepId("check"),
 		command,
 		reads: [] as readonly ArtifactId[],
 		timeoutMs,
-		onPass: StepId("ok"),
-		onFail: StepId("bad"),
+		onSuccess: StepId("ok"),
+		onFailure: StepId("bad"),
 	});
 
 	it("passes when the command exits 0", async () => {
-		const outcome = await runVerifyCommand(commandStep('node -e "process.exit(0)"'), { cwd: process.cwd() });
+		const outcome = await runCommand(commandStep('node -e "process.exit(0)"'), { cwd: process.cwd() });
 		expect(outcome.kind).toBe("pass");
 	});
 
 	it("fails when the command exits non-zero and captures stderr in the reason", async () => {
-		const outcome = await runVerifyCommand(
-			commandStep("node -e \"process.stderr.write('boom\\n'); process.exit(3)\""),
-			{ cwd: process.cwd() },
-		);
+		const outcome = await runCommand(commandStep("node -e \"process.stderr.write('boom\\n'); process.exit(3)\""), {
+			cwd: process.cwd(),
+		});
 		expect(outcome.kind).toBe("fail");
 		if (outcome.kind === "fail") {
 			expect(outcome.reason).toContain("code 3");
@@ -120,12 +119,12 @@ describe("runVerifyCommand", () => {
 	});
 
 	it("fails when the command does not exist (spawn error)", async () => {
-		const outcome = await runVerifyCommand(commandStep("definitely-not-a-real-binary-xyz"), { cwd: process.cwd() });
+		const outcome = await runCommand(commandStep("definitely-not-a-real-binary-xyz"), { cwd: process.cwd() });
 		expect(outcome.kind).toBe("fail");
 	});
 
 	it("fails with a timeout reason when the command exceeds its timeout", async () => {
-		const outcome = await runVerifyCommand(commandStep('node -e "setTimeout(() => process.exit(0), 5000)"', 200), {
+		const outcome = await runCommand(commandStep('node -e "setTimeout(() => process.exit(0), 5000)"', 200), {
 			cwd: process.cwd(),
 		});
 		expect(outcome.kind).toBe("fail");
@@ -135,7 +134,7 @@ describe("runVerifyCommand", () => {
 	});
 
 	it("includes output produced before the timeout in the failure reason", async () => {
-		const outcome = await runVerifyCommand(
+		const outcome = await runCommand(
 			commandStep(
 				"node -e \"process.stdout.write('partial progress'); setTimeout(() => process.exit(0), 5000)\"",
 				200,
@@ -151,7 +150,7 @@ describe("runVerifyCommand", () => {
 
 	it("fails when the abort signal fires mid-run", async () => {
 		const ctl = new AbortController();
-		const promise = runVerifyCommand(commandStep('node -e "setTimeout(() => process.exit(0), 5000)"', 10_000), {
+		const promise = runCommand(commandStep('node -e "setTimeout(() => process.exit(0), 5000)"', 10_000), {
 			cwd: process.cwd(),
 			signal: ctl.signal,
 		});
@@ -162,7 +161,7 @@ describe("runVerifyCommand", () => {
 
 	it("includes output produced before abort in the failure reason", async () => {
 		const ctl = new AbortController();
-		const promise = runVerifyCommand(
+		const promise = runCommand(
 			commandStep("node -e \"process.stdout.write('working...'); setTimeout(() => process.exit(0), 5000)\"", 10_000),
 			{ cwd: process.cwd(), signal: ctl.signal },
 		);
@@ -176,13 +175,13 @@ describe("runVerifyCommand", () => {
 	});
 
 	it("supports compound shell commands", async () => {
-		const outcome = await runVerifyCommand(commandStep("echo hello && echo world"), { cwd: process.cwd() });
+		const outcome = await runCommand(commandStep("echo hello && echo world"), { cwd: process.cwd() });
 		expect(outcome.kind).toBe("pass");
 	});
 
 	it("passes env vars from context to the child process", async () => {
 		const chunks: string[] = [];
-		const outcome = await runVerifyCommand(
+		const outcome = await runCommand(
 			commandStep("node -e \"process.stdout.write(process.env.candidate || 'MISSING')\""),
 			{ cwd: process.cwd(), env: { candidate: "hello from artifact" } },
 			(text) => chunks.push(text),
@@ -192,7 +191,7 @@ describe("runVerifyCommand", () => {
 	});
 
 	it("preserves standard env vars (PATH) when custom env is set", async () => {
-		const outcome = await runVerifyCommand(commandStep("node --version"), {
+		const outcome = await runCommand(commandStep("node --version"), {
 			cwd: process.cwd(),
 			env: { candidate: "test" },
 		});
@@ -200,7 +199,7 @@ describe("runVerifyCommand", () => {
 	});
 
 	it("runs without env vars when env is undefined", async () => {
-		const outcome = await runVerifyCommand(commandStep('node -e "process.exit(0)"'), { cwd: process.cwd() });
+		const outcome = await runCommand(commandStep('node -e "process.exit(0)"'), { cwd: process.cwd() });
 		expect(outcome.kind).toBe("pass");
 	});
 });

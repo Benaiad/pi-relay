@@ -168,17 +168,17 @@ describe("Scheduler — happy paths", () => {
 		expect(events[events.length - 1]!.kind).toBe("run_finished");
 	});
 
-	it("routes a verify_command step to its pass edge and continues", async () => {
+	it("routes a command step to its pass edge and continues", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Run a verify that always passes.",
 			artifacts: [],
 			steps: [
 				{
-					kind: "verify_command",
+					kind: "command",
 					id: "verify",
 					command: 'node -e "process.exit(0)"',
-					onPass: "ok",
-					onFail: "broken",
+					onSuccess: "ok",
+					onFailure: "broken",
 				},
 				{ kind: "terminal", id: "ok", outcome: "success", summary: "passed" },
 				{
@@ -194,20 +194,20 @@ describe("Scheduler — happy paths", () => {
 		const { scheduler } = buildScheduler(plan, engine);
 		const report = await scheduler.run();
 		expect(report.outcome).toBe("success");
-		expect(report.steps.find((s) => unwrap(s.stepId) === "verify")!.lastRoute).toEqual(RouteId("pass"));
+		expect(report.steps.find((s) => unwrap(s.stepId) === "verify")!.lastRoute).toEqual(RouteId("success"));
 	});
 
-	it("routes a verify_command step to its fail edge when the command fails", async () => {
+	it("routes a command step to its fail edge when the command fails", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Run a verify that always fails.",
 			artifacts: [],
 			steps: [
 				{
-					kind: "verify_command",
+					kind: "command",
 					id: "verify",
 					command: 'node -e "process.exit(2)"',
-					onPass: "ok",
-					onFail: "broken",
+					onSuccess: "ok",
+					onFailure: "broken",
 				},
 				{ kind: "terminal", id: "ok", outcome: "success", summary: "passed" },
 				{
@@ -742,11 +742,11 @@ describe("Scheduler — terminal routes", () => {
 			task: "Verify loop with no escape.",
 			steps: [
 				{
-					kind: "verify_files_exist",
+					kind: "files_exist",
 					id: "check",
 					paths: ["/tmp/pi-relay-nonexistent-sentinel-file"],
-					onPass: "done",
-					onFail: "check",
+					onSuccess: "done",
+					onFailure: "check",
 				},
 				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
 			],
@@ -874,12 +874,12 @@ describe("Scheduler — verify step artifact reads", () => {
 					routes: { done: "check" },
 				},
 				{
-					kind: "verify_command",
+					kind: "command",
 					id: "check",
 					command: "node -e \"process.exit(process.env.candidate === 'hello' ? 0 : 1)\"",
 					reads: ["candidate"],
-					onPass: "done",
-					onFail: "failed",
+					onSuccess: "done",
+					onFailure: "failed",
 				},
 				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
 				{ kind: "terminal", id: "failed", outcome: "failure", summary: "bad" },
@@ -905,12 +905,12 @@ describe("Scheduler — verify step artifact reads", () => {
 					routes: { done: "check" },
 				},
 				{
-					kind: "verify_command",
+					kind: "command",
 					id: "check",
 					command: 'node -e "const v = JSON.parse(process.env.result); process.exit(v.score === 42 ? 0 : 1)"',
 					reads: ["result"],
-					onPass: "done",
-					onFail: "failed",
+					onSuccess: "done",
+					onFailure: "failed",
 				},
 				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
 				{ kind: "terminal", id: "failed", outcome: "failure", summary: "bad" },
@@ -937,12 +937,12 @@ describe("Scheduler — verify step artifact reads", () => {
 					routes: { done: "check" },
 				},
 				{
-					kind: "verify_command",
+					kind: "command",
 					id: "check",
 					command: 'node -e "process.exit(process.env.data === undefined ? 0 : 1)"',
 					reads: ["data"],
-					onPass: "done",
-					onFail: "failed",
+					onSuccess: "done",
+					onFailure: "failed",
 				},
 				{
 					kind: "action",
@@ -978,12 +978,12 @@ describe("Scheduler — verify reader write enforcement", () => {
 					routes: { done: "grade" },
 				},
 				{
-					kind: "verify_command",
+					kind: "command",
 					id: "grade",
 					command: "echo $candidate",
 					reads: ["candidate"],
-					onPass: "done",
-					onFail: "done",
+					onSuccess: "done",
+					onFailure: "done",
 				},
 				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
 			],
@@ -1011,11 +1011,11 @@ describe("Scheduler — verify reader write enforcement", () => {
 					routes: { done: "check" },
 				},
 				{
-					kind: "verify_command",
+					kind: "command",
 					id: "check",
 					command: 'node -e "process.exit(0)"',
-					onPass: "done",
-					onFail: "done",
+					onSuccess: "done",
+					onFailure: "done",
 				},
 				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
 			],
@@ -1045,11 +1045,11 @@ describe("Scheduler — check result forwarding", () => {
 					routes: { done: "verify" },
 				},
 				{
-					kind: "verify_command",
+					kind: "command",
 					id: "verify",
 					command: 'node -e "process.exit(1)"',
-					onPass: "done",
-					onFail: "fix",
+					onSuccess: "done",
+					onFailure: "fix",
 				},
 				{
 					kind: "action",
@@ -1099,11 +1099,11 @@ describe("Scheduler — check result forwarding", () => {
 			artifacts: [],
 			steps: [
 				{
-					kind: "verify_command",
+					kind: "command",
 					id: "pre-check",
 					command: 'node -e "process.exit(0)"',
-					onPass: "act",
-					onFail: "fail",
+					onSuccess: "act",
+					onFailure: "fail",
 				},
 				{
 					kind: "action",

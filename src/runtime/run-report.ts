@@ -36,8 +36,8 @@ export type RunOutcome = "success" | "failure" | "aborted" | "incomplete";
  *   - `completed`      → action step emitted a route cleanly
  *   - `no_completion`  → actor ran but did not produce a valid completion block
  *   - `engine_error`   → actor engine itself failed (subprocess exit, abort, etc.)
- *   - `verify_pass`    → deterministic verification returned pass
- *   - `verify_fail`    → deterministic verification returned fail with a reason
+ *   - `check_pass`     → deterministic check returned pass
+ *   - `check_fail`     → deterministic check returned fail with a reason
  *   - `terminal`       → terminal step was reached
  *   - `open`           → attempt started but never closed (cut off by abort or crash)
  */
@@ -45,8 +45,8 @@ export type AttemptOutcome =
 	| "completed"
 	| "no_completion"
 	| "engine_error"
-	| "verify_pass"
-	| "verify_fail"
+	| "check_pass"
+	| "check_fail"
 	| "terminal"
 	| "open";
 
@@ -182,8 +182,7 @@ const buildStepSummary = (stepId: StepId, state: RelayRunState, attempts: readon
 		lastReason: runtime.lastReason,
 		usage: runtime.usage,
 		actorName: step.kind === "action" ? unwrap(step.actor) : undefined,
-		verifyDescription:
-			step.kind === "verify_command" || step.kind === "verify_files_exist" ? describeVerifyStep(step) : undefined,
+		verifyDescription: step.kind === "command" || step.kind === "files_exist" ? describeCommandStep(step) : undefined,
 		terminalOutcome: step.kind === "terminal" ? step.outcome : undefined,
 		terminalSummary: step.kind === "terminal" ? step.summary : undefined,
 	};
@@ -236,7 +235,7 @@ interface OpenAttempt {
  * Bucket events by stepId. On `step_started`, open a new attempt record for
  * that step. On `action_progress`, append to the open attempt's transcript.
  * On a closing event (`action_completed`, `action_no_completion`,
- * `action_engine_error`, `verify_passed`, `verify_failed`, `terminal_reached`),
+ * `action_engine_error`, `check_passed`, `check_failed`, `terminal_reached`),
  * finalize the open attempt and push it into the step's history list. If the
  * run is aborted mid-step, leave the open attempt as `outcome: "open"` so
  * the renderer can show it.
@@ -320,12 +319,12 @@ export const buildAttemptTimeline = (events: readonly RelayEvent[]): AttemptTime
 				break;
 			}
 
-			case "verify_passed": {
+			case "check_passed": {
 				const entry = open.get(event.stepId);
 				if (!entry) break;
 				close(event.stepId, {
 					attemptNumber: entry.attemptNumber,
-					outcome: "verify_pass",
+					outcome: "check_pass",
 					transcript: [],
 					usage: emptyUsage(),
 					startedAt: entry.startedAt,
@@ -335,12 +334,12 @@ export const buildAttemptTimeline = (events: readonly RelayEvent[]): AttemptTime
 				break;
 			}
 
-			case "verify_failed": {
+			case "check_failed": {
 				const entry = open.get(event.stepId);
 				if (!entry) break;
 				close(event.stepId, {
 					attemptNumber: entry.attemptNumber,
-					outcome: "verify_fail",
+					outcome: "check_fail",
 					reason: event.reason,
 					transcript: [],
 					usage: emptyUsage(),
@@ -494,7 +493,7 @@ const formatTimelineEntry = (
 				: "";
 		const actorPart = actor ? `, actor: ${actor}` : "";
 		lines.push(`step: ${stepId}${actorPart}${retryTag}`);
-	} else if (step.kind === "verify_command" || step.kind === "verify_files_exist") {
+	} else if (step.kind === "command" || step.kind === "files_exist") {
 		lines.push(`step: ${stepId}, verify`);
 	} else if (step.kind === "terminal") {
 		const outcome = step.terminalOutcome ?? "unknown";
@@ -513,7 +512,7 @@ const formatTimelineEntry = (
 		if (finalText.length > 0) {
 			lines.push(`  "${oneLine(finalText)}"`);
 		}
-	} else if (step.kind === "verify_command" || step.kind === "verify_files_exist") {
+	} else if (step.kind === "command" || step.kind === "files_exist") {
 		if (step.verifyDescription) lines.push(`  ${step.verifyDescription}`);
 	} else if (step.kind === "terminal") {
 		if (step.terminalSummary) lines.push(`  ${oneLine(step.terminalSummary)}`);
@@ -526,7 +525,7 @@ const formatTimelineEntry = (
 		}
 	} else if (attempt.outcome === "no_completion" || attempt.outcome === "engine_error") {
 		lines.push(`  Failed: ${attempt.reason ? oneLine(attempt.reason) : "no reason"}`);
-	} else if (attempt.outcome === "verify_fail") {
+	} else if (attempt.outcome === "check_fail") {
 		lines.push(`  Failed: ${attempt.reason ? oneLine(attempt.reason) : "no reason"}`);
 	}
 
@@ -543,7 +542,7 @@ const formatTimelineEntry = (
 	return lines;
 };
 
-const GENERIC_ROUTE_NAMES_TEXT = new Set(["done", "next", "continue", "ok", "success", "pass"]);
+const GENERIC_ROUTE_NAMES_TEXT = new Set(["done", "next", "continue", "ok", "success"]);
 
 const buildStepArtifactIndex = (store: ArtifactStore, report: RunReport): Map<string, StepArtifactEntry[]> => {
 	const index = new Map<string, StepArtifactEntry[]>();
@@ -577,13 +576,11 @@ const buildStepArtifactIndex = (store: ArtifactStore, report: RunReport): Map<st
 	return index;
 };
 
-const describeVerifyStep = (
-	step: Extract<Step, { kind: "verify_command" } | { kind: "verify_files_exist" }>,
-): string => {
+const describeCommandStep = (step: Extract<Step, { kind: "command" } | { kind: "files_exist" }>): string => {
 	switch (step.kind) {
-		case "verify_command":
+		case "command":
 			return `$ ${step.command.slice(0, 120)}`;
-		case "verify_files_exist":
+		case "files_exist":
 			return step.paths.length === 1 ? `File exists: ${step.paths[0]}` : `Files exist: ${step.paths.join(", ")}`;
 	}
 };

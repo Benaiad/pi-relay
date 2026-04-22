@@ -301,7 +301,7 @@ describe("compile", () => {
 		expect(result.error.kind).toBe("duplicate_artifact");
 	});
 
-	it("compiles a verify_files_exist step with pass and fail routes", () => {
+	it("compiles a files_exist step with pass and fail routes", () => {
 		const plan: PlanDraftDoc = {
 			task: "Run tests and branch on outcome.",
 			artifacts: [{ id: "spec", description: "spec" }],
@@ -316,11 +316,11 @@ describe("compile", () => {
 					routes: { ready: "verify" },
 				},
 				{
-					kind: "verify_files_exist",
+					kind: "files_exist",
 					id: "verify",
 					paths: ["/tmp/does-not-matter"],
-					onPass: "ok",
-					onFail: "broken",
+					onSuccess: "ok",
+					onFailure: "broken",
 				},
 				{ kind: "terminal", id: "ok", outcome: "success", summary: "passed" },
 				{
@@ -335,21 +335,21 @@ describe("compile", () => {
 		const result = compile(plan, defaultActors, fixedIdOptions);
 		expect(isOk(result)).toBe(true);
 		if (!isOk(result)) return;
-		expect(result.value.edges.get(edgeKey(StepId("verify"), RouteId("pass")))).toEqual(StepId("ok"));
-		expect(result.value.edges.get(edgeKey(StepId("verify"), RouteId("fail")))).toEqual(StepId("broken"));
+		expect(result.value.edges.get(edgeKey(StepId("verify"), RouteId("success")))).toEqual(StepId("ok"));
+		expect(result.value.edges.get(edgeKey(StepId("verify"), RouteId("failure")))).toEqual(StepId("broken"));
 	});
 
-	it("rejects a verify step with an unknown onFail target", () => {
+	it("rejects a verify step with an unknown onFailure target", () => {
 		const plan: PlanDraftDoc = {
 			task: "bad verify",
 			artifacts: [],
 			steps: [
 				{
-					kind: "verify_files_exist",
+					kind: "files_exist",
 					id: "verify",
 					paths: ["/tmp/x"],
-					onPass: "done",
-					onFail: "ghost",
+					onSuccess: "done",
+					onFailure: "ghost",
 				},
 				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
 			],
@@ -440,7 +440,7 @@ describe("compile", () => {
 		expect(isOk(result)).toBe(true);
 	});
 
-	it("accepts a verify_command step with reads", () => {
+	it("accepts a command step with reads", () => {
 		const plan: PlanDraftDoc = {
 			task: "Action writes, verify reads.",
 			artifacts: [{ id: "result", description: "result" }],
@@ -454,12 +454,12 @@ describe("compile", () => {
 					routes: { done: "check" },
 				},
 				{
-					kind: "verify_command",
+					kind: "command",
 					id: "check",
 					command: "echo $result",
 					reads: ["result"],
-					onPass: "done",
-					onFail: "failed",
+					onSuccess: "done",
+					onFailure: "failed",
 				},
 				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
 				{ kind: "terminal", id: "failed", outcome: "failure", summary: "bad" },
@@ -471,18 +471,18 @@ describe("compile", () => {
 		expect(result.value.readers.get(ArtifactId("result"))).toEqual(new Set([StepId("check")]));
 	});
 
-	it("rejects a verify_command step reading an undeclared artifact", () => {
+	it("rejects a command step reading an undeclared artifact", () => {
 		const plan: PlanDraftDoc = {
 			task: "Verify reads ghost.",
 			artifacts: [],
 			steps: [
 				{
-					kind: "verify_command",
+					kind: "command",
 					id: "check",
 					command: "echo $ghost",
 					reads: ["ghost"],
-					onPass: "done",
-					onFail: "done",
+					onSuccess: "done",
+					onFailure: "done",
 				},
 				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
 			],
@@ -496,18 +496,18 @@ describe("compile", () => {
 		}
 	});
 
-	it("compiles a verify_command step with empty reads", () => {
+	it("compiles a command step with empty reads", () => {
 		const plan: PlanDraftDoc = {
 			task: "Verify with no reads.",
 			artifacts: [],
 			steps: [
 				{
-					kind: "verify_command",
+					kind: "command",
 					id: "check",
 					command: "echo hello",
 					reads: [],
-					onPass: "done",
-					onFail: "done",
+					onSuccess: "done",
+					onFailure: "done",
 				},
 				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
 			],

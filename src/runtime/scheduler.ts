@@ -2,7 +2,7 @@
  * Sequential ready-queue scheduler.
  *
  * The scheduler executes a compiled `Program` as a DAG of `Action`,
- * `VerifyCommand`, `VerifyFilesExist`, and `Terminal` steps. The MVP
+ * `Command`, `FilesExist`, and `Terminal` steps. The MVP
  * implementation is strictly sequential: one step runs at a time. Parallel
  * execution and `Join` steps land in v0.2 and will slot in without changing
  * the event protocol or the reducer.
@@ -46,11 +46,11 @@ import { emptyUsage } from "../actors/types.js";
 import type { ActorId, ArtifactId, RouteId, StepId } from "../plan/ids.js";
 import { edgeKey, RouteId as makeRouteId, unwrap } from "../plan/ids.js";
 import type { Program } from "../plan/program.js";
-import type { ActionStep, Step, TerminalStep, VerifyCommandStep, VerifyFilesExistStep } from "../plan/types.js";
+import type { ActionStep, CommandStep, FilesExistStep, Step, TerminalStep } from "../plan/types.js";
 import { isAccumulatedEntryArray } from "./accumulated-entry.js";
 import { ArtifactStore } from "./artifacts.js";
 import { AuditLog } from "./audit.js";
-import { runFilesExist, runVerifyCommand } from "./checks.js";
+import { runCommand, runFilesExist } from "./checks.js";
 import { applyEvent, initRunState, type RelayEvent, type RelayRunState, type RunPhase } from "./events.js";
 import {
 	type AttemptSummary,
@@ -64,11 +64,11 @@ const DEFAULT_CLOCK = () => Date.now();
 const IMPLICIT_RETRY_ATTEMPTS = 3;
 const MAX_CHECK_DISPLAY_BUFFER = 32 * 1024;
 
-const describeVerifyStep = (step: VerifyCommandStep | VerifyFilesExistStep): string => {
+const describeCommandStep = (step: CommandStep | FilesExistStep): string => {
 	switch (step.kind) {
-		case "verify_command":
+		case "command":
 			return `command: ${step.command}`;
-		case "verify_files_exist":
+		case "files_exist":
 			return step.paths.length === 1 ? `file: ${step.paths[0]}` : `files: ${step.paths.join(", ")}`;
 	}
 };
@@ -98,11 +98,11 @@ const summarizePriorAttempt = (attempt: AttemptSummary): PriorAttempt => {
 		case "engine_error":
 			outcomeLabel = `engine_error: ${attempt.reason ?? "no reason"}`;
 			break;
-		case "verify_pass":
-			outcomeLabel = "verify passed";
+		case "check_pass":
+			outcomeLabel = "check passed";
 			break;
-		case "verify_fail":
-			outcomeLabel = `verify failed: ${attempt.reason ?? "no reason"}`;
+		case "check_fail":
+			outcomeLabel = `check failed: ${attempt.reason ?? "no reason"}`;
 			break;
 		case "terminal":
 			outcomeLabel = "terminal reached";
@@ -302,11 +302,11 @@ export class Scheduler {
 			case "action":
 				await this.executeAction(step);
 				return;
-			case "verify_command":
-				await this.executeVerifyCommand(step);
+			case "command":
+				await this.executeCommand(step);
 				return;
-			case "verify_files_exist":
-				await this.executeVerifyFilesExist(step);
+			case "files_exist":
+				await this.executeFilesExist(step);
 				return;
 			case "terminal":
 				this.executeTerminal(step);
@@ -443,7 +443,7 @@ export class Scheduler {
 		if (targetId) {
 			const targetStep = this.program.steps.get(targetId);
 			const targetReads =
-				targetStep?.kind === "action" || targetStep?.kind === "verify_command" ? targetStep.reads : undefined;
+				targetStep?.kind === "action" || targetStep?.kind === "command" ? targetStep.reads : undefined;
 			if (targetReads && targetReads.length > 0) {
 				const missingForTarget = targetReads.filter(
 					(readId) => step.writes.includes(readId) && !writes.has(readId),
@@ -469,7 +469,7 @@ export class Scheduler {
 		this.followRoute(step.id, route);
 	}
 
-	private async executeVerifyCommand(step: VerifyCommandStep): Promise<void> {
+	private async executeCommand(step: CommandStep): Promise<void> {
 		const attempt = (this.state.steps.get(step.id)?.attempts ?? 0) + 1;
 		this.emit({
 			kind: "step_started",
@@ -494,10 +494,10 @@ export class Scheduler {
 		};
 
 		const env = this.buildArtifactEnv(step.reads);
-		const outcome = await runVerifyCommand(step, { cwd: this.cwd, signal: this.signal, env }, onOutput);
+		const outcome = await runCommand(step, { cwd: this.cwd, signal: this.signal, env }, onOutput);
 		this.checkOutputChunks.delete(step.id);
 		this.checkOutputLens.delete(step.id);
-		const description = describeVerifyStep(step);
+		const description = describeCommandStep(step);
 
 		if (outcome.kind === "pass") {
 			this.lastCheckResult = {
@@ -505,8 +505,8 @@ export class Scheduler {
 				outcome: "passed",
 				description,
 			};
-			this.emit({ kind: "verify_passed", at: this.clock(), stepId: step.id });
-			this.followRoute(step.id, makeRouteId("pass"));
+			this.emit({ kind: "check_passed", at: this.clock(), stepId: step.id });
+			this.followRoute(step.id, makeRouteId("success"));
 		} else {
 			this.lastCheckResult = {
 				stepId: step.id,
@@ -514,16 +514,16 @@ export class Scheduler {
 				description,
 			};
 			this.emit({
-				kind: "verify_failed",
+				kind: "check_failed",
 				at: this.clock(),
 				stepId: step.id,
 				reason: outcome.reason,
 			});
-			this.followRoute(step.id, makeRouteId("fail"));
+			this.followRoute(step.id, makeRouteId("failure"));
 		}
 	}
 
-	private async executeVerifyFilesExist(step: VerifyFilesExistStep): Promise<void> {
+	private async executeFilesExist(step: FilesExistStep): Promise<void> {
 		const attempt = (this.state.steps.get(step.id)?.attempts ?? 0) + 1;
 		this.emit({
 			kind: "step_started",
@@ -536,7 +536,7 @@ export class Scheduler {
 			cwd: this.cwd,
 			signal: this.signal,
 		});
-		const description = describeVerifyStep(step);
+		const description = describeCommandStep(step);
 
 		if (outcome.kind === "pass") {
 			this.lastCheckResult = {
@@ -544,8 +544,8 @@ export class Scheduler {
 				outcome: "passed",
 				description,
 			};
-			this.emit({ kind: "verify_passed", at: this.clock(), stepId: step.id });
-			this.followRoute(step.id, makeRouteId("pass"));
+			this.emit({ kind: "check_passed", at: this.clock(), stepId: step.id });
+			this.followRoute(step.id, makeRouteId("success"));
 		} else {
 			this.lastCheckResult = {
 				stepId: step.id,
@@ -553,12 +553,12 @@ export class Scheduler {
 				description,
 			};
 			this.emit({
-				kind: "verify_failed",
+				kind: "check_failed",
 				at: this.clock(),
 				stepId: step.id,
 				reason: outcome.reason,
 			});
-			this.followRoute(step.id, makeRouteId("fail"));
+			this.followRoute(step.id, makeRouteId("failure"));
 		}
 	}
 

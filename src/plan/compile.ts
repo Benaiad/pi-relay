@@ -27,14 +27,7 @@ import type { PlanDraftDoc } from "./draft.js";
 import { ActorId, ArtifactId, type EdgeKey, edgeKey, PlanId, RouteId, StepId } from "./ids.js";
 import type { Program } from "./program.js";
 import { err, ok, type Result } from "./result.js";
-import type {
-	ActionStep,
-	ArtifactContract,
-	Step,
-	TerminalStep,
-	VerifyCommandStep,
-	VerifyFilesExistStep,
-} from "./types.js";
+import type { ActionStep, ArtifactContract, CommandStep, FilesExistStep, Step, TerminalStep } from "./types.js";
 
 /**
  * The set of actor identifiers available for this compilation.
@@ -140,10 +133,10 @@ const brandStep = (doc: PlanDraftDoc["steps"][number]): Step => {
 	switch (doc.kind) {
 		case "action":
 			return brandAction(doc);
-		case "verify_command":
-			return brandVerifyCommand(doc);
-		case "verify_files_exist":
-			return brandVerifyFilesExist(doc);
+		case "command":
+			return brandCommand(doc);
+		case "files_exist":
+			return brandFilesExist(doc);
 		case "terminal":
 			return brandTerminal(doc);
 	}
@@ -160,26 +153,22 @@ const brandAction = (doc: Extract<PlanDraftDoc["steps"][number], { kind: "action
 	maxRuns: doc.maxRuns,
 });
 
-const brandVerifyCommand = (
-	doc: Extract<PlanDraftDoc["steps"][number], { kind: "verify_command" }>,
-): VerifyCommandStep => ({
-	kind: "verify_command",
+const brandCommand = (doc: Extract<PlanDraftDoc["steps"][number], { kind: "command" }>): CommandStep => ({
+	kind: "command",
 	id: StepId(doc.id),
 	command: doc.command,
 	reads: (doc.reads ?? []).map((r) => ArtifactId(r)),
 	timeoutMs: doc.timeoutMs,
-	onPass: StepId(doc.onPass),
-	onFail: StepId(doc.onFail),
+	onSuccess: StepId(doc.onSuccess),
+	onFailure: StepId(doc.onFailure),
 });
 
-const brandVerifyFilesExist = (
-	doc: Extract<PlanDraftDoc["steps"][number], { kind: "verify_files_exist" }>,
-): VerifyFilesExistStep => ({
-	kind: "verify_files_exist",
+const brandFilesExist = (doc: Extract<PlanDraftDoc["steps"][number], { kind: "files_exist" }>): FilesExistStep => ({
+	kind: "files_exist",
 	id: StepId(doc.id),
 	paths: doc.paths,
-	onPass: StepId(doc.onPass),
-	onFail: StepId(doc.onFail),
+	onSuccess: StepId(doc.onSuccess),
+	onFailure: StepId(doc.onFailure),
 });
 
 const brandTerminal = (doc: Extract<PlanDraftDoc["steps"][number], { kind: "terminal" }>): TerminalStep => ({
@@ -209,8 +198,8 @@ const validateActors = (
 	return ok(referenced);
 };
 
-const VERIFY_PASS_ROUTE = RouteId("pass");
-const VERIFY_FAIL_ROUTE = RouteId("fail");
+const SUCCESS_ROUTE = RouteId("success");
+const FAILURE_ROUTE = RouteId("failure");
 
 const buildEdges = (
 	steps: ReadonlyMap<StepId, Step>,
@@ -235,32 +224,31 @@ const buildEdges = (
 				}
 				break;
 
-			case "verify_command":
-			case "verify_files_exist":
-				if (!steps.has(step.onPass)) {
+			case "command":
+			case "files_exist":
+				if (!steps.has(step.onSuccess)) {
 					return err({
 						kind: "missing_route_target",
 						from: step.id,
-						route: VERIFY_PASS_ROUTE,
-						target: step.onPass,
+						route: SUCCESS_ROUTE,
+						target: step.onSuccess,
 						availableSteps: stepOrder,
 					});
 				}
-				if (!steps.has(step.onFail)) {
+				if (!steps.has(step.onFailure)) {
 					return err({
 						kind: "missing_route_target",
 						from: step.id,
-						route: VERIFY_FAIL_ROUTE,
-						target: step.onFail,
+						route: FAILURE_ROUTE,
+						target: step.onFailure,
 						availableSteps: stepOrder,
 					});
 				}
-				edges.set(edgeKey(step.id, VERIFY_PASS_ROUTE), step.onPass);
-				edges.set(edgeKey(step.id, VERIFY_FAIL_ROUTE), step.onFail);
+				edges.set(edgeKey(step.id, SUCCESS_ROUTE), step.onSuccess);
+				edges.set(edgeKey(step.id, FAILURE_ROUTE), step.onFailure);
 				break;
 
 			case "terminal":
-				// Terminal steps contribute no outgoing edges.
 				break;
 		}
 	}
@@ -340,7 +328,7 @@ const buildArtifacts = (
 			}
 		}
 
-		if (step.kind === "verify_command") {
+		if (step.kind === "command") {
 			for (const readId of step.reads) {
 				if (!artifacts.has(readId)) {
 					return err({

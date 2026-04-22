@@ -103,11 +103,11 @@ steps:
     reads: []
     writes: [notes]
     routes: { done: verify }
-  - kind: verify_command
+  - kind: command
     id: verify
     command: echo ok
-    onPass: success
-    onFail: failed
+    onSuccess: success
+    onFailure: failed
   - kind: terminal
     id: success
     outcome: success

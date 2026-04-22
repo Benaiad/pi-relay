@@ -333,8 +333,8 @@ const appendAttemptBlock = (
 		// blocks and headings; mid-reply text renders as plain truncated
 		// lines for compactness.
 		renderActionTranscript(container, attempt.transcript, theme, mdTheme);
-	} else if (step.kind === "verify_command" || step.kind === "verify_files_exist") {
-		container.addChild(new Text(`  ${theme.fg("toolOutput", describeVerifyStepInline(step))}`, 0, 0));
+	} else if (step.kind === "command" || step.kind === "files_exist") {
+		container.addChild(new Text(`  ${theme.fg("toolOutput", describeCommandStepInline(step))}`, 0, 0));
 		if (liveCheckOutput && liveCheckOutput.length > 0) {
 			appendCheckOutputPreview(container, liveCheckOutput, theme);
 		}
@@ -355,7 +355,7 @@ const appendAttemptBlock = (
 		}
 	} else if (attempt.outcome === "no_completion" || attempt.outcome === "engine_error") {
 		container.addChild(new Text(`  ${theme.fg("error", `Failed: ${attempt.reason ?? "no reason"}`)}`, 0, 0));
-	} else if (attempt.outcome === "verify_fail") {
+	} else if (attempt.outcome === "check_fail") {
 		container.addChild(new Text(`  ${theme.fg("error", `Failed: ${attempt.reason ?? "no reason"}`)}`, 0, 0));
 	}
 };
@@ -474,15 +474,13 @@ const appendCheckOutputPreview = (container: Container, output: string, theme: T
 	});
 };
 
-const GENERIC_ROUTE_NAMES = new Set(["done", "next", "continue", "ok", "success", "pass"]);
+const GENERIC_ROUTE_NAMES = new Set(["done", "next", "continue", "ok", "success"]);
 
-const describeVerifyStepInline = (
-	step: Extract<Step, { kind: "verify_command" } | { kind: "verify_files_exist" }>,
-): string => {
+const describeCommandStepInline = (step: Extract<Step, { kind: "command" } | { kind: "files_exist" }>): string => {
 	switch (step.kind) {
-		case "verify_command":
+		case "command":
 			return `$ ${step.command}`;
-		case "verify_files_exist":
+		case "files_exist":
 			return step.paths.length === 1 ? `File exists: ${step.paths[0]}` : `Files exist: ${step.paths.join(", ")}`;
 	}
 };
@@ -494,9 +492,9 @@ const iconForAttemptOutcome = (outcome: AttemptOutcome, step: Step): StatusIcon 
 		case "no_completion":
 		case "engine_error":
 			return iconFor("failed");
-		case "verify_pass":
+		case "check_pass":
 			return iconFor("succeeded");
-		case "verify_fail":
+		case "check_fail":
 			return iconFor("failed");
 		case "terminal": {
 			const terminalOutcome: TerminalOutcome = step.kind === "terminal" ? step.outcome : "success";
@@ -533,10 +531,10 @@ const findFailedStep = (state: RelayRunState): { stepId: StepId; runtime: StepRu
 };
 
 const describeActiveStep = (step: Step, runtime: StepRuntimeState, theme: Theme, liveCheckOutput?: string): string => {
-	if (step.kind === "verify_command" || step.kind === "verify_files_exist") {
+	if (step.kind === "command" || step.kind === "files_exist") {
 		const lastLine = lastNonEmptyLine(liveCheckOutput);
 		if (lastLine) return theme.fg("toolOutput", truncate(lastLine, 80));
-		return theme.fg("dim", describeVerifyStepShort(step));
+		return theme.fg("dim", describeCommandStepShort(step));
 	}
 	if (step.kind === "terminal") return theme.fg("dim", `[${step.outcome}]`);
 	const lastCall = [...runtime.transcript]
@@ -569,13 +567,11 @@ const hasExpandedDetail = (state: RelayRunState): boolean => {
 	return false;
 };
 
-const describeVerifyStepShort = (
-	step: Extract<Step, { kind: "verify_command" } | { kind: "verify_files_exist" }>,
-): string => {
+const describeCommandStepShort = (step: Extract<Step, { kind: "command" } | { kind: "files_exist" }>): string => {
 	switch (step.kind) {
-		case "verify_command":
+		case "command":
 			return step.command;
-		case "verify_files_exist":
+		case "files_exist":
 			return step.paths.join(", ");
 	}
 };

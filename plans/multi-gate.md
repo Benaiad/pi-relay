@@ -40,21 +40,21 @@ steps:
       Write a summary of your changes to the change_notes artifact.
     writes: [change_notes]
     routes: { done: gate1 }
-  - kind: verify_command
+  - kind: command
     id: gate1
     command: "{{gate1}}"
-    onPass: gate2
-    onFail: gate1_failed
-  - kind: verify_command
+    onSuccess: gate2
+    onFailure: gate1_failed
+  - kind: command
     id: gate2
     command: "{{gate2}}"
-    onPass: gate3
-    onFail: gate2_failed
-  - kind: verify_command
+    onSuccess: gate3
+    onFailure: gate2_failed
+  - kind: command
     id: gate3
     command: "{{gate3}}"
-    onPass: done
-    onFail: gate3_failed
+    onSuccess: done
+    onFailure: gate3_failed
   - kind: terminal
     id: done
     outcome: success

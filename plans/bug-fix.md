@@ -52,11 +52,11 @@ steps:
     reads: [diagnosis]
     writes: [fix_notes]
     routes: { done: verify }
-  - kind: verify_command
+  - kind: command
     id: verify
     command: "{{verify}}"
-    onPass: done
-    onFail: failed
+    onSuccess: done
+    onFailure: failed
   - kind: terminal
     id: done
     outcome: success

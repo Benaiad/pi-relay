@@ -6,7 +6,7 @@
  * abort signal) and returns `pass` or `fail`. The scheduler routes the step
  * based on the outcome.
  *
- *   - `runVerifyCommand`    — pass iff the command runs and exits 0 within
+ *   - `runCommand`          — pass iff the command runs and exits 0 within
  *                             the timeout; output is captured for the failure
  *                             reason so the model can see why
  *   - `runFilesExist`       — pass iff every listed path exists on the
@@ -22,7 +22,7 @@
 import { access, constants } from "node:fs/promises";
 import * as path from "node:path";
 import { createLocalBashOperations } from "@mariozechner/pi-coding-agent";
-import type { VerifyCommandStep, VerifyFilesExistStep } from "../plan/types.js";
+import type { CommandStep, FilesExistStep } from "../plan/types.js";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 600_000;
 const COMMAND_OUTPUT_REASON_LIMIT = 800;
@@ -40,7 +40,7 @@ export type CheckOutcome = { readonly kind: "pass" } | { readonly kind: "fail"; 
 
 export type CheckOutputCallback = (text: string) => void;
 
-export const runFilesExist = async (step: VerifyFilesExistStep, ctx: CheckContext): Promise<CheckOutcome> => {
+export const runFilesExist = async (step: FilesExistStep, ctx: CheckContext): Promise<CheckOutcome> => {
 	const missing: string[] = [];
 	for (const p of step.paths) {
 		const resolved = path.isAbsolute(p) ? p : path.resolve(ctx.cwd, p);
@@ -55,8 +55,8 @@ export const runFilesExist = async (step: VerifyFilesExistStep, ctx: CheckContex
 	return { kind: "fail", reason: `${label}: ${missing.join(", ")}` };
 };
 
-export const runVerifyCommand = async (
-	step: VerifyCommandStep,
+export const runCommand = async (
+	step: CommandStep,
 	ctx: CheckContext,
 	onOutput?: CheckOutputCallback,
 ): Promise<CheckOutcome> => {

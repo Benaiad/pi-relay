@@ -24,11 +24,11 @@ steps:
       Write a summary of your changes to the change_notes artifact.
     writes: [change_notes]
     routes: { done: verify }
-  - kind: verify_command
+  - kind: command
     id: verify
     command: "{{verify}}"
-    onPass: done
-    onFail: failed
+    onSuccess: done
+    onFailure: failed
   - kind: terminal
     id: done
     outcome: success

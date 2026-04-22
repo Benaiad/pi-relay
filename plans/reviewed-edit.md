@@ -88,11 +88,11 @@ steps:
     reads: [spec_verdict, quality_verdict]
     writes: [notes]
     routes: { done: spec_review }
-  - kind: verify_command
+  - kind: command
     id: verify
     command: "{{verify}}"
-    onPass: done
-    onFail: failed
+    onSuccess: done
+    onFailure: failed
   - kind: terminal
     id: done
     outcome: success

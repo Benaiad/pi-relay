@@ -110,12 +110,12 @@ export type RelayEvent =
 			readonly usage: ActorUsage;
 	  }
 	| {
-			readonly kind: "verify_passed";
+			readonly kind: "check_passed";
 			readonly at: number;
 			readonly stepId: StepId;
 	  }
 	| {
-			readonly kind: "verify_failed";
+			readonly kind: "check_failed";
 			readonly at: number;
 			readonly stepId: StepId;
 			readonly reason: string;
@@ -300,27 +300,27 @@ export const applyEvent = (state: RelayRunState, event: RelayEvent): RelayRunSta
 				eventCount: nextEventCount,
 			};
 
-		case "verify_passed":
+		case "check_passed":
 			return {
 				...state,
 				steps: updateStep(state.steps, event.stepId, (s) => ({
 					...s,
 					status: "succeeded",
 					finishedAt: event.at,
-					lastRoute: VERIFY_PASS,
+					lastRoute: CHECK_SUCCESS,
 				})),
 				currentlyRunning: removeOne(state.currentlyRunning, event.stepId),
 				eventCount: nextEventCount,
 			};
 
-		case "verify_failed":
+		case "check_failed":
 			return {
 				...state,
 				steps: updateStep(state.steps, event.stepId, (s) => ({
 					...s,
 					status: "succeeded",
 					finishedAt: event.at,
-					lastRoute: VERIFY_FAIL,
+					lastRoute: CHECK_FAILURE,
 					lastReason: event.reason,
 				})),
 				currentlyRunning: removeOne(state.currentlyRunning, event.stepId),
@@ -438,8 +438,8 @@ export const replay = (program: Program, events: readonly RelayEvent[]): RelayRu
 // Reducer helpers
 // ============================================================================
 
-const VERIFY_PASS = makeRouteId("pass");
-const VERIFY_FAIL = makeRouteId("fail");
+const CHECK_SUCCESS = makeRouteId("success");
+const CHECK_FAILURE = makeRouteId("failure");
 
 const getStep = (steps: ReadonlyMap<StepId, StepRuntimeState>, id: StepId): StepRuntimeState => {
 	const existing = steps.get(id);

@@ -85,10 +85,10 @@ const buildStepBlock = (
 	switch (step.kind) {
 		case "action":
 			return buildActionBlock(step, index, theme, expanded);
-		case "verify_command":
-			return buildVerifyCommandBlock(step, index, theme);
-		case "verify_files_exist":
-			return buildVerifyFilesExistBlock(step, index, theme);
+		case "command":
+			return buildCommandBlock(step, index, theme);
+		case "files_exist":
+			return buildFilesExistBlock(step, index, theme);
 		case "terminal":
 			return buildTerminalBlock(step, index, theme);
 	}
@@ -136,8 +136,8 @@ const buildActionBlock = (
 	return lines;
 };
 
-const buildVerifyCommandBlock = (
-	step: Extract<PlanDraftDoc["steps"][number], { kind: "verify_command" }>,
+const buildCommandBlock = (
+	step: Extract<PlanDraftDoc["steps"][number], { kind: "command" }>,
 	index: number,
 	theme: Theme,
 ): string[] => {
@@ -149,12 +149,12 @@ const buildVerifyCommandBlock = (
 	if (step.reads && step.reads.length > 0) {
 		lines.push(`     ${theme.fg("dim", `Uses: ${step.reads.join(", ")}`)}`);
 	}
-	lines.push(`     ${theme.fg("dim", `Pass → ${step.onPass}, fail → ${step.onFail}`)}`);
+	lines.push(`     ${theme.fg("dim", `Success → ${step.onSuccess}, failure → ${step.onFailure}`)}`);
 	return lines;
 };
 
-const buildVerifyFilesExistBlock = (
-	step: Extract<PlanDraftDoc["steps"][number], { kind: "verify_files_exist" }>,
+const buildFilesExistBlock = (
+	step: Extract<PlanDraftDoc["steps"][number], { kind: "files_exist" }>,
 	index: number,
 	theme: Theme,
 ): string[] => {
@@ -162,7 +162,7 @@ const buildVerifyFilesExistBlock = (
 		step.paths.length === 1 ? `File exists: ${step.paths[0]}` : `Files exist: ${step.paths.join(", ")}`;
 	return [
 		`  ${theme.fg("warning", `${index}.`)} ${theme.fg("toolTitle", step.id)}  ${theme.fg("toolOutput", description)}`,
-		`     ${theme.fg("dim", `Pass → ${step.onPass}, fail → ${step.onFail}`)}`,
+		`     ${theme.fg("dim", `Success → ${step.onSuccess}, failure → ${step.onFailure}`)}`,
 	];
 };
 

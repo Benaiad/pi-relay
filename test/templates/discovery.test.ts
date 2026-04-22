@@ -44,11 +44,11 @@ task: Run the linter
 entryStep: lint
 artifacts: []
 steps:
-  - kind: verify_command
+  - kind: command
     id: lint
     command: npm run lint
-    onPass: done
-    onFail: failed
+    onSuccess: done
+    onFailure: failed
   - kind: terminal
     id: done
     outcome: success

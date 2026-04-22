@@ -218,12 +218,12 @@ export const summarizePlanImpact = (
 				if (EDIT_TOOLS.has(tool)) mayEdit = true;
 				if (COMMAND_TOOLS.has(tool)) mayRunCommands = true;
 			}
-		} else if (step.kind === "verify_command") {
+		} else if (step.kind === "command") {
 			verifyStepCount += 1;
 			const cmd = step.command;
 			commandChecks.push(cmd.length > 80 ? `${cmd.slice(0, 80)}…` : cmd);
 			mayRunCommands = true;
-		} else if (step.kind === "verify_files_exist") {
+		} else if (step.kind === "files_exist") {
 			verifyStepCount += 1;
 		} else {
 			terminalStepCount += 1;
