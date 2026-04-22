@@ -98,18 +98,18 @@ const CommandStepSchema = Type.Object(
 			Type.Array(ArtifactIdField("An artifact ID this command step may access."), {
 				description:
 					"Artifacts injected as environment variables when the command runs. " +
-					"Each read artifact is available as $artifact_id containing the value " +
-					"(raw text for text artifacts, JSON for structured artifacts). Defaults to none.",
+					"Each read artifact is available as $artifact_id. " +
+					"Format: plain text (no fields), JSON object (fields), JSON array (fields + list). " +
+					"Defaults to none.",
 			}),
 		),
 		writes: Type.Optional(
 			Type.Array(ArtifactIdField("An artifact ID this command step may produce."), {
 				description:
-					"Artifacts this step may write. The runtime creates a directory and sets $RELAY_OUT " +
-					"to its path. Write files named after the artifact ID: echo value > $RELAY_OUT/artifact_id. " +
-					"Plain text for text artifacts, JSON for artifacts with fields. " +
-					"The runtime reads them back after exit. Do NOT mkdir $RELAY_OUT — it already exists. " +
-					"Defaults to none.",
+					"Artifacts this step may write. The runtime creates $RELAY_OUT directory. " +
+					"Write: echo value > $RELAY_OUT/artifact_id. " +
+					"Format: plain text (no fields), JSON object (fields), JSON array (fields + list). " +
+					"Do NOT mkdir $RELAY_OUT — it already exists. Defaults to none.",
 			}),
 		),
 		timeoutMs: Type.Optional(
