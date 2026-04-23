@@ -12,6 +12,7 @@
  */
 
 import { defineTool, type ToolDefinition } from "@mariozechner/pi-coding-agent";
+import { Text } from "@mariozechner/pi-tui";
 import { type TSchema, Type } from "typebox";
 import type { ArtifactId, RouteId } from "../plan/ids.js";
 import { unwrap } from "../plan/ids.js";
@@ -75,6 +76,22 @@ export const buildCompletionTool = (
 				details: { route: route as string, artifacts } satisfies CompletionDetails,
 				terminate: true,
 			};
+		},
+
+		renderCall(args, theme) {
+			const route = (args as Record<string, unknown>).route;
+			const label = route ? `route: ${route}` : "completing…";
+			return new Text(theme.fg("muted", label), 0, 0);
+		},
+
+		renderResult(result, _options, theme) {
+			const details = result.details as CompletionDetails | undefined;
+			if (!details) {
+				return new Text(theme.fg("muted", "done"), 0, 0);
+			}
+			const artifactCount = Object.keys(details.artifacts).length;
+			const suffix = artifactCount > 0 ? ` (${artifactCount} artifact${artifactCount === 1 ? "" : "s"})` : "";
+			return new Text(theme.fg("muted", `→ ${details.route}${suffix}`), 0, 0);
 		},
 	});
 };
