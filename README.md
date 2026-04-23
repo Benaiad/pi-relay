@@ -1,6 +1,10 @@
-# pi-relay
+<p align="center">
+  <img src="pi-relay.png" alt="pi-relay" width="480">
+</p>
 
-Workflow engine for [pi](https://pi.dev/) — break complex tasks into steps with actors, commands, and loops.
+<p align="center">
+  Workflow engine for <a href="https://pi.dev/">pi</a> — break complex tasks into steps with actors, commands, and loops.
+</p>
 
 ```bash
 pi install https://github.com/benaiad/pi-relay
