@@ -116,109 +116,130 @@ const runAction = async (config: SdkEngineConfig, request: ActionRequest): Promi
 	const transcript: TranscriptItem[] = [];
 	const usage = mutableUsage();
 
-	const unsubscribe = session.subscribe((event) => {
-		if (event.type === "message_end" && event.message.role === "assistant") {
-			const msg = event.message as AssistantMessage;
-			usage.turns += 1;
-			if (msg.usage) {
-				usage.input += msg.usage.input ?? 0;
-				usage.output += msg.usage.output ?? 0;
-				usage.cacheRead += msg.usage.cacheRead ?? 0;
-				usage.cacheWrite += msg.usage.cacheWrite ?? 0;
-				usage.cost += msg.usage.cost?.total ?? 0;
-				usage.contextTokens = msg.usage.totalTokens ?? usage.contextTokens;
+	const abortHandler = signal
+		? () => {
+				session.abort();
 			}
-			for (const part of msg.content) {
-				if (part.type === "text" && part.text.length > 0) {
-					const item: TranscriptItem = { kind: "text", text: part.text };
-					transcript.push(item);
-					onProgress?.({
-						stepId: step.id,
-						actor: step.actor,
-						item,
-						usage: snapshotUsage(usage),
-					});
-				}
-			}
-		}
-
-		if (event.type === "tool_execution_start" && event.toolName !== TURN_COMPLETE_TOOL) {
-			const item: TranscriptItem = {
-				kind: "tool_call",
-				toolName: event.toolName,
-				args: event.args as Record<string, unknown>,
-			};
-			transcript.push(item);
-			onProgress?.({
-				stepId: step.id,
-				actor: step.actor,
-				item,
-				usage: snapshotUsage(usage),
-			});
-		}
-	});
+		: undefined;
 
 	try {
-		await session.prompt(taskPrompt);
-	} catch (error: unknown) {
 		if (signal?.aborted) {
 			return { kind: "aborted", usage: snapshotUsage(usage), transcript };
 		}
-		const reason = error instanceof Error ? error.message : String(error);
+		if (abortHandler) {
+			signal!.addEventListener("abort", abortHandler, { once: true });
+		}
+
+		const unsubscribe = session.subscribe((event) => {
+			if (event.type === "message_end" && event.message.role === "assistant") {
+				const msg = event.message as AssistantMessage;
+				usage.turns += 1;
+				if (msg.usage) {
+					usage.input += msg.usage.input ?? 0;
+					usage.output += msg.usage.output ?? 0;
+					usage.cacheRead += msg.usage.cacheRead ?? 0;
+					usage.cacheWrite += msg.usage.cacheWrite ?? 0;
+					usage.cost += msg.usage.cost?.total ?? 0;
+					usage.contextTokens = msg.usage.totalTokens ?? usage.contextTokens;
+				}
+				for (const part of msg.content) {
+					if (part.type === "text" && part.text.length > 0) {
+						const item: TranscriptItem = { kind: "text", text: part.text };
+						transcript.push(item);
+						onProgress?.({
+							stepId: step.id,
+							actor: step.actor,
+							item,
+							usage: snapshotUsage(usage),
+						});
+					}
+				}
+			}
+
+			if (event.type === "tool_execution_start" && event.toolName !== TURN_COMPLETE_TOOL) {
+				const item: TranscriptItem = {
+					kind: "tool_call",
+					toolName: event.toolName,
+					args: event.args as Record<string, unknown>,
+				};
+				transcript.push(item);
+				onProgress?.({
+					stepId: step.id,
+					actor: step.actor,
+					item,
+					usage: snapshotUsage(usage),
+				});
+			}
+		});
+
+		try {
+			await session.prompt(taskPrompt);
+		} catch (error: unknown) {
+			if (signal?.aborted) {
+				return { kind: "aborted", usage: snapshotUsage(usage), transcript };
+			}
+			const reason = error instanceof Error ? error.message : String(error);
+			return {
+				kind: "engine_error",
+				reason: `agent session failed: ${reason}`,
+				usage: snapshotUsage(usage),
+				transcript,
+			};
+		} finally {
+			unsubscribe();
+		}
+
+		if (signal?.aborted) {
+			return { kind: "aborted", usage: snapshotUsage(usage), transcript };
+		}
+
+		const messages = session.messages;
+
+		const completion = extractCompletion(messages);
+		if (!completion) {
+			const lastText = extractLastAssistantText(messages);
+			const tail = truncate(lastText.trim(), 600) || "(actor produced no text output)";
+			return {
+				kind: "no_completion",
+				reason: `actor did not call turn_complete. Final reply ended with: "${tail}"`,
+				usage: snapshotUsage(usage),
+				transcript,
+			};
+		}
+
+		const routeId = RouteId(completion.route);
+		if (!step.routes.has(routeId)) {
+			return {
+				kind: "no_completion",
+				reason: `route '${completion.route}' is not one of the allowed routes: ${[...step.routes.keys()]
+					.map(unwrap)
+					.join(", ")}`,
+				usage: snapshotUsage(usage),
+				transcript,
+			};
+		}
+
+		const allowedWrites = new Set<ArtifactIdType>(step.writes);
+		const writes = new Map<ArtifactIdType, unknown>();
+		for (const [idStr, value] of Object.entries(completion.artifacts)) {
+			const id = ArtifactId(idStr);
+			if (!allowedWrites.has(id)) continue;
+			writes.set(id, value);
+		}
+
 		return {
-			kind: "engine_error",
-			reason: `agent session failed: ${reason}`,
+			kind: "completed",
+			route: routeId,
+			writes,
 			usage: snapshotUsage(usage),
 			transcript,
 		};
 	} finally {
-		unsubscribe();
+		if (abortHandler) {
+			signal!.removeEventListener("abort", abortHandler);
+		}
 		session.dispose();
 	}
-
-	if (signal?.aborted) {
-		return { kind: "aborted", usage: snapshotUsage(usage), transcript };
-	}
-
-	const completion = extractCompletion(session.messages);
-	if (!completion) {
-		const lastText = extractLastAssistantText(session.messages);
-		const tail = truncate(lastText.trim(), 600) || "(actor produced no text output)";
-		return {
-			kind: "no_completion",
-			reason: `actor did not call turn_complete. Final reply ended with: "${tail}"`,
-			usage: snapshotUsage(usage),
-			transcript,
-		};
-	}
-
-	const routeId = RouteId(completion.route);
-	if (!step.routes.has(routeId)) {
-		return {
-			kind: "no_completion",
-			reason: `route '${completion.route}' is not one of the allowed routes: ${[...step.routes.keys()]
-				.map(unwrap)
-				.join(", ")}`,
-			usage: snapshotUsage(usage),
-			transcript,
-		};
-	}
-
-	const allowedWrites = new Set<ArtifactIdType>(step.writes);
-	const writes = new Map<ArtifactIdType, unknown>();
-	for (const [idStr, value] of Object.entries(completion.artifacts)) {
-		const id = ArtifactId(idStr);
-		if (!allowedWrites.has(id)) continue;
-		writes.set(id, value);
-	}
-
-	return {
-		kind: "completed",
-		route: routeId,
-		writes,
-		usage: snapshotUsage(usage),
-		transcript,
-	};
 };
 
 // ============================================================================

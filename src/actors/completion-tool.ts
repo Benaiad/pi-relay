@@ -58,7 +58,7 @@ export const buildCompletionTool = (
 
 	return defineTool({
 		name: TOOL_NAME,
-		label: "Relay Complete",
+		label: "Turn Complete",
 		description: buildDescription(routes, writableArtifactIds, artifactContracts),
 		promptSnippet: "Signal step completion with a route and optional artifact values",
 		promptGuidelines: [
