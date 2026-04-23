@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="pi-relay.png" alt="pi-relay" width="200">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="pi-relay-dark.png">
+    <img src="pi-relay.png" alt="pi-relay" width="200">
+  </picture>
 </p>
 
 # pi-relay
