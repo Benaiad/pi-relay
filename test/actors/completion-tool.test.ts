@@ -22,9 +22,9 @@ const recordListContract = (id: string, description: string, fields: string[]): 
 });
 
 describe("buildCompletionTool", () => {
-	it("produces a tool named relay_complete", () => {
+	it("produces a tool named turn_complete", () => {
 		const tool = buildCompletionTool([RouteId("done")], [], new Map());
-		expect(tool.name).toBe("relay_complete");
+		expect(tool.name).toBe("turn_complete");
 	});
 
 	it("schema has route as a literal when one route exists", () => {

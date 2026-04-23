@@ -3,7 +3,7 @@
  *
  * Runs each action step as an in-process `AgentSession` via pi's SDK instead
  * of spawning a subprocess. The completion protocol is a terminating tool call
- * (`relay_complete`) whose schema is dynamically constructed per step from
+ * (`turn_complete`) whose schema is dynamically constructed per step from
  * the step's declared routes and writable artifacts.
  *
  * Benefits over the subprocess engine:
@@ -40,7 +40,7 @@ import {
 	type TranscriptItem,
 } from "./types.js";
 
-const RELAY_COMPLETE_TOOL = "relay_complete";
+const TURN_COMPLETE_TOOL = "turn_complete";
 
 export interface SdkEngineConfig {
 	readonly modelRegistry: ModelRegistry;
@@ -84,7 +84,7 @@ const runAction = async (config: SdkEngineConfig, request: ActionRequest): Promi
 		request.priorCheckResult,
 	);
 
-	const actorTools = actor.tools ? [...actor.tools, RELAY_COMPLETE_TOOL] : [RELAY_COMPLETE_TOOL];
+	const actorTools = actor.tools ? [...actor.tools, TURN_COMPLETE_TOOL] : [TURN_COMPLETE_TOOL];
 
 	const agentDir = getAgentDir();
 	const settingsManager = SettingsManager.create(cwd, agentDir);
@@ -142,7 +142,7 @@ const runAction = async (config: SdkEngineConfig, request: ActionRequest): Promi
 			}
 		}
 
-		if (event.type === "tool_execution_start" && event.toolName !== RELAY_COMPLETE_TOOL) {
+		if (event.type === "tool_execution_start" && event.toolName !== TURN_COMPLETE_TOOL) {
 			const item: TranscriptItem = {
 				kind: "tool_call",
 				toolName: event.toolName,
@@ -186,7 +186,7 @@ const runAction = async (config: SdkEngineConfig, request: ActionRequest): Promi
 		const tail = truncate(lastText.trim(), 600) || "(actor produced no text output)";
 		return {
 			kind: "no_completion",
-			reason: `actor did not call relay_complete. Final reply ended with: "${tail}"`,
+			reason: `actor did not call turn_complete. Final reply ended with: "${tail}"`,
 			usage: snapshotUsage(usage),
 			transcript,
 		};
@@ -260,10 +260,10 @@ const resolveModel = (modelString: string | undefined, config: SdkEngineConfig):
 // ============================================================================
 
 /**
- * Find the `relay_complete` tool result in the session messages and extract
+ * Find the `turn_complete` tool result in the session messages and extract
  * the structured completion details.
  *
- * Walks backward to find the most recent tool result for `relay_complete`.
+ * Walks backward to find the most recent tool result for `turn_complete`.
  * The `details` field carries the route and artifact values set by the tool's
  * execute function — no parsing needed.
  */
@@ -271,7 +271,7 @@ const extractCompletion = (messages: readonly AgentMessage[]): CompletionDetails
 	for (let i = messages.length - 1; i >= 0; i -= 1) {
 		const msg = messages[i];
 		if (!msg || !isToolResultMessage(msg)) continue;
-		if (msg.toolName !== RELAY_COMPLETE_TOOL) continue;
+		if (msg.toolName !== TURN_COMPLETE_TOOL) continue;
 		const details = msg.details as CompletionDetails | undefined;
 		if (details?.route) return details;
 	}
@@ -286,7 +286,7 @@ const isAssistantMessage = (msg: AgentMessage): msg is AssistantMessage =>
 
 /**
  * Extract the concatenated text of the last assistant message.
- * Used for diagnostic output when the actor fails to call `relay_complete`.
+ * Used for diagnostic output when the actor fails to call `turn_complete`.
  */
 const extractLastAssistantText = (messages: readonly AgentMessage[]): string => {
 	for (let i = messages.length - 1; i >= 0; i -= 1) {

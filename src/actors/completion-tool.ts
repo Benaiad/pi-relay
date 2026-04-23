@@ -1,7 +1,7 @@
 /**
  * Dynamic completion tool construction.
  *
- * Each action step gets a `relay_complete` tool whose schema is derived from
+ * Each action step gets a `turn_complete` tool whose schema is derived from
  * the step's declared routes and writable artifacts. The model calls this tool
  * with structured JSON arguments instead of emitting XML in free-form text.
  * `terminate: true` in the tool result ends the agent turn immediately.
@@ -17,7 +17,7 @@ import type { ArtifactId, RouteId } from "../plan/ids.js";
 import { unwrap } from "../plan/ids.js";
 import type { ArtifactContract, ArtifactShape } from "../plan/types.js";
 
-const TOOL_NAME = "relay_complete";
+const TOOL_NAME = "turn_complete";
 
 /** The structured details carried by the tool result. */
 export interface CompletionDetails {
@@ -26,7 +26,7 @@ export interface CompletionDetails {
 }
 
 /**
- * Build a `relay_complete` tool definition for a specific action step.
+ * Build a `turn_complete` tool definition for a specific action step.
  *
  * The tool's parameter schema is constructed from the step's declared routes
  * and writable artifacts. Route names become a string enum. Each writable
@@ -62,8 +62,8 @@ export const buildCompletionTool = (
 		description: buildDescription(routes, writableArtifactIds, artifactContracts),
 		promptSnippet: "Signal step completion with a route and optional artifact values",
 		promptGuidelines: [
-			"Call relay_complete exactly once, as your final action, after all work is done.",
-			"Do not call relay_complete until every task requirement is met.",
+			"Call turn_complete exactly once, as your final action, after all work is done.",
+			"Do not call turn_complete until every task requirement is met.",
 			"Choose the route that best describes the outcome of your work.",
 		],
 		parameters,
