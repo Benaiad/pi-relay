@@ -25,7 +25,6 @@
 
 import { getMarkdownTheme, keyHint, type Theme, truncateToVisualLines } from "@mariozechner/pi-coding-agent";
 import { type Component, Container, Markdown, Spacer, Text, truncateToWidth } from "@mariozechner/pi-tui";
-import { stripCompletionTag } from "../actors/complete-step.js";
 import type { TranscriptItem } from "../actors/types.js";
 import type { StepId } from "../plan/ids.js";
 import { unwrap } from "../plan/ids.js";
@@ -399,7 +398,7 @@ const renderActionTranscript = (
 	let finalTextIndex = -1;
 	if (transcript.length > 0) {
 		const last = transcript[transcript.length - 1];
-		if (last?.kind === "text" && stripCompletionTag(last.text).trim().length > 0) {
+		if (last?.kind === "text" && last.text.trim().length > 0) {
 			finalTextIndex = transcript.length - 1;
 		}
 	}
@@ -431,7 +430,7 @@ const renderActionTranscript = (
 
 		// Text item. The final one (after every tool call) gets Markdown
 		// treatment; mid-reply chunks get inline plain-text treatment.
-		const cleaned = stripCompletionTag(item.text).trim();
+		const cleaned = item.text.trim();
 		if (cleaned.length === 0) continue;
 
 		if (i === finalTextIndex) {
@@ -545,7 +544,7 @@ const describeActiveStep = (step: Step, runtime: StepRuntimeState, theme: Theme,
 		.reverse()
 		.find((item): item is Extract<TranscriptItem, { kind: "text" }> => item.kind === "text");
 	if (lastText) {
-		const cleaned = stripCompletionTag(lastText.text).replace(/\s+/g, " ");
+		const cleaned = lastText.text.replace(/\s+/g, " ").trim();
 		if (cleaned.length > 0) return theme.fg("dim", truncate(cleaned, 80));
 	}
 	return "";

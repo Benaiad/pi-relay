@@ -15,7 +15,6 @@
  * data from `details.state`.
  */
 
-import { stripCompletionTag } from "../actors/complete-step.js";
 import { renderValue } from "../actors/render-value.js";
 import type { ActorUsage, TranscriptItem } from "../actors/types.js";
 import { emptyUsage } from "../actors/types.js";
@@ -592,7 +591,7 @@ const extractAttemptFinalText = (attempt: AttemptSummary): string => {
 		if (item.kind === "text" && item.text.trim().length > 0) texts.push(item.text);
 	}
 	if (texts.length === 0) return "";
-	return stripCompletionTag(texts.join("\n"));
+	return texts.join("\n").trim();
 };
 
 const outcomeLabel = (outcome: RunOutcome): string => {

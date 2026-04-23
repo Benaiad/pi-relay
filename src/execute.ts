@@ -12,7 +12,7 @@
 
 import type { AgentToolResult, AgentToolUpdateCallback, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { actorRegistryFromDiscovery } from "./actors/discovery.js";
-import { createSubprocessActorEngine } from "./actors/engine.js";
+import { createSdkActorEngine } from "./actors/sdk-engine.js";
 import type { ActorConfig, ActorDiscovery } from "./actors/types.js";
 import type { RelayDetails } from "./pi-relay.js";
 import { compile } from "./plan/compile.js";
@@ -121,7 +121,10 @@ export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<
 	const artifactStore = new ArtifactStore(program, clock);
 	const scheduler = new Scheduler({
 		program,
-		actorEngine: createSubprocessActorEngine(),
+		actorEngine: createSdkActorEngine({
+			modelRegistry: ctx.modelRegistry,
+			defaultModel: ctx.model,
+		}),
 		actorsByName,
 		cwd: ctx.cwd,
 		signal,

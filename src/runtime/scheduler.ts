@@ -35,7 +35,6 @@
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { stripCompletionTag } from "../actors/complete-step.js";
 import type {
 	ActionOutcome,
 	ActionRequest,
@@ -87,7 +86,7 @@ const summarizePriorAttempt = (attempt: AttemptSummary): PriorAttempt => {
 		if (item.kind === "tool_call") toolsCalled.push(item.toolName);
 		else if (item.kind === "text" && item.text.trim().length > 0) narrationParts.push(item.text);
 	}
-	const rawNarration = stripCompletionTag(narrationParts.join("\n"));
+	const rawNarration = narrationParts.join("\n").trim();
 	const narration = oneLineLimit(rawNarration, PRIOR_ATTEMPT_NARRATION_LIMIT);
 
 	let outcomeLabel: string;
