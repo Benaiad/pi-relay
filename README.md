@@ -45,7 +45,7 @@ Three things are added to pi:
 1. The assistant calls `relay` (ad-hoc plan) or `replay` (saved template) based on the task.
 2. The plan is compiled — actor references, route targets, and artifact contracts are validated.
 3. You review the plan and choose: **Run**, **Refine**, or **Cancel**.
-4. The scheduler executes steps sequentially. Action steps spawn isolated agent subprocesses. Command steps run shell commands or check file existence and route on the outcome — pass or fail, no interpretation.
+4. The scheduler executes steps sequentially. Action steps run isolated agent sessions with restricted tools. Command steps run shell commands or check file existence and route on the outcome — pass or fail, no interpretation.
 5. The run report shows what happened: per-step outcomes, tool calls, and actor transcripts. Press `Ctrl+O` to expand the full step-by-step detail.
 
 ## Core concepts
@@ -73,7 +73,7 @@ Command and files_exist steps route via fixed `onSuccess` / `onFailure` fields.
 
 ### Artifacts
 
-Structured state passed between steps. Declared at the plan level with an id and description, then read and written by steps. Action steps read and write artifacts through the completion protocol. Command steps read and write artifacts through the filesystem:
+Structured state passed between steps. Declared at the plan level with an id and description, then read and written by steps. Action steps read and write artifacts through a terminating tool call. Command steps read and write artifacts through the filesystem:
 
 ```yaml
 - kind: command
