@@ -1,6 +1,6 @@
 # pi-relay
 
-Multi-step workflows for [pi](https://pi.dev/) — actors do the work, verification gates decide pass/fail.
+Workflow engine for [pi](https://pi.dev/) — break complex tasks into steps with actors, commands, and loops.
 
 ```bash
 pi install https://github.com/benaiad/pi-relay
