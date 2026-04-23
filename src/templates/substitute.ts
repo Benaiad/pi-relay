@@ -12,7 +12,7 @@
  * (`"`, `:`, `\n`) cannot corrupt the document structure.
  */
 
-import { Value } from "@sinclair/typebox/value";
+import { Value } from "typebox/value";
 import type { PlanDraftDoc } from "../plan/draft.js";
 import { PlanDraftSchema } from "../plan/draft.js";
 import { err, ok, type Result } from "../plan/result.js";
@@ -68,7 +68,7 @@ export const instantiateTemplate = (
 	if (!Value.Check(PlanDraftSchema, cloned)) {
 		const errors = [...Value.Errors(PlanDraftSchema, cloned)];
 		const firstError = errors[0];
-		const message = firstError ? `${firstError.path}: ${firstError.message}` : "unknown validation error";
+		const message = firstError ? `${firstError.instancePath}: ${firstError.message}` : "unknown validation error";
 		return err({
 			kind: "invalid_plan",
 			templateName: template.name,

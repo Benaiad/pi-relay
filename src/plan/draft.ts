@@ -12,7 +12,7 @@
  * checked against the plan's declared steps, actors, and artifacts.
  */
 
-import { type Static, Type } from "@sinclair/typebox";
+import { type Static, Type } from "typebox";
 
 const IdField = (description: string) =>
 	Type.String({
