@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="pi-relay.png" alt="pi-relay" width="480">
+  <img src="pi-relay.png" alt="pi-relay" width="200">
 </p>
 
 # pi-relay
