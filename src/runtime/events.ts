@@ -93,6 +93,7 @@ export type RelayEvent =
 			readonly at: number;
 			readonly stepId: StepId;
 			readonly route: RouteId;
+			readonly assistant_summary: string;
 			readonly usage: ActorUsage;
 	  }
 	| {
@@ -113,11 +114,15 @@ export type RelayEvent =
 			readonly kind: "check_passed";
 			readonly at: number;
 			readonly stepId: StepId;
+			readonly exitCode: number | null;
+			readonly output: string;
 	  }
 	| {
 			readonly kind: "check_failed";
 			readonly at: number;
 			readonly stepId: StepId;
+			readonly exitCode: number | null;
+			readonly output: string;
 			readonly reason: string;
 	  }
 	| {

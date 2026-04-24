@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { createLocalBashOperations } from "@mariozechner/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type ArtifactId, StepId } from "../../src/plan/ids.js";
-import { runCommand, runFilesExist } from "../../src/runtime/checks.js";
+import { runCommand, runFilesExist, tailLines } from "../../src/runtime/checks.js";
 
 const ops = createLocalBashOperations();
 
@@ -31,6 +31,7 @@ describe("runFilesExist", () => {
 		};
 		const outcome = await runFilesExist(step, { cwd: tmp, ops });
 		expect(outcome.kind).toBe("pass");
+		expect(outcome.exitCode).toBeNull();
 	});
 
 	it("passes when a cwd-relative path exists", async () => {
@@ -56,9 +57,7 @@ describe("runFilesExist", () => {
 		};
 		const outcome = await runFilesExist(step, { cwd: tmp, ops });
 		expect(outcome.kind).toBe("fail");
-		if (outcome.kind === "fail") {
-			expect(outcome.reason).toContain("no-such-file");
-		}
+		expect(outcome.reason).toContain("no-such-file");
 	});
 
 	it("passes when all paths in an array exist", async () => {
@@ -86,11 +85,9 @@ describe("runFilesExist", () => {
 		};
 		const outcome = await runFilesExist(step, { cwd: tmp, ops });
 		expect(outcome.kind).toBe("fail");
-		if (outcome.kind === "fail") {
-			expect(outcome.reason).toContain("missing-a.txt");
-			expect(outcome.reason).toContain("missing-b.txt");
-			expect(outcome.reason).not.toContain("exists.txt");
-		}
+		expect(outcome.reason).toContain("missing-a.txt");
+		expect(outcome.reason).toContain("missing-b.txt");
+		expect(outcome.reason).not.toContain("exists.txt");
 	});
 });
 
@@ -109,26 +106,27 @@ describe("runCommand", () => {
 	it("passes when the command exits 0", async () => {
 		const outcome = await runCommand(commandStep('node -e "process.exit(0)"'), { cwd: process.cwd(), ops });
 		expect(outcome.kind).toBe("pass");
+		expect(outcome.exitCode).toBe(0);
 	});
 
-	it("fails when the command exits non-zero and captures stderr in the reason", async () => {
+	it("fails with exit code and captures stderr in output", async () => {
 		const outcome = await runCommand(commandStep("node -e \"process.stderr.write('boom\\n'); process.exit(3)\""), {
 			cwd: process.cwd(),
 			ops,
 		});
 		expect(outcome.kind).toBe("fail");
-		if (outcome.kind === "fail") {
-			expect(outcome.reason).toContain("code 3");
-			expect(outcome.reason).toContain("boom");
-		}
+		expect(outcome.exitCode).toBe(3);
+		expect(outcome.output).toContain("boom");
+		expect(outcome.reason).toContain("code 3");
 	});
 
-	it("fails when the command does not exist (spawn error)", async () => {
+	it("fails when the command does not exist", async () => {
 		const outcome = await runCommand(commandStep("definitely-not-a-real-binary-xyz"), {
 			cwd: process.cwd(),
 			ops,
 		});
 		expect(outcome.kind).toBe("fail");
+		expect(outcome.exitCode).not.toBe(0);
 	});
 
 	it("fails with a timeout reason when the command exceeds its timeout", async () => {
@@ -137,12 +135,10 @@ describe("runCommand", () => {
 			ops,
 		});
 		expect(outcome.kind).toBe("fail");
-		if (outcome.kind === "fail") {
-			expect(outcome.reason).toMatch(/timed out/i);
-		}
+		expect(outcome.reason).toMatch(/timed out/i);
 	});
 
-	it("includes output produced before the timeout in the failure reason", async () => {
+	it("includes output produced before the timeout", async () => {
 		const outcome = await runCommand(
 			commandStep(
 				"node -e \"process.stdout.write('partial progress'); setTimeout(() => process.exit(0), 5000)\"",
@@ -151,10 +147,8 @@ describe("runCommand", () => {
 			{ cwd: process.cwd(), ops },
 		);
 		expect(outcome.kind).toBe("fail");
-		if (outcome.kind === "fail") {
-			expect(outcome.reason).toMatch(/timed out/i);
-			expect(outcome.reason).toContain("partial progress");
-		}
+		expect(outcome.reason).toMatch(/timed out/i);
+		expect(outcome.output).toContain("partial progress");
 	});
 
 	it("fails when the abort signal fires mid-run", async () => {
@@ -167,9 +161,10 @@ describe("runCommand", () => {
 		setTimeout(() => ctl.abort(), 50);
 		const outcome = await promise;
 		expect(outcome.kind).toBe("fail");
+		expect(outcome.reason).toContain("aborted");
 	});
 
-	it("includes output produced before abort in the failure reason", async () => {
+	it("includes output produced before abort", async () => {
 		const ctl = new AbortController();
 		const promise = runCommand(
 			commandStep("node -e \"process.stdout.write('working...'); setTimeout(() => process.exit(0), 5000)\"", 10_000),
@@ -178,15 +173,19 @@ describe("runCommand", () => {
 		setTimeout(() => ctl.abort(), 200);
 		const outcome = await promise;
 		expect(outcome.kind).toBe("fail");
-		if (outcome.kind === "fail") {
-			expect(outcome.reason).toContain("aborted");
-			expect(outcome.reason).toContain("working...");
-		}
+		expect(outcome.reason).toContain("aborted");
+		expect(outcome.output).toContain("working...");
 	});
 
 	it("supports compound shell commands", async () => {
 		const outcome = await runCommand(commandStep("echo hello && echo world"), { cwd: process.cwd(), ops });
 		expect(outcome.kind).toBe("pass");
+	});
+
+	it("captures output on success", async () => {
+		const outcome = await runCommand(commandStep("echo success-marker"), { cwd: process.cwd(), ops });
+		expect(outcome.kind).toBe("pass");
+		expect(outcome.output).toContain("success-marker");
 	});
 
 	it("passes env context to the child process", async () => {
@@ -228,5 +227,43 @@ describe("runCommand", () => {
 		const outcome = await runCommand(commandStep("echo test"), { cwd: process.cwd(), ops: mockOps });
 		expect(outcome.kind).toBe("pass");
 		expect(calls).toEqual(["echo test"]);
+	});
+});
+
+describe("tailLines", () => {
+	it("returns empty string for empty input", () => {
+		expect(tailLines("")).toBe("");
+		expect(tailLines("   ")).toBe("");
+	});
+
+	it("returns all lines when under the limit", () => {
+		const input = "line 1\nline 2\nline 3";
+		expect(tailLines(input)).toBe("line 1\nline 2\nline 3");
+	});
+
+	it("keeps only the last 20 lines when over the limit", () => {
+		const lines = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`);
+		const result = tailLines(lines.join("\n"));
+		expect(result).toContain("… (10 lines omitted)");
+		expect(result).toContain("line 11");
+		expect(result).toContain("line 30");
+		expect(result).not.toContain("line 10\n");
+	});
+
+	it("truncates individual lines longer than 256 characters", () => {
+		const longLine = "x".repeat(300);
+		const result = tailLines(longLine);
+		expect(result.length).toBeLessThan(300);
+		expect(result).toContain("…");
+		expect(result.replace("…", "").length).toBe(256);
+	});
+
+	it("handles mixed short and long lines", () => {
+		const input = `short line\n${"a".repeat(400)}\nanother short`;
+		const result = tailLines(input);
+		expect(result).toContain("short line");
+		expect(result).toContain("another short");
+		const longLine = result.split("\n")[1]!;
+		expect(longLine.length).toBeLessThanOrEqual(257);
 	});
 });

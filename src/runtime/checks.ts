@@ -3,12 +3,11 @@
  *
  * Command and files_exist steps are evaluated by the runtime itself, outside of any LLM.
  * Each function takes its step type and a small context (working directory,
- * abort signal) and returns `pass` or `fail`. The scheduler routes the step
- * based on the outcome.
+ * abort signal) and returns a structured outcome with exit code and output.
  *
  *   - `runCommand`          — pass iff the command runs and exits 0 within
- *                             the timeout; output is captured for the failure
- *                             reason so the model can see why
+ *                             the timeout; output is always captured (last
+ *                             N lines) so both success and failure are visible
  *   - `runFilesExist`       — pass iff every listed path exists on the
  *                             filesystem
  *
@@ -25,8 +24,9 @@ import type { BashOperations } from "@mariozechner/pi-coding-agent";
 import type { CommandStep, FilesExistStep } from "../plan/types.js";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 600_000;
-const COMMAND_OUTPUT_REASON_LIMIT = 800;
-const MAX_OUTPUT_BUFFER = COMMAND_OUTPUT_REASON_LIMIT * 4;
+const TAIL_LINE_COUNT = 20;
+const MAX_LINE_LENGTH = 256;
+const MAX_OUTPUT_BUFFER = 32_000;
 
 export interface CheckContext {
 	readonly cwd: string;
@@ -36,7 +36,12 @@ export interface CheckContext {
 	readonly ops: BashOperations;
 }
 
-export type CheckOutcome = { readonly kind: "pass" } | { readonly kind: "fail"; readonly reason: string };
+export interface CheckOutcome {
+	readonly kind: "pass" | "fail";
+	readonly exitCode: number | null;
+	readonly output: string;
+	readonly reason?: string;
+}
 
 export type CheckOutputCallback = (text: string) => void;
 
@@ -50,9 +55,9 @@ export const runFilesExist = async (step: FilesExistStep, ctx: CheckContext): Pr
 			missing.push(p);
 		}
 	}
-	if (missing.length === 0) return { kind: "pass" };
+	if (missing.length === 0) return { kind: "pass", exitCode: null, output: "" };
 	const label = missing.length === 1 ? "file does not exist" : "files do not exist";
-	return { kind: "fail", reason: `${label}: ${missing.join(", ")}` };
+	return { kind: "fail", exitCode: null, output: "", reason: `${label}: ${missing.join(", ")}` };
 };
 
 export const runCommand = async (
@@ -75,7 +80,7 @@ export const runCommand = async (
 		onOutput?.(text);
 	};
 
-	const drainOutput = (): string => chunks.join("");
+	const drainOutput = (): string => tailLines(chunks.join(""));
 
 	try {
 		const { exitCode } = await ctx.ops.exec(step.command, ctx.cwd, {
@@ -85,39 +90,42 @@ export const runCommand = async (
 			env: ctx.env,
 		});
 
-		if (exitCode === 0) return { kind: "pass" };
+		if (exitCode === 0) return { kind: "pass", exitCode: 0, output: drainOutput() };
 		return {
 			kind: "fail",
-			reason: formatCommandFailure(step.command, exitCode, drainOutput()),
+			exitCode: exitCode ?? null,
+			output: drainOutput(),
+			reason: `exited with code ${exitCode ?? "unknown"}`,
 		};
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
-		const captured = truncateOutput(drainOutput());
-		const outputSuffix = captured.length > 0 ? `; output: ${captured}` : "";
+		const output = drainOutput();
 		if (message === "aborted") {
-			return { kind: "fail", reason: `check aborted${outputSuffix}` };
+			return { kind: "fail", exitCode: null, output, reason: "check aborted" };
 		}
 		if (message.startsWith("timeout:")) {
-			return {
-				kind: "fail",
-				reason: `command timed out after ${timeoutMs}ms: ${step.command}${outputSuffix}`,
-			};
+			return { kind: "fail", exitCode: null, output, reason: `timed out after ${timeoutMs}ms` };
 		}
-		return {
-			kind: "fail",
-			reason: `failed to spawn ${step.command}: ${message}`,
-		};
+		return { kind: "fail", exitCode: null, output, reason: `failed to spawn: ${message}` };
 	}
 };
 
-const formatCommandFailure = (command: string, code: number | null, output: string): string => {
-	const prefix = `${command} exited with code ${code ?? "unknown"}`;
-	const trimmed = truncateOutput(output);
-	return trimmed.length > 0 ? `${prefix}; output: ${trimmed}` : prefix;
-};
-
-const truncateOutput = (text: string): string => {
+/**
+ * Keep the last `TAIL_LINE_COUNT` lines, each truncated to `MAX_LINE_LENGTH` chars.
+ *
+ * Errors cluster at the end of output (compiler errors after passing tests,
+ * assertion failures after setup logs). Taking the tail captures the signal;
+ * per-line truncation prevents a single minified blob from blowing up the report.
+ */
+export const tailLines = (text: string): string => {
 	const trimmed = text.trim();
-	if (trimmed.length <= COMMAND_OUTPUT_REASON_LIMIT) return trimmed;
-	return `${trimmed.slice(0, COMMAND_OUTPUT_REASON_LIMIT)}… (truncated)`;
+	if (trimmed.length === 0) return "";
+	const lines = trimmed.split("\n");
+	const start = Math.max(0, lines.length - TAIL_LINE_COUNT);
+	const selected = lines.slice(start);
+	const truncated = selected.map((line) =>
+		line.length > MAX_LINE_LENGTH ? `${line.slice(0, MAX_LINE_LENGTH)}…` : line,
+	);
+	const prefix = start > 0 ? `… (${start} lines omitted)\n` : "";
+	return `${prefix}${truncated.join("\n")}`;
 };

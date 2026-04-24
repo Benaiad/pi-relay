@@ -394,7 +394,7 @@ export class Scheduler {
 
 		switch (outcome.kind) {
 			case "completed":
-				this.handleActionCompleted(step, outcome.route, outcome.writes, outcome.usage);
+				this.handleActionCompleted(step, outcome.route, outcome.assistant_summary, outcome.writes, outcome.usage);
 				return;
 			case "no_completion":
 				this.emit({
@@ -425,6 +425,7 @@ export class Scheduler {
 	private handleActionCompleted(
 		step: ActionStep,
 		route: RouteId,
+		assistant_summary: string,
 		writes: ReadonlyMap<ArtifactId, unknown>,
 		usage: ActorUsage,
 	): void {
@@ -473,6 +474,7 @@ export class Scheduler {
 			at: this.clock(),
 			stepId: step.id,
 			route,
+			assistant_summary,
 			usage,
 		});
 		this.followRoute(step.id, route);
@@ -532,9 +534,16 @@ export class Scheduler {
 					outcome: "passed",
 					description,
 				};
-				this.emit({ kind: "check_passed", at: this.clock(), stepId: step.id });
+				this.emit({
+					kind: "check_passed",
+					at: this.clock(),
+					stepId: step.id,
+					exitCode: outcome.exitCode,
+					output: outcome.output,
+				});
 				this.followRoute(step.id, makeRouteId("success"));
 			} else {
+				const reason = outcome.reason ?? `exited with code ${outcome.exitCode ?? "unknown"}`;
 				this.lastCheckResult = {
 					stepId: step.id,
 					outcome: "failed",
@@ -544,7 +553,9 @@ export class Scheduler {
 					kind: "check_failed",
 					at: this.clock(),
 					stepId: step.id,
-					reason: outcome.reason,
+					exitCode: outcome.exitCode,
+					output: outcome.output,
+					reason,
 				});
 				this.followRoute(step.id, makeRouteId("failure"));
 			}
@@ -626,7 +637,13 @@ export class Scheduler {
 				outcome: "passed",
 				description,
 			};
-			this.emit({ kind: "check_passed", at: this.clock(), stepId: step.id });
+			this.emit({
+				kind: "check_passed",
+				at: this.clock(),
+				stepId: step.id,
+				exitCode: null,
+				output: "",
+			});
 			this.followRoute(step.id, makeRouteId("success"));
 		} else {
 			this.lastCheckResult = {
@@ -638,7 +655,9 @@ export class Scheduler {
 				kind: "check_failed",
 				at: this.clock(),
 				stepId: step.id,
-				reason: outcome.reason,
+				exitCode: null,
+				output: "",
+				reason: outcome.reason ?? "check failed",
 			});
 			this.followRoute(step.id, makeRouteId("failure"));
 		}
