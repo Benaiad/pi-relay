@@ -1,8 +1,11 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { discoverPlanTemplates } from "../../src/templates/discovery.js";
+import { instantiateTemplate } from "../../src/templates/substitute.js";
 
 const VALID_TEMPLATE = `---
 name: refactor
@@ -19,18 +22,18 @@ parameters:
 ---
 
 task: "Rename {{old_name}} to {{new_name}} in {{module}}"
-entryStep: rename
+entry_step: rename
 artifacts: []
 steps:
-  - kind: action
-    id: rename
+  - type: action
+    name: rename
     actor: worker
     instruction: "Rename {{old_name}} to {{new_name}} in {{module}}"
     reads: []
     writes: []
     routes: { done: success }
-  - kind: terminal
-    id: success
+  - type: terminal
+    name: success
     outcome: success
     summary: Done.
 `;
@@ -41,20 +44,20 @@ description: Run the linter on the whole project.
 ---
 
 task: Run the linter
-entryStep: lint
+entry_step: lint
 artifacts: []
 steps:
-  - kind: command
-    id: lint
+  - type: command
+    name: lint
     command: npm run lint
-    onSuccess: done
-    onFailure: failed
-  - kind: terminal
-    id: done
+    on_success: done
+    on_failure: failed
+  - type: terminal
+    name: done
     outcome: success
     summary: Lint passed.
-  - kind: terminal
-    id: failed
+  - type: terminal
+    name: failed
     outcome: failure
     summary: Lint failed.
 `;
@@ -64,11 +67,11 @@ description: No name field.
 ---
 
 task: oops
-entryStep: a
+entry_step: a
 artifacts: []
 steps:
-  - kind: terminal
-    id: a
+  - type: terminal
+    name: a
     outcome: success
     summary: x
 `;
@@ -78,11 +81,11 @@ name: no-desc
 ---
 
 task: oops
-entryStep: a
+entry_step: a
 artifacts: []
 steps:
-  - kind: terminal
-    id: a
+  - type: terminal
+    name: a
     outcome: success
     summary: x
 `;
@@ -106,11 +109,11 @@ parameters:
 ---
 
 task: "{{x}}"
-entryStep: a
+entry_step: a
 artifacts: []
 steps:
-  - kind: terminal
-    id: a
+  - type: terminal
+    name: a
     outcome: success
     summary: done
 `;
@@ -298,5 +301,59 @@ describe("discoverPlanTemplates", () => {
 		expect(byName.get("refactor")!.source).toBe("project");
 		expect(byName.get("lint-all")!.description).toBe("Run the linter on the whole project.");
 		expect(byName.get("lint-all")!.source).toBe("bundled");
+	});
+});
+
+// ============================================================================
+// Bundled plan template validation
+// ============================================================================
+
+const BUNDLED_PLANS_DIR = join(dirname(dirname(fileURLToPath(import.meta.url))), "..", "plans");
+
+const DUMMY_ARGS: Record<string, Record<string, string>> = {
+	"verified-edit": { task: "add a button", verify: "npm test" },
+	"bug-fix": { bug: "login fails", verify: "npm test" },
+	debate: { topic: "is the sky blue?", position: "yes it is", max_rounds: "3" },
+	"reviewed-edit": { task: "refactor auth", criteria: "must pass tests", verify: "npm test" },
+	"multi-gate": {
+		task: "add feature",
+		gate1_name: "lint",
+		gate1: "npm run lint",
+		gate2_name: "test",
+		gate2: "npm test",
+		gate3_name: "build",
+		gate3: "npm run build",
+	},
+};
+
+describe("bundled plan templates", () => {
+	it("discovers all bundled templates without warnings", () => {
+		const disc = discoverPlanTemplates("/nonexistent", "user", {
+			bundledDir: BUNDLED_PLANS_DIR,
+		});
+		expect(disc.warnings).toHaveLength(0);
+		expect(disc.templates.length).toBeGreaterThanOrEqual(5);
+	});
+
+	it.each([
+		"verified-edit",
+		"bug-fix",
+		"debate",
+		"reviewed-edit",
+		"multi-gate",
+	])("%s instantiates with dummy args and produces a valid plan", (templateName) => {
+		const disc = discoverPlanTemplates("/nonexistent", "user", {
+			bundledDir: BUNDLED_PLANS_DIR,
+		});
+		const template = disc.templates.find((t) => t.name === templateName);
+		expect(template).toBeDefined();
+
+		const args = DUMMY_ARGS[templateName] ?? {};
+		const result = instantiateTemplate(template!, args);
+
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.value.plan.task).toBeTruthy();
+		expect(result.value.plan.steps.length).toBeGreaterThanOrEqual(2);
 	});
 });
