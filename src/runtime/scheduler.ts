@@ -340,7 +340,7 @@ export class Scheduler {
 		// pass to the actor contains only completed prior attempts — not the
 		// one we're about to start. The audit log is the source of truth here
 		// because the run state resets transcripts on re-entry.
-		const priorAttemptHistory = buildAttemptHistories(this.audit.entries()).get(step.id) ?? [];
+		const priorAttemptHistory = buildAttemptHistories(this.audit.entries(), this.program).get(step.id) ?? [];
 		const priorAttempts = priorAttemptHistory.map((entry): PriorAttempt => summarizePriorAttempt(entry));
 
 		const attempt = (this.state.steps.get(step.id)?.attempts ?? 0) + 1;

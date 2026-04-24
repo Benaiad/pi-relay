@@ -109,12 +109,18 @@ export const plainTheme: Theme = {
  * chars. This keeps extension-registered tools visible without special
  * cases for every possible name.
  */
-export const formatToolCall = (toolName: string, args: Record<string, unknown>, theme: Theme): string => {
+export const formatToolCall = (
+	toolName: string,
+	args: Record<string, unknown>,
+	theme: Theme,
+	bashLimit?: number,
+): string => {
 	const fg = theme.fg.bind(theme);
 	switch (toolName) {
 		case "bash": {
 			const command = typeof args.command === "string" ? args.command : "...";
-			const preview = command.length > 60 ? `${command.slice(0, 60)}…` : command;
+			const limit = bashLimit ?? 60;
+			const preview = limit > 0 && command.length > limit ? `${command.slice(0, limit)}…` : command;
 			return fg("muted", "$ ") + fg("toolOutput", preview);
 		}
 		case "read": {

@@ -515,9 +515,9 @@ describe("Scheduler — terminal routes", () => {
 				["fix", [completed("done", { notes: { v: 2 } })]],
 			]),
 		);
-		const { scheduler } = buildScheduler(plan, engine);
+		const { scheduler, program } = buildScheduler(plan, engine);
 		await scheduler.run();
-		const timeline = buildAttemptTimeline(scheduler.getAudit().entries());
+		const timeline = buildAttemptTimeline(scheduler.getAudit().entries(), program);
 
 		// Chronological order: create → review#1 → fix → review#2 → done.
 		const order = timeline.map((entry) => `${unwrap(entry.stepId)}#${entry.attempt.attemptNumber}`);

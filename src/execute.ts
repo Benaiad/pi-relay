@@ -152,7 +152,7 @@ export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<
 		lastEmitAt = now;
 		const state = scheduler.getState();
 		const auditLog = scheduler.getAudit();
-		const attemptTimeline = buildAttemptTimeline(auditLog.entries());
+		const attemptTimeline = buildAttemptTimeline(auditLog.entries(), program);
 		const report = buildRunReport(state, auditLog);
 		const checkOutput = buildCheckOutputSnapshot(scheduler, state);
 		onUpdate({
@@ -167,7 +167,7 @@ export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<
 		const report = await scheduler.run();
 		emitUpdate(true);
 		const finalState = scheduler.getState();
-		const finalTimeline = buildAttemptTimeline(scheduler.getAudit().entries());
+		const finalTimeline = buildAttemptTimeline(scheduler.getAudit().entries(), program);
 		return {
 			content: [{ type: "text", text: renderRunReportText(report, artifactStore) }],
 			details: {

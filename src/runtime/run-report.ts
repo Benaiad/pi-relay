@@ -7,19 +7,19 @@
  * which the run state no longer retains — see `events.ts` for why re-entered
  * steps reset their transcript).
  *
- * The content text the model reads is produced by `renderRunReportText` and
- * is the ONE surface the outer assistant uses to understand what happened.
- * It must include enough structure that the model can narrate the loop —
- * every attempt, every route taken, every actor's final reply — without
- * guessing. The TUI's `renderResult` is a separate concern and gets its
- * data from `details.state`.
+ * The content text the model reads is produced by `renderRunReportText` —
+ * a markdown document structured for both LLM comprehension and human
+ * readability in a TUI. It groups attempts by step (not flat timeline),
+ * compresses loops to one-liner summaries for prior runs, and shows full
+ * detail only for the latest activation of each step.
  */
 
 import { renderValue } from "../actors/render-value.js";
 import type { ActorUsage, TranscriptItem } from "../actors/types.js";
 import { emptyUsage } from "../actors/types.js";
-import type { ArtifactId, PlanId, RouteId, StepId } from "../plan/ids.js";
-import { unwrap } from "../plan/ids.js";
+import type { ArtifactId, PlanId, StepId } from "../plan/ids.js";
+import { edgeKey, RouteId, unwrap } from "../plan/ids.js";
+import type { Program } from "../plan/program.js";
 import type { Step, TerminalOutcome } from "../plan/types.js";
 import { formatToolCall, plainTheme } from "../render/format.js";
 import { isAccumulatedEntryArray } from "./accumulated-entry.js";
@@ -59,7 +59,11 @@ export interface AttemptSummary {
 	readonly attemptNumber: number;
 	readonly outcome: AttemptOutcome;
 	readonly route?: RouteId;
+	readonly routedTo?: StepId;
 	readonly reason?: string;
+	readonly assistant_summary?: string;
+	readonly exitCode?: number | null;
+	readonly output?: string;
 	readonly transcript: readonly TranscriptItem[];
 	readonly usage: ActorUsage;
 	readonly startedAt?: number;
@@ -78,13 +82,9 @@ export interface StepSummary {
 	readonly lastRoute?: RouteId;
 	readonly lastReason?: string;
 	readonly usage: ActorUsage;
-	/** Present for action steps — the actor this step delegates to. */
 	readonly actorName?: string;
-	/** Present for command/files_exist steps — a human-readable description of what the step runs. */
 	readonly commandDescription?: string;
-	/** Present for terminal steps — the success/failure outcome declared on the step. */
 	readonly terminalOutcome?: TerminalOutcome;
-	/** Present for terminal steps — the summary prose declared on the step. */
 	readonly terminalSummary?: string;
 }
 
@@ -102,16 +102,6 @@ export interface RunReport {
 	readonly summary: string;
 	readonly durationMs: number;
 	readonly steps: readonly StepSummary[];
-	/**
-	 * Chronological attempt timeline reconstructed from the audit log.
-	 *
-	 * `steps` groups attempts by step id (plan order); `timeline` walks
-	 * the audit in execution order and shows each attempt as its own
-	 * entry. For a review/fix loop `steps` has two entries (`review`,
-	 * `fix`) while `timeline` has four (`review#1`, `fix#1`, `review#2`,
-	 * `fix#2`). Text rendering uses the timeline so the model sees the
-	 * loop the way it actually ran.
-	 */
 	readonly timeline: readonly AttemptTimelineEntry[];
 	readonly artifacts: readonly ArtifactSummary[];
 	readonly usage: ActorUsage;
@@ -136,8 +126,8 @@ export const phaseToOutcome = (phase: RunPhase): RunOutcome => {
 export const buildRunReport = (state: RelayRunState, audit: AuditLog): RunReport => {
 	const { program } = state;
 	const events = audit.entries();
-	const timeline = buildAttemptTimeline(events);
-	const attemptHistories = buildAttemptHistories(events);
+	const timeline = buildAttemptTimeline(events, program);
+	const attemptHistories = buildAttemptHistories(events, program);
 	const steps = program.stepOrder.map((id) => buildStepSummary(id, state, attemptHistories.get(id) ?? []));
 	const artifacts = buildArtifactSummaries(state);
 	const outcome = phaseToOutcome(state.phase);
@@ -181,8 +171,7 @@ const buildStepSummary = (stepId: StepId, state: RelayRunState, attempts: readon
 		lastReason: runtime.lastReason,
 		usage: runtime.usage,
 		actorName: step.kind === "action" ? unwrap(step.actor) : undefined,
-		commandDescription:
-			step.kind === "command" || step.kind === "files_exist" ? describeCommandStep(step) : undefined,
+		commandDescription: describeCheckStep(step),
 		terminalOutcome: step.kind === "terminal" ? step.outcome : undefined,
 		terminalSummary: step.kind === "terminal" ? step.summary : undefined,
 	};
@@ -230,17 +219,6 @@ interface OpenAttempt {
 }
 
 /**
- * Walk the audit log in order and reconstruct per-step attempt histories.
- *
- * Bucket events by stepId. On `step_started`, open a new attempt record for
- * that step. On `action_progress`, append to the open attempt's transcript.
- * On a closing event (`action_completed`, `action_no_completion`,
- * `action_engine_error`, `check_passed`, `check_failed`, `terminal_reached`),
- * finalize the open attempt and push it into the step's history list. If the
- * run is aborted mid-step, leave the open attempt as `outcome: "open"` so
- * the renderer can show it.
- */
-/**
  * One attempt in chronological execution order.
  *
  * The expanded TUI view walks the timeline and emits one block per entry,
@@ -256,12 +234,15 @@ export interface AttemptTimelineEntry {
 
 /**
  * Walk the audit log once and produce the chronologically ordered list of
- * attempt entries. This is the primitive that `buildAttemptHistories`
- * groups by step for the per-step run-report view.
+ * attempt entries. Route resolution uses the program's edge map to resolve
+ * each route to its target step ID.
  */
-export const buildAttemptTimeline = (events: readonly RelayEvent[]): AttemptTimelineEntry[] => {
+export const buildAttemptTimeline = (events: readonly RelayEvent[], program: Program): AttemptTimelineEntry[] => {
 	const timeline: AttemptTimelineEntry[] = [];
 	const open = new Map<StepId, OpenAttempt>();
+
+	const resolveRoute = (stepId: StepId, route: RouteId): StepId | undefined =>
+		program.edges.get(edgeKey(stepId, route));
 
 	const close = (stepId: StepId, attempt: AttemptSummary) => {
 		timeline.push({ stepId, attempt });
@@ -293,6 +274,8 @@ export const buildAttemptTimeline = (events: readonly RelayEvent[]): AttemptTime
 					attemptNumber: entry.attemptNumber,
 					outcome: "completed",
 					route: event.route,
+					routedTo: resolveRoute(event.stepId, event.route),
+					assistant_summary: event.assistant_summary,
 					transcript: entry.transcript,
 					usage: event.usage,
 					startedAt: entry.startedAt,
@@ -325,6 +308,9 @@ export const buildAttemptTimeline = (events: readonly RelayEvent[]): AttemptTime
 				close(event.stepId, {
 					attemptNumber: entry.attemptNumber,
 					outcome: "check_pass",
+					routedTo: resolveRoute(event.stepId, RouteId("success")),
+					exitCode: event.exitCode,
+					output: event.output,
 					transcript: [],
 					usage: emptyUsage(),
 					startedAt: entry.startedAt,
@@ -340,7 +326,10 @@ export const buildAttemptTimeline = (events: readonly RelayEvent[]): AttemptTime
 				close(event.stepId, {
 					attemptNumber: entry.attemptNumber,
 					outcome: "check_fail",
+					routedTo: resolveRoute(event.stepId, RouteId("failure")),
 					reason: event.reason,
+					exitCode: event.exitCode,
+					output: event.output,
 					transcript: [],
 					usage: emptyUsage(),
 					startedAt: entry.startedAt,
@@ -353,10 +342,6 @@ export const buildAttemptTimeline = (events: readonly RelayEvent[]): AttemptTime
 			case "terminal_reached": {
 				const entry = open.get(event.stepId);
 				if (!entry) {
-					// Terminals don't emit step_started in the current scheduler,
-					// so we synthesize an attempt entry on the fly. Keeps terminals
-					// visible in the timeline even though they don't "run" in the
-					// actor/check sense.
 					close(event.stepId, {
 						attemptNumber: 1,
 						outcome: "terminal",
@@ -384,8 +369,6 @@ export const buildAttemptTimeline = (events: readonly RelayEvent[]): AttemptTime
 		}
 	}
 
-	// Any attempts still open at end-of-audit are aborted mid-flight. Record
-	// them as `open` so they don't disappear from the timeline silently.
 	for (const [stepId, entry] of open) {
 		close(stepId, {
 			attemptNumber: entry.attemptNumber,
@@ -399,8 +382,11 @@ export const buildAttemptTimeline = (events: readonly RelayEvent[]): AttemptTime
 	return timeline;
 };
 
-export const buildAttemptHistories = (events: readonly RelayEvent[]): Map<StepId, AttemptSummary[]> => {
-	const timeline = buildAttemptTimeline(events);
+export const buildAttemptHistories = (
+	events: readonly RelayEvent[],
+	program: Program,
+): Map<StepId, AttemptSummary[]> => {
+	const timeline = buildAttemptTimeline(events, program);
 	const map = new Map<StepId, AttemptSummary[]>();
 	for (const { stepId, attempt } of timeline) {
 		const list = map.get(stepId) ?? [];
@@ -411,187 +397,232 @@ export const buildAttemptHistories = (events: readonly RelayEvent[]): Map<StepId
 };
 
 // ============================================================================
-// Text rendering for the tool result content
+// Markdown report rendering
 // ============================================================================
 
+const MAX_PRIOR_RUNS = 5;
+
 /**
- * Render the run report as plain text for the tool result's `content` field.
+ * Render the run report as markdown for the tool result's `content` field.
  *
  * The outer assistant reads this to understand what happened inside the
- * relay run, then narrates to the user. The format should read like an
- * execution log a human could follow: no "kind" labels, no "route: X"
- * jargon, no per-step token accounting. Just: what ran, what it did,
- * what happened, in chronological order.
+ * relay run. The format is markdown — readable by both models and humans
+ * in a TUI.
  *
- * Walks `report.timeline` (execution order). For a review/fix loop the
- * output reads:  create → review → fix → review (retry) → done.
+ * Steps are grouped by step ID (order of first activation). A step that ran
+ * multiple times shows prior attempts as one-liners (last 5) and full detail
+ * only for the latest activation. Artifacts are in a dedicated section at the
+ * end.
  */
 export const renderRunReportText = (report: RunReport, artifactStore?: ArtifactStore): string => {
 	const lines: string[] = [];
-	lines.push(`Relay run: ${outcomeLabel(report.outcome)} — ${oneLine(report.task, 120)}`);
-	if (report.summary && report.summary !== report.task) {
-		lines.push(oneLine(report.summary));
-	}
+	lines.push(`# Relay: ${outcomeLabel(report.outcome)}`);
+	lines.push("");
+	lines.push(`**Task:** ${report.task}`);
 	lines.push("");
 
-	const stepById = new Map<string, StepSummary>();
-	for (const step of report.steps) stepById.set(unwrap(step.stepId), step);
+	const grouped = groupByStep(report.timeline);
 
-	const stepArtifacts = artifactStore
-		? buildStepArtifactIndex(artifactStore, report)
-		: new Map<string, StepArtifactEntry[]>();
-
-	for (const entry of report.timeline) {
-		const step = stepById.get(unwrap(entry.stepId));
+	for (const [stepId, attempts] of grouped) {
+		const step = report.steps.find((s) => unwrap(s.stepId) === unwrap(stepId));
 		if (!step) continue;
+		if (step.status === "skipped") continue;
+
+		lines.push("---");
 		lines.push("");
-		const artifacts = stepArtifacts.get(`${unwrap(entry.stepId)}:${entry.attempt.attemptNumber}`) ?? [];
-		for (const line of formatTimelineEntry(step, entry.attempt, artifacts)) lines.push(line);
+		renderStepSection(lines, step, attempts);
+		lines.push("");
 	}
 
-	const skippedSteps = report.steps.filter((s) => s.status === "skipped");
-	if (skippedSteps.length > 0) {
-		lines.push("");
-		lines.push(
-			`(${skippedSteps.length} step${skippedSteps.length === 1 ? "" : "s"} not reached: ${skippedSteps.map((s) => unwrap(s.stepId)).join(", ")})`,
-		);
-	}
-
-	if (report.artifacts.length > 0) {
-		lines.push("");
-		lines.push(`Produced: ${report.artifacts.map((a) => unwrap(a.artifactId)).join(", ")}`);
-	}
-
-	if (report.usage.turns > 0) {
-		lines.push(
-			`Total: ${report.usage.turns} turns · ${report.usage.input}↑ ${report.usage.output}↓ · $${report.usage.cost.toFixed(4)}`,
-		);
+	if (artifactStore) {
+		const allArtifacts = [...artifactStore.all()];
+		if (allArtifacts.length > 0) {
+			lines.push("---");
+			lines.push("");
+			lines.push("## Artifacts");
+			lines.push("");
+			for (const stored of allArtifacts) {
+				lines.push(`### ${unwrap(stored.id)}`);
+				lines.push("");
+				if (isAccumulatedEntryArray(stored.value)) {
+					for (const entry of stored.value) {
+						const rendered = renderValue(entry.value, 0);
+						lines.push(rendered);
+						lines.push("");
+					}
+				} else {
+					const rendered = renderValue(stored.value, 0);
+					lines.push(rendered);
+					lines.push("");
+				}
+			}
+		}
 	}
 
 	return lines.join("\n");
 };
 
-interface StepArtifactEntry {
-	readonly artifactId: string;
-	readonly value: unknown;
-	readonly index?: number;
-}
+const groupByStep = (timeline: readonly AttemptTimelineEntry[]): Map<StepId, AttemptSummary[]> => {
+	const map = new Map<StepId, AttemptSummary[]>();
+	for (const { stepId, attempt } of timeline) {
+		const list = map.get(stepId) ?? [];
+		list.push(attempt);
+		map.set(stepId, list);
+	}
+	return map;
+};
 
-const formatTimelineEntry = (
-	step: StepSummary,
-	attempt: AttemptSummary,
-	artifacts: readonly StepArtifactEntry[],
-): string[] => {
+const renderStepSection = (lines: string[], step: StepSummary, attempts: readonly AttemptSummary[]): void => {
 	const stepId = unwrap(step.stepId);
-	const lines: string[] = [];
+	const runCount = attempts.length;
+	const runSuffix = runCount > 1 ? ` (${runCount} runs)` : "";
 
-	if (step.kind === "action") {
-		const actor = step.actorName ?? "";
-		const retryTag =
-			attempt.attemptNumber > 1
-				? ` ${attempt.attemptNumber === 2 ? "(retry)" : `(retry ${attempt.attemptNumber - 1})`}`
-				: "";
-		const actorPart = actor ? `, actor: ${actor}` : "";
-		lines.push(`step: ${stepId}${actorPart}${retryTag}`);
-	} else if (step.kind === "command" || step.kind === "files_exist") {
-		lines.push(`step: ${stepId}, verify`);
-	} else if (step.kind === "terminal") {
-		const outcome = step.terminalOutcome ?? "unknown";
-		lines.push(`step: ${stepId}, terminal: ${outcome}`);
-	}
-
-	if (step.kind === "action") {
-		const toolCalls = attempt.transcript.filter(
-			(item): item is Extract<TranscriptItem, { kind: "tool_call" }> => item.kind === "tool_call",
-		);
-		for (const tc of toolCalls) {
-			lines.push(`  → ${formatToolCall(tc.toolName, tc.args, plainTheme)}`);
-		}
-
-		const finalText = extractAttemptFinalText(attempt);
-		if (finalText.length > 0) {
-			lines.push(`  "${oneLine(finalText)}"`);
-		}
-	} else if (step.kind === "command" || step.kind === "files_exist") {
-		if (step.commandDescription) lines.push(`  ${step.commandDescription}`);
-	} else if (step.kind === "terminal") {
-		if (step.terminalSummary) lines.push(`  ${oneLine(step.terminalSummary)}`);
-	}
-
-	if (attempt.outcome === "completed" && attempt.route) {
-		const routeName = unwrap(attempt.route);
-		if (!GENERIC_ROUTE_NAMES_TEXT.has(routeName.toLowerCase())) {
-			lines.push(`  → ${routeName}`);
-		}
-	} else if (attempt.outcome === "no_completion" || attempt.outcome === "engine_error") {
-		lines.push(`  Failed: ${attempt.reason ? oneLine(attempt.reason) : "no reason"}`);
-	} else if (attempt.outcome === "check_fail") {
-		lines.push(`  Failed: ${attempt.reason ? oneLine(attempt.reason) : "no reason"}`);
-	}
-
-	for (const artifact of artifacts) {
-		const indexSuffix = artifact.index !== undefined ? ` [${artifact.index + 1}]` : "";
-		lines.push("");
-		lines.push(`  artifact ${artifact.artifactId}${indexSuffix}:`);
-		const rendered = renderValue(artifact.value, 2);
-		for (const line of rendered.split("\n")) {
-			lines.push(`  ${line}`);
-		}
-	}
-
-	return lines;
-};
-
-const GENERIC_ROUTE_NAMES_TEXT = new Set(["done", "next", "continue", "ok", "success"]);
-
-const buildStepArtifactIndex = (store: ArtifactStore, report: RunReport): Map<string, StepArtifactEntry[]> => {
-	const index = new Map<string, StepArtifactEntry[]>();
-
-	const addEntry = (stepId: string, attempt: number, entry: StepArtifactEntry) => {
-		const key = `${stepId}:${attempt}`;
-		const list = index.get(key) ?? [];
-		list.push(entry);
-		index.set(key, list);
-	};
-
-	for (const stored of store.all()) {
-		const artifactId = unwrap(stored.id);
-
-		if (isAccumulatedEntryArray(stored.value)) {
-			for (const entry of stored.value) {
-				addEntry(unwrap(entry.stepId), entry.attempt, {
-					artifactId,
-					value: entry.value,
-					index: entry.index,
-				});
-			}
-		} else {
-			const writerStepId = unwrap(stored.writerStep);
-			const stepSummary = report.steps.find((s) => unwrap(s.stepId) === writerStepId);
-			const attempt = stepSummary?.attemptCount ?? 1;
-			addEntry(writerStepId, attempt, { artifactId, value: stored.value });
-		}
-	}
-
-	return index;
-};
-
-const describeCommandStep = (step: Extract<Step, { kind: "command" } | { kind: "files_exist" }>): string => {
 	switch (step.kind) {
+		case "action":
+			lines.push(`## ${stepId} -- actor: ${step.actorName ?? "unknown"}${runSuffix}`);
+			break;
 		case "command":
-			return `$ ${step.command.slice(0, 120)}`;
+			lines.push(`## ${stepId} -- command${runSuffix}`);
+			break;
 		case "files_exist":
-			return step.paths.length === 1 ? `File exists: ${step.paths[0]}` : `Files exist: ${step.paths.join(", ")}`;
+			lines.push(`## ${stepId} -- files_exist${runSuffix}`);
+			break;
+		case "terminal":
+			lines.push(`## ${stepId} -- terminal: ${step.terminalOutcome ?? "unknown"}`);
+			break;
+	}
+	lines.push("");
+
+	if (runCount === 1) {
+		renderAttemptDetail(lines, step, attempts[0]!);
+		return;
+	}
+
+	const priorAttempts = attempts.slice(0, -1);
+	const latestAttempt = attempts[attempts.length - 1]!;
+
+	const visiblePrior = priorAttempts.length > MAX_PRIOR_RUNS ? priorAttempts.slice(-MAX_PRIOR_RUNS) : priorAttempts;
+	const omitted = priorAttempts.length - visiblePrior.length;
+
+	if (omitted > 0) {
+		lines.push(`... ${omitted} earlier runs omitted`);
+		lines.push("");
+	}
+
+	for (const attempt of visiblePrior) {
+		lines.push(`- run ${attempt.attemptNumber}: ${formatPriorAttemptOneLiner(step, attempt)}`);
+	}
+	lines.push("");
+
+	lines.push(`### Latest (run ${latestAttempt.attemptNumber})`);
+	lines.push("");
+	renderAttemptDetail(lines, step, latestAttempt);
+};
+
+const formatPriorAttemptOneLiner = (step: StepSummary, attempt: AttemptSummary): string => {
+	const target = attempt.routedTo ? ` -> ${unwrap(attempt.routedTo)}` : "";
+
+	switch (attempt.outcome) {
+		case "completed": {
+			const summary = attempt.assistant_summary ? truncateLine(attempt.assistant_summary, 80) : "completed";
+			return `${summary}, routed to${target}`;
+		}
+		case "check_pass":
+			return `exit ${attempt.exitCode ?? "?"}, routed to${target}`;
+		case "check_fail":
+			return `exit ${attempt.exitCode ?? "?"}, routed to${target}`;
+		case "no_completion":
+		case "engine_error":
+			return `failed: ${truncateLine(attempt.reason ?? "unknown", 80)}`;
+		case "terminal":
+			return `terminal: ${step.terminalOutcome ?? "unknown"}`;
+		case "open":
+			return "in progress (aborted)";
 	}
 };
 
-const extractAttemptFinalText = (attempt: AttemptSummary): string => {
-	const texts: string[] = [];
-	for (const item of attempt.transcript) {
-		if (item.kind === "text" && item.text.trim().length > 0) texts.push(item.text);
+const renderAttemptDetail = (lines: string[], step: StepSummary, attempt: AttemptSummary): void => {
+	switch (step.kind) {
+		case "action":
+			renderActionDetail(lines, attempt);
+			break;
+		case "command":
+			renderCommandDetail(lines, step, attempt);
+			break;
+		case "files_exist":
+			renderFilesExistDetail(lines, step, attempt);
+			break;
+		case "terminal":
+			if (step.terminalSummary) lines.push(step.terminalSummary);
+			break;
 	}
-	if (texts.length === 0) return "";
-	return texts.join("\n").trim();
+};
+
+const renderActionDetail = (lines: string[], attempt: AttemptSummary): void => {
+	const toolCalls = attempt.transcript.filter(
+		(item): item is Extract<TranscriptItem, { kind: "tool_call" }> => item.kind === "tool_call",
+	);
+	if (toolCalls.length > 0) {
+		for (const tc of toolCalls) {
+			lines.push(`> ${formatToolCall(tc.toolName, tc.args, plainTheme, 0)}`);
+		}
+		lines.push("");
+	}
+
+	if (attempt.assistant_summary) {
+		lines.push(attempt.assistant_summary);
+		lines.push("");
+	}
+
+	renderOutcomeAndRoute(lines, attempt);
+};
+
+const renderCommandDetail = (lines: string[], step: StepSummary, attempt: AttemptSummary): void => {
+	if (step.commandDescription) {
+		lines.push(step.commandDescription);
+		lines.push("");
+	}
+
+	if (attempt.exitCode !== undefined) {
+		lines.push(`Exit code: ${attempt.exitCode ?? "N/A"}`);
+		lines.push("");
+	}
+
+	if (attempt.output && attempt.output.length > 0) {
+		lines.push("```");
+		lines.push(attempt.output);
+		lines.push("```");
+		lines.push("");
+	}
+
+	renderOutcomeAndRoute(lines, attempt);
+};
+
+const renderFilesExistDetail = (lines: string[], step: StepSummary, attempt: AttemptSummary): void => {
+	if (step.commandDescription) {
+		lines.push(step.commandDescription);
+	}
+
+	if (attempt.outcome === "check_pass") {
+		lines.push("Result: pass");
+	} else if (attempt.outcome === "check_fail") {
+		lines.push(`Result: fail (${attempt.reason ?? "unknown"})`);
+	}
+	lines.push("");
+
+	renderOutcomeAndRoute(lines, attempt);
+};
+
+const renderOutcomeAndRoute = (lines: string[], attempt: AttemptSummary): void => {
+	if (attempt.outcome === "no_completion" || attempt.outcome === "engine_error") {
+		lines.push(`**Failed:** ${attempt.reason ?? "no reason"}`);
+		lines.push("");
+		return;
+	}
+
+	if (attempt.routedTo) {
+		lines.push(`Routed to -> ${unwrap(attempt.routedTo)}`);
+	}
 };
 
 const outcomeLabel = (outcome: RunOutcome): string => {
@@ -607,17 +638,20 @@ const outcomeLabel = (outcome: RunOutcome): string => {
 	}
 };
 
-/**
- * Collapse whitespace and (optionally) truncate to `limit` characters.
- *
- * Call without a limit to just normalize whitespace without cutting —
- * the default for anywhere the caller wants a single logical line but
- * doesn't have a fixed column budget (quoted narrations, reasons,
- * terminal summaries).
- */
-const oneLine = (text: string, limit?: number): string => {
+const describeCheckStep = (step: Step): string | undefined => {
+	switch (step.kind) {
+		case "command":
+			return `$ ${step.command}`;
+		case "files_exist":
+			return step.paths.length === 1 ? `Paths: ${step.paths[0]}` : `Paths: ${step.paths.join(", ")}`;
+		default:
+			return undefined;
+	}
+};
+
+const truncateLine = (text: string, limit: number): string => {
 	const collapsed = text.replace(/\s+/g, " ").trim();
-	if (limit === undefined || collapsed.length <= limit) return collapsed;
+	if (collapsed.length <= limit) return collapsed;
 	return `${collapsed.slice(0, limit)}…`;
 };
 
