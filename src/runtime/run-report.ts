@@ -235,7 +235,7 @@ export interface AttemptTimelineEntry {
 /**
  * Walk the audit log once and produce the chronologically ordered list of
  * attempt entries. Route resolution uses the program's edge map to resolve
- * each route to its target step ID.
+ * each route to its target step.
  */
 export const buildAttemptTimeline = (events: readonly RelayEvent[], program: Program): AttemptTimelineEntry[] => {
 	const timeline: AttemptTimelineEntry[] = [];
@@ -409,7 +409,7 @@ const MAX_PRIOR_RUNS = 5;
  * relay run. The format is markdown — readable by both models and humans
  * in a TUI.
  *
- * Steps are grouped by step ID (order of first activation). A step that ran
+ * Steps are grouped by step name (order of first activation). A step that ran
  * multiple times shows prior attempts as one-liners (last 5) and full detail
  * only for the latest activation. Artifacts are in a dedicated section at the
  * end.
