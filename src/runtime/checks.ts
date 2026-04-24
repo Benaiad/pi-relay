@@ -14,26 +14,26 @@
  *
  * These steps never call an LLM and always terminate within their declared
  * timeout. Command steps may read artifacts (from $RELAY_INPUT) and write
- * artifacts (to $RELAY_OUTPUT). Command execution delegates to
- * Pi's `createLocalBashOperations()` for process tree cleanup, cross-platform
- * shell resolution, and abort handling.
+ * artifacts (to $RELAY_OUTPUT). Command execution uses a `BashOperations`
+ * instance (provided via `CheckContext`) for process tree cleanup,
+ * cross-platform shell resolution, and abort handling.
  */
 
 import { access, constants } from "node:fs/promises";
 import * as path from "node:path";
-import { createLocalBashOperations } from "@mariozechner/pi-coding-agent";
+import type { BashOperations } from "@mariozechner/pi-coding-agent";
 import type { CommandStep, FilesExistStep } from "../plan/types.js";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 600_000;
 const COMMAND_OUTPUT_REASON_LIMIT = 800;
 const MAX_OUTPUT_BUFFER = COMMAND_OUTPUT_REASON_LIMIT * 4;
 
-const ops = createLocalBashOperations();
-
 export interface CheckContext {
 	readonly cwd: string;
 	readonly signal?: AbortSignal;
-	readonly env?: Readonly<Record<string, string>>;
+	/** When present, a complete process environment (process.env + Pi bin dir + extra vars). */
+	readonly env?: NodeJS.ProcessEnv;
+	readonly ops: BashOperations;
 }
 
 export type CheckOutcome = { readonly kind: "pass" } | { readonly kind: "fail"; readonly reason: string };
@@ -78,11 +78,11 @@ export const runCommand = async (
 	const drainOutput = (): string => chunks.join("");
 
 	try {
-		const { exitCode } = await ops.exec(step.command, ctx.cwd, {
+		const { exitCode } = await ctx.ops.exec(step.command, ctx.cwd, {
 			onData,
 			signal: ctx.signal,
 			timeout: timeoutMs / 1000,
-			env: ctx.env ? { ...process.env, ...ctx.env } : undefined,
+			env: ctx.env,
 		});
 
 		if (exitCode === 0) return { kind: "pass" };

@@ -10,7 +10,13 @@
  * descriptions, or `renderCall` — those differ between relay and replay.
  */
 
-import type { AgentToolResult, AgentToolUpdateCallback, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import {
+	type AgentToolResult,
+	type AgentToolUpdateCallback,
+	type ExtensionContext,
+	getAgentDir,
+	SettingsManager,
+} from "@mariozechner/pi-coding-agent";
 import { actorRegistryFromDiscovery } from "./actors/discovery.js";
 import { createSdkActorEngine } from "./actors/sdk-engine.js";
 import type { ActorConfig, ActorDiscovery } from "./actors/types.js";
@@ -116,6 +122,9 @@ export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<
 		}
 	}
 
+	const agentDir = getAgentDir();
+	const settingsManager = SettingsManager.create(ctx.cwd, agentDir);
+
 	const clock = () => Date.now();
 	const audit = new AuditLog();
 	const artifactStore = new ArtifactStore(program, clock);
@@ -131,6 +140,8 @@ export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<
 		clock,
 		audit,
 		artifactStore,
+		shellPath: settingsManager.getShellPath(),
+		shellCommandPrefix: settingsManager.getShellCommandPrefix(),
 	});
 
 	let lastEmitAt = 0;

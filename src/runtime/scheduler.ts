@@ -34,7 +34,8 @@
 
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
+import { type BashOperations, createLocalBashOperations, getAgentDir } from "@mariozechner/pi-coding-agent";
 import type {
 	ActionOutcome,
 	ActionRequest,
@@ -138,6 +139,8 @@ export interface SchedulerConfig {
 	readonly artifactStore?: ArtifactStore;
 	readonly audit?: AuditLog;
 	readonly maxConcurrency?: number;
+	readonly shellPath?: string;
+	readonly shellCommandPrefix?: string;
 }
 
 export interface SchedulerSubscription {
@@ -155,6 +158,8 @@ export class Scheduler {
 	private readonly clock: () => number;
 	private readonly audit: AuditLog;
 	private readonly artifactStore: ArtifactStore;
+	private readonly ops: BashOperations;
+	private readonly shellCommandPrefix: string | undefined;
 
 	private state: RelayRunState;
 	private readyQueue: StepId[] = [];
@@ -174,6 +179,8 @@ export class Scheduler {
 		this.clock = config.clock ?? DEFAULT_CLOCK;
 		this.audit = config.audit ?? new AuditLog();
 		this.artifactStore = config.artifactStore ?? new ArtifactStore(this.program, this.clock);
+		this.ops = createLocalBashOperations({ shellPath: config.shellPath });
+		this.shellCommandPrefix = config.shellCommandPrefix;
 		this.state = initRunState(this.program);
 	}
 
@@ -498,11 +505,18 @@ export class Scheduler {
 		const inputDir = await this.writeArtifactInputDir(step.reads);
 		const outputDir = step.writes.length > 0 ? await mkdtemp(join(tmpdir(), "pi-relay-output-")) : undefined;
 		try {
-			const env: Record<string, string> = {};
-			if (inputDir) env.RELAY_INPUT = inputDir;
-			if (outputDir) env.RELAY_OUTPUT = outputDir;
-			const envOrUndefined = Object.keys(env).length > 0 ? env : undefined;
-			const outcome = await runCommand(step, { cwd: this.cwd, signal: this.signal, env: envOrUndefined }, onOutput);
+			const extra: Record<string, string> = {};
+			if (inputDir) extra.RELAY_INPUT = inputDir;
+			if (outputDir) extra.RELAY_OUTPUT = outputDir;
+			const env = Object.keys(extra).length > 0 ? buildShellEnv(extra) : undefined;
+
+			const resolvedCommand = this.shellCommandPrefix ? `${this.shellCommandPrefix}\n${step.command}` : step.command;
+
+			const outcome = await runCommand(
+				{ ...step, command: resolvedCommand },
+				{ cwd: this.cwd, signal: this.signal, env, ops: this.ops },
+				onOutput,
+			);
 			this.checkOutputChunks.delete(step.id);
 			this.checkOutputLens.delete(step.id);
 
@@ -602,6 +616,7 @@ export class Scheduler {
 		const outcome = await runFilesExist(step, {
 			cwd: this.cwd,
 			signal: this.signal,
+			ops: this.ops,
 		});
 		const description = describeCommandStep(step);
 
@@ -705,6 +720,30 @@ export class Scheduler {
 		return dir;
 	}
 }
+
+/**
+ * Build a process environment that preserves Pi's managed bin directory on PATH.
+ *
+ * Mirrors the behavior of Pi's internal `getShellEnv()` (which is not exported):
+ * ensures `{agentDir}/bin` is on PATH so commands have access to Pi-managed
+ * binaries. Extra variables (e.g. RELAY_INPUT, RELAY_OUTPUT) are merged on top.
+ *
+ * When no extra env is needed, callers should pass `env: undefined` so
+ * `createLocalBashOperations` falls back to its own `getShellEnv()` call.
+ */
+const buildShellEnv = (extraEnv: Readonly<Record<string, string>>): NodeJS.ProcessEnv => {
+	const binDir = join(getAgentDir(), "bin");
+	const pathKey = Object.keys(process.env).find((k) => k.toLowerCase() === "path") ?? "PATH";
+	const currentPath = process.env[pathKey] ?? "";
+	const pathEntries = currentPath.split(delimiter).filter(Boolean);
+	const hasBinDir = pathEntries.includes(binDir);
+	const updatedPath = hasBinDir ? currentPath : [binDir, currentPath].filter(Boolean).join(delimiter);
+	return {
+		...process.env,
+		[pathKey]: updatedPath,
+		...extraEnv,
+	};
+};
 
 const serializeForFile = (value: unknown): string => {
 	if (isAccumulatedEntryArray(value)) {

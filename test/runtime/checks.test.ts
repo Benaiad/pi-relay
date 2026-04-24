@@ -1,9 +1,12 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { createLocalBashOperations } from "@mariozechner/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type ArtifactId, StepId } from "../../src/plan/ids.js";
 import { runCommand, runFilesExist } from "../../src/runtime/checks.js";
+
+const ops = createLocalBashOperations();
 
 describe("runFilesExist", () => {
 	let tmp = "";
@@ -26,7 +29,7 @@ describe("runFilesExist", () => {
 			onSuccess: StepId("ok"),
 			onFailure: StepId("bad"),
 		};
-		const outcome = await runFilesExist(step, { cwd: tmp });
+		const outcome = await runFilesExist(step, { cwd: tmp, ops });
 		expect(outcome.kind).toBe("pass");
 	});
 
@@ -39,7 +42,7 @@ describe("runFilesExist", () => {
 			onSuccess: StepId("ok"),
 			onFailure: StepId("bad"),
 		};
-		const outcome = await runFilesExist(step, { cwd: tmp });
+		const outcome = await runFilesExist(step, { cwd: tmp, ops });
 		expect(outcome.kind).toBe("pass");
 	});
 
@@ -51,7 +54,7 @@ describe("runFilesExist", () => {
 			onSuccess: StepId("ok"),
 			onFailure: StepId("bad"),
 		};
-		const outcome = await runFilesExist(step, { cwd: tmp });
+		const outcome = await runFilesExist(step, { cwd: tmp, ops });
 		expect(outcome.kind).toBe("fail");
 		if (outcome.kind === "fail") {
 			expect(outcome.reason).toContain("no-such-file");
@@ -68,7 +71,7 @@ describe("runFilesExist", () => {
 			onSuccess: StepId("ok"),
 			onFailure: StepId("bad"),
 		};
-		const outcome = await runFilesExist(step, { cwd: tmp });
+		const outcome = await runFilesExist(step, { cwd: tmp, ops });
 		expect(outcome.kind).toBe("pass");
 	});
 
@@ -81,7 +84,7 @@ describe("runFilesExist", () => {
 			onSuccess: StepId("ok"),
 			onFailure: StepId("bad"),
 		};
-		const outcome = await runFilesExist(step, { cwd: tmp });
+		const outcome = await runFilesExist(step, { cwd: tmp, ops });
 		expect(outcome.kind).toBe("fail");
 		if (outcome.kind === "fail") {
 			expect(outcome.reason).toContain("missing-a.txt");
@@ -104,13 +107,14 @@ describe("runCommand", () => {
 	});
 
 	it("passes when the command exits 0", async () => {
-		const outcome = await runCommand(commandStep('node -e "process.exit(0)"'), { cwd: process.cwd() });
+		const outcome = await runCommand(commandStep('node -e "process.exit(0)"'), { cwd: process.cwd(), ops });
 		expect(outcome.kind).toBe("pass");
 	});
 
 	it("fails when the command exits non-zero and captures stderr in the reason", async () => {
 		const outcome = await runCommand(commandStep("node -e \"process.stderr.write('boom\\n'); process.exit(3)\""), {
 			cwd: process.cwd(),
+			ops,
 		});
 		expect(outcome.kind).toBe("fail");
 		if (outcome.kind === "fail") {
@@ -120,13 +124,17 @@ describe("runCommand", () => {
 	});
 
 	it("fails when the command does not exist (spawn error)", async () => {
-		const outcome = await runCommand(commandStep("definitely-not-a-real-binary-xyz"), { cwd: process.cwd() });
+		const outcome = await runCommand(commandStep("definitely-not-a-real-binary-xyz"), {
+			cwd: process.cwd(),
+			ops,
+		});
 		expect(outcome.kind).toBe("fail");
 	});
 
 	it("fails with a timeout reason when the command exceeds its timeout", async () => {
 		const outcome = await runCommand(commandStep('node -e "setTimeout(() => process.exit(0), 5000)"', 200), {
 			cwd: process.cwd(),
+			ops,
 		});
 		expect(outcome.kind).toBe("fail");
 		if (outcome.kind === "fail") {
@@ -140,7 +148,7 @@ describe("runCommand", () => {
 				"node -e \"process.stdout.write('partial progress'); setTimeout(() => process.exit(0), 5000)\"",
 				200,
 			),
-			{ cwd: process.cwd() },
+			{ cwd: process.cwd(), ops },
 		);
 		expect(outcome.kind).toBe("fail");
 		if (outcome.kind === "fail") {
@@ -154,6 +162,7 @@ describe("runCommand", () => {
 		const promise = runCommand(commandStep('node -e "setTimeout(() => process.exit(0), 5000)"', 10_000), {
 			cwd: process.cwd(),
 			signal: ctl.signal,
+			ops,
 		});
 		setTimeout(() => ctl.abort(), 50);
 		const outcome = await promise;
@@ -164,7 +173,7 @@ describe("runCommand", () => {
 		const ctl = new AbortController();
 		const promise = runCommand(
 			commandStep("node -e \"process.stdout.write('working...'); setTimeout(() => process.exit(0), 5000)\"", 10_000),
-			{ cwd: process.cwd(), signal: ctl.signal },
+			{ cwd: process.cwd(), signal: ctl.signal, ops },
 		);
 		setTimeout(() => ctl.abort(), 200);
 		const outcome = await promise;
@@ -176,7 +185,7 @@ describe("runCommand", () => {
 	});
 
 	it("supports compound shell commands", async () => {
-		const outcome = await runCommand(commandStep("echo hello && echo world"), { cwd: process.cwd() });
+		const outcome = await runCommand(commandStep("echo hello && echo world"), { cwd: process.cwd(), ops });
 		expect(outcome.kind).toBe("pass");
 	});
 
@@ -184,18 +193,40 @@ describe("runCommand", () => {
 		const chunks: string[] = [];
 		const outcome = await runCommand(
 			commandStep("node -e \"process.stdout.write(process.env.RELAY_INPUT || 'MISSING')\""),
-			{ cwd: process.cwd(), env: { RELAY_INPUT: "/tmp/test-input" } },
+			{ cwd: process.cwd(), env: { ...process.env, RELAY_INPUT: "/tmp/test-input" }, ops },
 			(text) => chunks.push(text),
 		);
 		expect(outcome.kind).toBe("pass");
 		expect(chunks.join("")).toContain("/tmp/test-input");
 	});
 
-	it("preserves standard PATH when custom env is set", async () => {
+	it("preserves standard PATH when complete env with extra vars is set", async () => {
 		const outcome = await runCommand(commandStep("node --version"), {
 			cwd: process.cwd(),
-			env: { RELAY_INPUT: "/tmp/test" },
+			env: { ...process.env, RELAY_INPUT: "/tmp/test" },
+			ops,
 		});
 		expect(outcome.kind).toBe("pass");
+	});
+
+	it("uses getShellEnv fallback when env is not provided", async () => {
+		const outcome = await runCommand(commandStep("node --version"), {
+			cwd: process.cwd(),
+			ops,
+		});
+		expect(outcome.kind).toBe("pass");
+	});
+
+	it("uses the provided BashOperations for execution", async () => {
+		const calls: string[] = [];
+		const mockOps = {
+			exec: async (command: string, _cwd: string, _opts: Record<string, unknown>) => {
+				calls.push(command);
+				return { exitCode: 0 };
+			},
+		};
+		const outcome = await runCommand(commandStep("echo test"), { cwd: process.cwd(), ops: mockOps });
+		expect(outcome.kind).toBe("pass");
+		expect(calls).toEqual(["echo test"]);
 	});
 });

@@ -130,7 +130,11 @@ const linearPlan: PlanDraftDoc = {
 	entryStep: "first",
 };
 
-const buildScheduler = (doc: PlanDraftDoc, engine: ActorEngine, extras: { signal?: AbortSignal } = {}) => {
+const buildScheduler = (
+	doc: PlanDraftDoc,
+	engine: ActorEngine,
+	extras: { signal?: AbortSignal; shellCommandPrefix?: string } = {},
+) => {
 	const compiled = compile(doc, actorRegistry, { generateId: () => "pid" });
 	if (!isOk(compiled)) throw new Error("compile must succeed for scheduler tests");
 	const clock = new StubClock();
@@ -141,6 +145,7 @@ const buildScheduler = (doc: PlanDraftDoc, engine: ActorEngine, extras: { signal
 		cwd: process.cwd(),
 		clock: () => clock.next(),
 		signal: extras.signal,
+		shellCommandPrefix: extras.shellCommandPrefix,
 	});
 	return { scheduler, program: compiled.value };
 };
@@ -224,6 +229,54 @@ describe("Scheduler — happy paths", () => {
 		const report = await scheduler.run();
 		expect(report.outcome).toBe("failure");
 		expect(report.terminalOutcome).toBe("failure");
+	});
+
+	it("applies shellCommandPrefix to command steps", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Verify that shellCommandPrefix is prepended.",
+			artifacts: [],
+			steps: [
+				{
+					kind: "command",
+					id: "verify",
+					command: "node -e \"process.exit(typeof process.env.RELAY_PREFIX_TEST === 'undefined' ? 1 : 0)\"",
+					onSuccess: "ok",
+					onFailure: "broken",
+				},
+				{ kind: "terminal", id: "ok", outcome: "success", summary: "passed" },
+				{ kind: "terminal", id: "broken", outcome: "failure", summary: "failed" },
+			],
+			entryStep: "verify",
+		};
+		const engine = new ScriptedActorEngine(new Map());
+		const { scheduler } = buildScheduler(plan, engine, {
+			shellCommandPrefix: "export RELAY_PREFIX_TEST=1",
+		});
+		const report = await scheduler.run();
+		expect(report.outcome).toBe("success");
+	});
+
+	it("runs command steps without prefix when shellCommandPrefix is not set", async () => {
+		const plan: PlanDraftDoc = {
+			task: "Verify commands work without prefix.",
+			artifacts: [],
+			steps: [
+				{
+					kind: "command",
+					id: "verify",
+					command: 'node -e "process.exit(0)"',
+					onSuccess: "ok",
+					onFailure: "broken",
+				},
+				{ kind: "terminal", id: "ok", outcome: "success", summary: "passed" },
+				{ kind: "terminal", id: "broken", outcome: "failure", summary: "failed" },
+			],
+			entryStep: "verify",
+		};
+		const engine = new ScriptedActorEngine(new Map());
+		const { scheduler } = buildScheduler(plan, engine);
+		const report = await scheduler.run();
+		expect(report.outcome).toBe("success");
 	});
 });
 
