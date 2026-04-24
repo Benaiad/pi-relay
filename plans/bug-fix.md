@@ -13,11 +13,11 @@ parameters:
 task: "Fix: {{bug}}"
 success_criteria: "Verification passes and the root cause is documented."
 artifacts:
-  - id: diagnosis
+  - name: diagnosis
     description: "Root cause analysis: what's wrong, where, and the minimal fix."
     fields: [root_cause, file, line, fix]
     list: true
-  - id: fix_notes
+  - name: fix_notes
     description: What was changed to fix the bug.
 
 steps:

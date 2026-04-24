@@ -16,13 +16,13 @@ parameters:
 task: "{{task}}"
 success_criteria: "{{criteria}}"
 artifacts:
-  - id: notes
+  - name: notes
     description: Implementation and fix notes from the worker.
 
-  - id: spec_verdict
+  - name: spec_verdict
     description: "Spec compliance verdict: does the implementation match the requirements?"
     fields: [compliant, gaps]
-  - id: quality_verdict
+  - name: quality_verdict
     description: "Code quality verdict: is the implementation well-written?"
     fields: [approved, issues, fixes]
 

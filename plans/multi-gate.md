@@ -28,7 +28,7 @@ parameters:
 task: "{{task}}"
 success_criteria: "All three gates pass: {{gate1_name}}, {{gate2_name}}, {{gate3_name}}."
 artifacts:
-  - id: change_notes
+  - name: change_notes
     description: What was changed — files touched and a one-line description per file.
 
 steps:

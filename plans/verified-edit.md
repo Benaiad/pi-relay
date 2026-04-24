@@ -12,7 +12,7 @@ parameters:
 
 task: "{{task}}"
 artifacts:
-  - id: change_notes
+  - name: change_notes
     description: What was changed — files touched and a one-line description per file.
 
 steps:
