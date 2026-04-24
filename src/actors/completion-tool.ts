@@ -136,7 +136,7 @@ const buildRouteSchema = (routes: readonly RouteId[]): TSchema => {
  * - record_list → array of objects with one string property per declared field
  */
 const shapeToSchema = (shape: ArtifactShape, description: string): TSchema => {
-	switch (shape.kind) {
+	switch (shape.type) {
 		case "text":
 			return Type.String({ description });
 		case "record": {

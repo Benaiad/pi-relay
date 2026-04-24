@@ -98,7 +98,7 @@ export const buildTaskPrompt = (
 };
 
 export const formatShapeHint = (shape: ArtifactShape): string => {
-	switch (shape.kind) {
+	switch (shape.type) {
 		case "text":
 			return "    Value: plain text";
 		case "record":

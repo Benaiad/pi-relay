@@ -15,18 +15,18 @@ const listOrNone = (items: readonly { toString(): string }[]): string => {
 };
 
 export const formatCompileError = (error: CompileError): string => {
-	switch (error.kind) {
+	switch (error.type) {
 		case "empty_plan":
 			return "Plan has no steps. Add at least one action step and a terminal.";
 
 		case "no_terminal":
-			return "Plan has no terminal step. Add at least one step with kind 'terminal' so the plan can complete.";
+			return "Plan has no terminal step. Add at least one step with type 'terminal' so the plan can complete.";
 
 		case "terminal_entry":
 			return `Entry step '${unwrap(error.entryStep)}' is a terminal. The plan would end immediately without doing any work. Use an action or command step as the entry point.`;
 
 		case "duplicate_step":
-			return `Step id '${unwrap(error.stepId)}' appears more than once. Every step id must be unique within the plan.`;
+			return `Step name '${unwrap(error.stepId)}' appears more than once. Every step name must be unique within the plan.`;
 
 		case "missing_entry":
 			return (
@@ -44,7 +44,7 @@ export const formatCompileError = (error: CompileError): string => {
 		case "missing_route_target":
 			return (
 				`Step '${unwrap(error.from)}' declares route '${unwrap(error.route)}' → '${unwrap(error.target)}', ` +
-				`but no step with id '${unwrap(error.target)}' exists. ` +
+				`but no step named '${unwrap(error.target)}' exists. ` +
 				`Available steps: ${listOrNone(error.availableSteps.map(unwrap))}.`
 			);
 

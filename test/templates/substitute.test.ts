@@ -12,12 +12,12 @@ const makeTemplate = (overrides: Partial<PlanTemplate> = {}): PlanTemplate => ({
 	],
 	rawPlan: {
 		task: "Rename {{symbol}} in {{module}}",
-		entryStep: "rename",
+		entry_step: "rename",
 		artifacts: [],
 		steps: [
 			{
-				kind: "action",
-				id: "rename",
+				type: "action",
+				name: "rename",
 				actor: "worker",
 				instruction: "Rename {{symbol}} in {{module}}. Note: {{note}}",
 				reads: [],
@@ -25,8 +25,8 @@ const makeTemplate = (overrides: Partial<PlanTemplate> = {}): PlanTemplate => ({
 				routes: { done: "success" },
 			},
 			{
-				kind: "terminal",
-				id: "success",
+				type: "terminal",
+				name: "success",
 				outcome: "success",
 				summary: "Done.",
 			},
@@ -48,7 +48,7 @@ describe("instantiateTemplate", () => {
 		if (!result.ok) return;
 		expect(result.value.plan.task).toBe("Rename oldName in src/foo.ts");
 		const step = result.value.plan.steps[0]!;
-		if (step.kind !== "action") throw new Error("expected action");
+		if (step.type !== "action") throw new Error("expected action");
 		expect(step.instruction).toBe("Rename oldName in src/foo.ts. Note: be careful");
 		expect(result.value.templateName).toBe("test-template");
 		expect(result.value.templateArgs).toEqual({
@@ -66,7 +66,7 @@ describe("instantiateTemplate", () => {
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		const step = result.value.plan.steps[0]!;
-		if (step.kind !== "action") throw new Error("expected action");
+		if (step.type !== "action") throw new Error("expected action");
 		expect(step.instruction).toBe("Rename oldName in src/foo.ts. Note: ");
 	});
 
@@ -127,12 +127,12 @@ describe("instantiateTemplate", () => {
 		const template = makeTemplate({
 			rawPlan: {
 				task: "test",
-				entryStep: "a",
+				entry_step: "a",
 				artifacts: [],
 				steps: [
 					{
-						kind: "action",
-						id: "a",
+						type: "action",
+						name: "a",
 						actor: "worker",
 						instruction: "do it",
 						reads: [],
@@ -140,8 +140,8 @@ describe("instantiateTemplate", () => {
 						routes: { done: "{{next_step}}" },
 					},
 					{
-						kind: "terminal",
-						id: "b",
+						type: "terminal",
+						name: "b",
 						outcome: "success",
 						summary: "ok",
 					},
@@ -153,7 +153,7 @@ describe("instantiateTemplate", () => {
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		const step = result.value.plan.steps[0]!;
-		if (step.kind !== "action") throw new Error("expected action");
+		if (step.type !== "action") throw new Error("expected action");
 		expect(Object.values(step.routes)[0]).toBe("b");
 	});
 
@@ -164,12 +164,12 @@ describe("instantiateTemplate", () => {
 			parameters: [{ name: "x", description: "test", required: true }],
 			rawPlan: {
 				task: "Do {{x}}",
-				entryStep: "a",
+				entry_step: "a",
 				artifacts: [],
 				steps: [
 					{
-						kind: "terminal",
-						id: "a",
+						type: "terminal",
+						name: "a",
 						outcome: "success",
 						summary: "ok",
 					},
@@ -187,12 +187,12 @@ describe("instantiateTemplate", () => {
 			parameters: [{ name: "task_text", description: "task", required: false }],
 			rawPlan: {
 				task: "{{task_text}}",
-				entryStep: "a",
+				entry_step: "a",
 				artifacts: [],
 				steps: [
 					{
-						kind: "terminal",
-						id: "a",
+						type: "terminal",
+						name: "a",
 						outcome: "success",
 						summary: "ok",
 					},
@@ -210,25 +210,25 @@ describe("instantiateTemplate", () => {
 			parameters: [],
 			rawPlan: {
 				task: "Run the linter",
-				entryStep: "lint",
+				entry_step: "lint",
 				artifacts: [],
 				steps: [
 					{
-						kind: "command",
-						id: "lint",
+						type: "command",
+						name: "lint",
 						command: "npm run lint",
-						onSuccess: "done",
-						onFailure: "failed",
+						on_success: "done",
+						on_failure: "failed",
 					},
 					{
-						kind: "terminal",
-						id: "done",
+						type: "terminal",
+						name: "done",
 						outcome: "success",
 						summary: "Lint passed.",
 					},
 					{
-						kind: "terminal",
-						id: "failed",
+						type: "terminal",
+						name: "failed",
 						outcome: "failure",
 						summary: "Lint failed.",
 					},
@@ -246,20 +246,20 @@ describe("instantiateTemplate", () => {
 			parameters: [{ name: "count", description: "a number", required: true }],
 			rawPlan: {
 				task: "test",
-				entryStep: "a",
+				entry_step: "a",
 				artifacts: [],
 				steps: [
 					{
-						kind: "action",
-						id: "a",
+						type: "action",
+						name: "a",
 						actor: "worker",
 						instruction: "do it",
 						reads: [],
 						writes: [],
 						routes: { done: "b" },
-						maxRuns: "{{count}}",
+						max_runs: "{{count}}",
 					},
-					{ kind: "terminal", id: "b", outcome: "success", summary: "ok" },
+					{ type: "terminal", name: "b", outcome: "success", summary: "ok" },
 				],
 			},
 		});
@@ -267,9 +267,9 @@ describe("instantiateTemplate", () => {
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		const step = result.value.plan.steps[0]!;
-		if (step.kind !== "action") throw new Error("expected action");
-		expect(step.maxRuns).toBe(25);
-		expect(typeof step.maxRuns).toBe("number");
+		if (step.type !== "action") throw new Error("expected action");
+		expect(step.max_runs).toBe(25);
+		expect(typeof step.max_runs).toBe("number");
 	});
 
 	it("coerces booleans when the entire value is a placeholder", () => {
@@ -277,19 +277,19 @@ describe("instantiateTemplate", () => {
 			parameters: [{ name: "flag", description: "bool", required: true }],
 			rawPlan: {
 				task: "test {{flag}}",
-				entryStep: "a",
-				artifacts: [{ id: "x", description: "x" }],
+				entry_step: "a",
+				artifacts: [{ name: "x", description: "x" }],
 				steps: [
 					{
-						kind: "action",
-						id: "a",
+						type: "action",
+						name: "a",
 						actor: "worker",
 						instruction: "do it",
 						reads: [],
 						writes: ["x"],
 						routes: { done: "b" },
 					},
-					{ kind: "terminal", id: "b", outcome: "success", summary: "ok" },
+					{ type: "terminal", name: "b", outcome: "success", summary: "ok" },
 				],
 			},
 		});
@@ -304,9 +304,9 @@ describe("instantiateTemplate", () => {
 			parameters: [{ name: "n", description: "num", required: true }],
 			rawPlan: {
 				task: "run {{n}} times",
-				entryStep: "a",
+				entry_step: "a",
 				artifacts: [],
-				steps: [{ kind: "terminal", id: "a", outcome: "success", summary: "ok" }],
+				steps: [{ type: "terminal", name: "a", outcome: "success", summary: "ok" }],
 			},
 		});
 		const result = instantiateTemplate(template, { n: "42" });

@@ -4,21 +4,21 @@ import { ArtifactId, RouteId } from "../../src/plan/ids.js";
 import type { ArtifactContract } from "../../src/plan/types.js";
 
 const textContract = (id: string, description: string): ArtifactContract => ({
-	id: ArtifactId(id),
+	name: ArtifactId(id),
 	description,
-	shape: { kind: "text" },
+	shape: { type: "text" },
 });
 
 const recordContract = (id: string, description: string, fields: string[]): ArtifactContract => ({
-	id: ArtifactId(id),
+	name: ArtifactId(id),
 	description,
-	shape: { kind: "record", fields },
+	shape: { type: "record", fields },
 });
 
 const recordListContract = (id: string, description: string, fields: string[]): ArtifactContract => ({
-	id: ArtifactId(id),
+	name: ArtifactId(id),
 	description,
-	shape: { kind: "record_list", fields },
+	shape: { type: "record_list", fields },
 });
 
 describe("buildCompletionTool", () => {

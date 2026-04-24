@@ -26,48 +26,48 @@ parameters:
 ---
 
 task: "{{task}}"
-successCriteria: "All three gates pass: {{gate1_name}}, {{gate2_name}}, {{gate3_name}}."
+success_criteria: "All three gates pass: {{gate1_name}}, {{gate2_name}}, {{gate3_name}}."
 artifacts:
   - id: change_notes
     description: What was changed — files touched and a one-line description per file.
 
 steps:
-  - kind: action
-    id: implement
+  - type: action
+    name: implement
     actor: worker
     instruction: |
       {{task}}
       Write a summary of your changes to the change_notes artifact.
     writes: [change_notes]
     routes: { done: gate1 }
-  - kind: command
-    id: gate1
+  - type: command
+    name: gate1
     command: "{{gate1}}"
-    onSuccess: gate2
-    onFailure: gate1_failed
-  - kind: command
-    id: gate2
+    on_success: gate2
+    on_failure: gate1_failed
+  - type: command
+    name: gate2
     command: "{{gate2}}"
-    onSuccess: gate3
-    onFailure: gate2_failed
-  - kind: command
-    id: gate3
+    on_success: gate3
+    on_failure: gate2_failed
+  - type: command
+    name: gate3
     command: "{{gate3}}"
-    onSuccess: done
-    onFailure: gate3_failed
-  - kind: terminal
-    id: done
+    on_success: done
+    on_failure: gate3_failed
+  - type: terminal
+    name: done
     outcome: success
     summary: "All gates passed: {{gate1_name}}, {{gate2_name}}, {{gate3_name}}."
-  - kind: terminal
-    id: gate1_failed
+  - type: terminal
+    name: gate1_failed
     outcome: failure
     summary: "Failed at {{gate1_name}}."
-  - kind: terminal
-    id: gate2_failed
+  - type: terminal
+    name: gate2_failed
     outcome: failure
     summary: "Failed at {{gate2_name}} ({{gate1_name}} passed)."
-  - kind: terminal
-    id: gate3_failed
+  - type: terminal
+    name: gate3_failed
     outcome: failure
     summary: "Failed at {{gate3_name}} ({{gate1_name}} and {{gate2_name}} passed)."

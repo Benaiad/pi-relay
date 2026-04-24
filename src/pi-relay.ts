@@ -55,11 +55,11 @@ import type { PlanTemplate } from "./templates/types.js";
  * requests, and runtime states are very different things to render.
  */
 export type RelayDetails =
-	| { readonly kind: "compile_failed"; readonly message: string }
-	| { readonly kind: "cancelled"; readonly reason: string }
-	| { readonly kind: "refined"; readonly feedback: string }
+	| { readonly type: "compile_failed"; readonly message: string }
+	| { readonly type: "cancelled"; readonly reason: string }
+	| { readonly type: "refined"; readonly feedback: string }
 	| {
-			readonly kind: "state";
+			readonly type: "state";
 			readonly state: RelayRunState;
 			readonly attemptTimeline: readonly AttemptTimelineEntry[];
 			readonly checkOutput?: ReadonlyMap<StepId, string>;
@@ -234,7 +234,7 @@ export const renderRelayResult = (
 	},
 ): ReturnType<typeof renderRunResult> => {
 	const details = result.details;
-	if (details?.kind === "state") {
+	if (details?.type === "state") {
 		return renderRunResult(
 			details.state,
 			details.attemptTimeline,
@@ -244,13 +244,13 @@ export const renderRelayResult = (
 			details.checkOutput,
 		);
 	}
-	if (details?.kind === "compile_failed") {
+	if (details?.type === "compile_failed") {
 		return renderCompileFailure(details.message, theme, context.lastComponent);
 	}
-	if (details?.kind === "cancelled") {
+	if (details?.type === "cancelled") {
 		return renderCancelled(details.reason, theme, context.lastComponent);
 	}
-	if (details?.kind === "refined") {
+	if (details?.type === "refined") {
 		return renderRefined(details.feedback, theme, context.lastComponent);
 	}
 	return renderPlanPreview(context.args, theme, options.expanded, context.lastComponent);
@@ -412,8 +412,8 @@ export const buildToolDescription = (actors: readonly ActorConfig[]): string => 
 		...actorLines,
 		"",
 		"Action step structure (all required unless noted):",
-		'  kind: "action"',
-		"  id: unique step identifier",
+		'  type: "action"',
+		"  name: unique step identifier",
 		"  actor: one of the actor names listed above",
 		"  instruction: task-specific prompt for this step",
 		'  routes: { "<route_name>": "<target_step_id>", ... } — at least one entry required.',

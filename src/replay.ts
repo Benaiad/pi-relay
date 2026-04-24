@@ -80,7 +80,7 @@ export const registerReplayTool = (
 				});
 				return {
 					content: [{ type: "text", text: `Replay failed: ${message}` }],
-					details: { kind: "compile_failed", message },
+					details: { type: "compile_failed", message },
 				};
 			}
 
@@ -89,7 +89,7 @@ export const registerReplayTool = (
 				const message = formatTemplateError(instantiation.error);
 				return {
 					content: [{ type: "text", text: `Replay failed: ${message}` }],
-					details: { kind: "compile_failed", message },
+					details: { type: "compile_failed", message },
 				};
 			}
 

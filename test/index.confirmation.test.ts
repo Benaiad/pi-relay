@@ -21,30 +21,30 @@ const registry = new Map<ReturnType<typeof ActorId>, ActorConfig>([
 
 const readOnlyPlan: PlanDraftDoc = {
 	task: "Describe what the parser does.",
-	artifacts: [{ id: "summary", description: "analysis" }],
+	artifacts: [{ name: "summary", description: "analysis" }],
 	steps: [
 		{
-			kind: "action",
-			id: "analyze",
+			type: "action",
+			name: "analyze",
 			actor: "planner",
 			instruction: "Read the parser and describe its responsibilities.",
 			reads: [],
 			writes: ["summary"],
 			routes: { done: "end" },
 		},
-		{ kind: "terminal", id: "end", outcome: "success", summary: "described" },
+		{ type: "terminal", name: "end", outcome: "success", summary: "described" },
 	],
-	entryStep: "analyze",
+	entry_step: "analyze",
 };
 
 const mutatingPlan: PlanDraftDoc = {
 	task: "Add a feature flag and verify the tests pass.",
-	successCriteria: "Tests green after the change.",
-	artifacts: [{ id: "notes", description: "n" }],
+	success_criteria: "Tests green after the change.",
+	artifacts: [{ name: "notes", description: "n" }],
 	steps: [
 		{
-			kind: "action",
-			id: "implement",
+			type: "action",
+			name: "implement",
 			actor: "worker",
 			instruction: "Add the flag.",
 			reads: [],
@@ -52,16 +52,16 @@ const mutatingPlan: PlanDraftDoc = {
 			routes: { done: "verify" },
 		},
 		{
-			kind: "command",
-			id: "verify",
+			type: "command",
+			name: "verify",
 			command: "npm test",
-			onSuccess: "end",
-			onFailure: "bad",
+			on_success: "end",
+			on_failure: "bad",
 		},
-		{ kind: "terminal", id: "end", outcome: "success", summary: "ok" },
-		{ kind: "terminal", id: "bad", outcome: "failure", summary: "bad" },
+		{ type: "terminal", name: "end", outcome: "success", summary: "ok" },
+		{ type: "terminal", name: "bad", outcome: "failure", summary: "bad" },
 	],
-	entryStep: "implement",
+	entry_step: "implement",
 };
 
 describe("summarizePlanImpact", () => {
@@ -88,7 +88,7 @@ describe("summarizePlanImpact", () => {
 
 	it("reports unknown actors rather than silently failing", () => {
 		const firstStep = readOnlyPlan.steps[0]!;
-		if (firstStep.kind !== "action") throw new Error("expected action");
+		if (firstStep.type !== "action") throw new Error("expected action");
 		const bad: PlanDraftDoc = {
 			...readOnlyPlan,
 			steps: [{ ...firstStep, actor: "ghost-actor" }, readOnlyPlan.steps[1]!],
@@ -125,21 +125,21 @@ describe("buildSelectTitle", () => {
 			steps: [
 				mutatingPlan.steps[0]!,
 				{
-					kind: "command",
-					id: "verify",
+					type: "command",
+					name: "verify",
 					command: "npm test",
-					onSuccess: "step2",
-					onFailure: "bad",
+					on_success: "step2",
+					on_failure: "bad",
 				},
 				{
-					kind: "command",
-					id: "step2",
+					type: "command",
+					name: "step2",
 					command: "npm run lint",
-					onSuccess: "end",
-					onFailure: "bad",
+					on_success: "end",
+					on_failure: "bad",
 				},
-				{ kind: "terminal", id: "end", outcome: "success", summary: "ok" },
-				{ kind: "terminal", id: "bad", outcome: "failure", summary: "bad" },
+				{ type: "terminal", name: "end", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "bad", outcome: "failure", summary: "bad" },
 			],
 		};
 		const impact = summarizePlanImpact(planWithMultipleChecks, registry);
@@ -149,7 +149,7 @@ describe("buildSelectTitle", () => {
 
 	it("surfaces unknown actors with a leading warning", () => {
 		const firstStep = readOnlyPlan.steps[0]!;
-		if (firstStep.kind !== "action") throw new Error("expected action");
+		if (firstStep.type !== "action") throw new Error("expected action");
 		const bad: PlanDraftDoc = {
 			...readOnlyPlan,
 			steps: [{ ...firstStep, actor: "ghost-actor" }, readOnlyPlan.steps[1]!],

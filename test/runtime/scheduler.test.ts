@@ -59,7 +59,7 @@ class ScriptedActorEngine implements ActorEngine {
 	constructor(private readonly script: Map<string, ScriptEntry[]>) {}
 
 	async runAction(request: ActionRequest): Promise<ActionOutcome> {
-		const stepKey = unwrap(request.step.id);
+		const stepKey = unwrap(request.step.name);
 		const entries = this.script.get(stepKey) ?? [];
 		const priorCalls = this.calls.filter((c) => c.stepId === stepKey).length;
 		this.calls.push({
@@ -115,20 +115,20 @@ const engineError =
 
 const linearPlan: PlanDraftDoc = {
 	task: "Linear two-step plan.",
-	artifacts: [{ id: "note", description: "n", fields: ["ok"] }],
+	artifacts: [{ name: "note", description: "n", fields: ["ok"] }],
 	steps: [
 		{
-			kind: "action",
-			id: "first",
+			type: "action",
+			name: "first",
 			actor: "worker",
 			instruction: "Produce the note.",
 			reads: [],
 			writes: ["note"],
 			routes: { next: "end" },
 		},
-		{ kind: "terminal", id: "end", outcome: "success", summary: "All good." },
+		{ type: "terminal", name: "end", outcome: "success", summary: "All good." },
 	],
-	entryStep: "first",
+	entry_step: "first",
 };
 
 const buildScheduler = (
@@ -168,10 +168,10 @@ describe("Scheduler — happy paths", () => {
 		expect(report.steps.map((s) => s.status)).toEqual(["succeeded", "succeeded"]);
 		expect(report.artifacts.map((a) => unwrap(a.artifactId))).toEqual(["note"]);
 		expect(engine.callCounts().get("first")).toBe(1);
-		expect(events.some((e) => e.kind === "action_completed")).toBe(true);
-		expect(events.some((e) => e.kind === "artifact_committed")).toBe(true);
-		expect(events.some((e) => e.kind === "terminal_reached")).toBe(true);
-		expect(events[events.length - 1]!.kind).toBe("run_finished");
+		expect(events.some((e) => e.type === "action_completed")).toBe(true);
+		expect(events.some((e) => e.type === "artifact_committed")).toBe(true);
+		expect(events.some((e) => e.type === "terminal_reached")).toBe(true);
+		expect(events[events.length - 1]!.type).toBe("run_finished");
 	});
 
 	it("routes a command step to its pass edge and continues", async () => {
@@ -180,21 +180,21 @@ describe("Scheduler — happy paths", () => {
 			artifacts: [],
 			steps: [
 				{
-					kind: "command",
-					id: "verify",
+					type: "command",
+					name: "verify",
 					command: 'node -e "process.exit(0)"',
-					onSuccess: "ok",
-					onFailure: "broken",
+					on_success: "ok",
+					on_failure: "broken",
 				},
-				{ kind: "terminal", id: "ok", outcome: "success", summary: "passed" },
+				{ type: "terminal", name: "ok", outcome: "success", summary: "passed" },
 				{
-					kind: "terminal",
-					id: "broken",
+					type: "terminal",
+					name: "broken",
 					outcome: "failure",
 					summary: "failed",
 				},
 			],
-			entryStep: "verify",
+			entry_step: "verify",
 		};
 		const engine = new ScriptedActorEngine(new Map());
 		const { scheduler } = buildScheduler(plan, engine);
@@ -209,21 +209,21 @@ describe("Scheduler — happy paths", () => {
 			artifacts: [],
 			steps: [
 				{
-					kind: "command",
-					id: "verify",
+					type: "command",
+					name: "verify",
 					command: 'node -e "process.exit(2)"',
-					onSuccess: "ok",
-					onFailure: "broken",
+					on_success: "ok",
+					on_failure: "broken",
 				},
-				{ kind: "terminal", id: "ok", outcome: "success", summary: "passed" },
+				{ type: "terminal", name: "ok", outcome: "success", summary: "passed" },
 				{
-					kind: "terminal",
-					id: "broken",
+					type: "terminal",
+					name: "broken",
 					outcome: "failure",
 					summary: "failed",
 				},
 			],
-			entryStep: "verify",
+			entry_step: "verify",
 		};
 		const engine = new ScriptedActorEngine(new Map());
 		const { scheduler } = buildScheduler(plan, engine);
@@ -238,16 +238,16 @@ describe("Scheduler — happy paths", () => {
 			artifacts: [],
 			steps: [
 				{
-					kind: "command",
-					id: "verify",
+					type: "command",
+					name: "verify",
 					command: "node -e \"process.exit(typeof process.env.RELAY_PREFIX_TEST === 'undefined' ? 1 : 0)\"",
-					onSuccess: "ok",
-					onFailure: "broken",
+					on_success: "ok",
+					on_failure: "broken",
 				},
-				{ kind: "terminal", id: "ok", outcome: "success", summary: "passed" },
-				{ kind: "terminal", id: "broken", outcome: "failure", summary: "failed" },
+				{ type: "terminal", name: "ok", outcome: "success", summary: "passed" },
+				{ type: "terminal", name: "broken", outcome: "failure", summary: "failed" },
 			],
-			entryStep: "verify",
+			entry_step: "verify",
 		};
 		const engine = new ScriptedActorEngine(new Map());
 		const { scheduler } = buildScheduler(plan, engine, {
@@ -263,16 +263,16 @@ describe("Scheduler — happy paths", () => {
 			artifacts: [],
 			steps: [
 				{
-					kind: "command",
-					id: "verify",
+					type: "command",
+					name: "verify",
 					command: 'node -e "process.exit(0)"',
-					onSuccess: "ok",
-					onFailure: "broken",
+					on_success: "ok",
+					on_failure: "broken",
 				},
-				{ kind: "terminal", id: "ok", outcome: "success", summary: "passed" },
-				{ kind: "terminal", id: "broken", outcome: "failure", summary: "failed" },
+				{ type: "terminal", name: "ok", outcome: "success", summary: "passed" },
+				{ type: "terminal", name: "broken", outcome: "failure", summary: "failed" },
 			],
-			entryStep: "verify",
+			entry_step: "verify",
 		};
 		const engine = new ScriptedActorEngine(new Map());
 		const { scheduler } = buildScheduler(plan, engine);
@@ -300,8 +300,8 @@ describe("Scheduler — implicit retries", () => {
 			artifacts: [],
 			steps: [
 				{
-					kind: "action",
-					id: "try",
+					type: "action",
+					name: "try",
 					actor: "worker",
 					instruction: "Might fail.",
 					reads: [],
@@ -311,10 +311,10 @@ describe("Scheduler — implicit retries", () => {
 						failure: "bad",
 					},
 				},
-				{ kind: "terminal", id: "good", outcome: "success", summary: "ok" },
-				{ kind: "terminal", id: "bad", outcome: "failure", summary: "no good" },
+				{ type: "terminal", name: "good", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "bad", outcome: "failure", summary: "no good" },
 			],
-			entryStep: "try",
+			entry_step: "try",
 		};
 		const engine = new ScriptedActorEngine(
 			new Map([["try", [engineError("e1"), engineError("e2"), engineError("e3")]]]),
@@ -380,13 +380,13 @@ describe("Scheduler — artifact contract violations", () => {
 		const plan: PlanDraftDoc = {
 			task: "Two-step with contracts.",
 			artifacts: [
-				{ id: "a", description: "a" },
-				{ id: "b", description: "b" },
+				{ name: "a", description: "a" },
+				{ name: "b", description: "b" },
 			],
 			steps: [
 				{
-					kind: "action",
-					id: "first",
+					type: "action",
+					name: "first",
 					actor: "worker",
 					instruction: "Write a.",
 					reads: [],
@@ -394,17 +394,17 @@ describe("Scheduler — artifact contract violations", () => {
 					routes: { next: "second" },
 				},
 				{
-					kind: "action",
-					id: "second",
+					type: "action",
+					name: "second",
 					actor: "worker",
 					instruction: "Write b.",
 					reads: ["a"],
 					writes: ["b"],
 					routes: { done: "end" },
 				},
-				{ kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "end", outcome: "success", summary: "ok" },
 			],
-			entryStep: "first",
+			entry_step: "first",
 		};
 		// First attempt: try to write to b (not allowed) — should cause a rejection and a retry.
 		const engine = new ScriptedActorEngine(
@@ -418,7 +418,7 @@ describe("Scheduler — artifact contract violations", () => {
 		scheduler.subscribe((e) => events.push(e));
 		const report = await scheduler.run();
 		expect(report.outcome).toBe("success");
-		expect(events.some((e) => e.kind === "artifact_rejected")).toBe(true);
+		expect(events.some((e) => e.type === "artifact_rejected")).toBe(true);
 		expect(engine.callCounts().get("first")).toBe(2);
 	});
 });
@@ -430,8 +430,8 @@ describe("Scheduler — terminal routes", () => {
 			artifacts: [],
 			steps: [
 				{
-					kind: "action",
-					id: "decide",
+					type: "action",
+					name: "decide",
 					actor: "worker",
 					instruction: "decide",
 					reads: [],
@@ -439,13 +439,13 @@ describe("Scheduler — terminal routes", () => {
 					routes: { fail: "bad" },
 				},
 				{
-					kind: "terminal",
-					id: "bad",
+					type: "terminal",
+					name: "bad",
 					outcome: "failure",
 					summary: "decided to fail",
 				},
 			],
-			entryStep: "decide",
+			entry_step: "decide",
 		};
 		const engine = new ScriptedActorEngine(new Map([["decide", [completed("fail")]]]));
 		const { scheduler } = buildScheduler(plan, engine);
@@ -459,13 +459,13 @@ describe("Scheduler — terminal routes", () => {
 		const plan: PlanDraftDoc = {
 			task: "Loop with back-edge, timeline check.",
 			artifacts: [
-				{ id: "notes", description: "n", fields: ["v"] },
-				{ id: "verdict", description: "v", fields: ["ok"] },
+				{ name: "notes", description: "n", fields: ["v"] },
+				{ name: "verdict", description: "v", fields: ["ok"] },
 			],
 			steps: [
 				{
-					kind: "action",
-					id: "create",
+					type: "action",
+					name: "create",
 					actor: "worker",
 					instruction: "create",
 					reads: [],
@@ -473,8 +473,8 @@ describe("Scheduler — terminal routes", () => {
 					routes: { done: "review" },
 				},
 				{
-					kind: "action",
-					id: "review",
+					type: "action",
+					name: "review",
 					actor: "checker",
 					instruction: "review",
 					reads: ["notes"],
@@ -485,8 +485,8 @@ describe("Scheduler — terminal routes", () => {
 					},
 				},
 				{
-					kind: "action",
-					id: "fix",
+					type: "action",
+					name: "fix",
 					actor: "worker",
 					instruction: "fix",
 					reads: ["verdict"],
@@ -494,13 +494,13 @@ describe("Scheduler — terminal routes", () => {
 					routes: { done: "review" },
 				},
 				{
-					kind: "terminal",
-					id: "done",
+					type: "terminal",
+					name: "done",
 					outcome: "success",
 					summary: "accepted",
 				},
 			],
-			entryStep: "create",
+			entry_step: "create",
 		};
 		const engine = new ScriptedActorEngine(
 			new Map([
@@ -534,13 +534,13 @@ describe("Scheduler — terminal routes", () => {
 		const plan: PlanDraftDoc = {
 			task: "Simple review loop with one iteration.",
 			artifacts: [
-				{ id: "notes", description: "impl", fields: ["v"] },
-				{ id: "verdict", description: "r", fields: ["ok"] },
+				{ name: "notes", description: "impl", fields: ["v"] },
+				{ name: "verdict", description: "r", fields: ["ok"] },
 			],
 			steps: [
 				{
-					kind: "action",
-					id: "create",
+					type: "action",
+					name: "create",
 					actor: "worker",
 					instruction: "create",
 					reads: [],
@@ -548,8 +548,8 @@ describe("Scheduler — terminal routes", () => {
 					routes: { done: "review" },
 				},
 				{
-					kind: "action",
-					id: "review",
+					type: "action",
+					name: "review",
 					actor: "checker",
 					instruction: "review",
 					reads: ["notes"],
@@ -560,8 +560,8 @@ describe("Scheduler — terminal routes", () => {
 					},
 				},
 				{
-					kind: "action",
-					id: "fix",
+					type: "action",
+					name: "fix",
 					actor: "worker",
 					instruction: "fix",
 					reads: ["verdict"],
@@ -569,13 +569,13 @@ describe("Scheduler — terminal routes", () => {
 					routes: { done: "review" },
 				},
 				{
-					kind: "terminal",
-					id: "done",
+					type: "terminal",
+					name: "done",
 					outcome: "success",
 					summary: "accepted",
 				},
 			],
-			entryStep: "create",
+			entry_step: "create",
 		};
 		const engine = new ScriptedActorEngine(
 			new Map([
@@ -611,13 +611,13 @@ describe("Scheduler — terminal routes", () => {
 		const plan: PlanDraftDoc = {
 			task: "Loop once.",
 			artifacts: [
-				{ id: "notes", description: "n", fields: ["v"] },
-				{ id: "verdict", description: "v", fields: ["ok"] },
+				{ name: "notes", description: "n", fields: ["v"] },
+				{ name: "verdict", description: "v", fields: ["ok"] },
 			],
 			steps: [
 				{
-					kind: "action",
-					id: "create",
+					type: "action",
+					name: "create",
 					actor: "worker",
 					instruction: "create",
 					reads: [],
@@ -625,8 +625,8 @@ describe("Scheduler — terminal routes", () => {
 					routes: { done: "review" },
 				},
 				{
-					kind: "action",
-					id: "review",
+					type: "action",
+					name: "review",
 					actor: "checker",
 					instruction: "review",
 					reads: ["notes"],
@@ -637,8 +637,8 @@ describe("Scheduler — terminal routes", () => {
 					},
 				},
 				{
-					kind: "action",
-					id: "fix",
+					type: "action",
+					name: "fix",
 					actor: "worker",
 					instruction: "fix",
 					reads: ["verdict"],
@@ -646,13 +646,13 @@ describe("Scheduler — terminal routes", () => {
 					routes: { done: "review" },
 				},
 				{
-					kind: "terminal",
-					id: "done",
+					type: "terminal",
+					name: "done",
 					outcome: "success",
 					summary: "accepted",
 				},
 			],
-			entryStep: "create",
+			entry_step: "create",
 		};
 		const engine = new ScriptedActorEngine(
 			new Map([
@@ -682,13 +682,13 @@ describe("Scheduler — terminal routes", () => {
 		const plan: PlanDraftDoc = {
 			task: "Review-fix loop.",
 			artifacts: [
-				{ id: "notes", description: "impl", fields: ["v"] },
-				{ id: "verdict", description: "review", fields: ["ok"] },
+				{ name: "notes", description: "impl", fields: ["v"] },
+				{ name: "verdict", description: "review", fields: ["ok"] },
 			],
 			steps: [
 				{
-					kind: "action",
-					id: "create",
+					type: "action",
+					name: "create",
 					actor: "worker",
 					instruction: "create",
 					reads: [],
@@ -696,8 +696,8 @@ describe("Scheduler — terminal routes", () => {
 					routes: { done: "review" },
 				},
 				{
-					kind: "action",
-					id: "review",
+					type: "action",
+					name: "review",
 					actor: "checker",
 					instruction: "review",
 					reads: ["notes"],
@@ -708,8 +708,8 @@ describe("Scheduler — terminal routes", () => {
 					},
 				},
 				{
-					kind: "action",
-					id: "fix",
+					type: "action",
+					name: "fix",
 					actor: "worker",
 					instruction: "fix",
 					reads: ["verdict", "notes"],
@@ -717,13 +717,13 @@ describe("Scheduler — terminal routes", () => {
 					routes: { done: "review" },
 				},
 				{
-					kind: "terminal",
-					id: "done",
+					type: "terminal",
+					name: "done",
 					outcome: "success",
 					summary: "accepted",
 				},
 			],
-			entryStep: "create",
+			entry_step: "create",
 		};
 
 		// Script: create ok → review rejects → fix → review accepts.
@@ -751,31 +751,31 @@ describe("Scheduler — terminal routes", () => {
 	it("halts when an action step exceeds its maxRuns cap", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Two-actor ping-pong that never converges.",
-			artifacts: [{ id: "state", description: "s" }],
+			artifacts: [{ name: "state", description: "s" }],
 			steps: [
 				{
-					kind: "action",
-					id: "a",
+					type: "action",
+					name: "a",
 					actor: "worker",
 					instruction: "a",
 					reads: [],
 					writes: ["state"],
 					routes: { next: "b" },
-					maxRuns: 3,
+					max_runs: 3,
 				},
 				{
-					kind: "action",
-					id: "b",
+					type: "action",
+					name: "b",
 					actor: "checker",
 					instruction: "b",
 					reads: ["state"],
 					writes: [],
 					routes: { again: "a" },
-					maxRuns: 3,
+					max_runs: 3,
 				},
-				{ kind: "terminal", id: "never", outcome: "success", summary: "never" },
+				{ type: "terminal", name: "never", outcome: "success", summary: "never" },
 			],
-			entryStep: "a",
+			entry_step: "a",
 		};
 		const engine = new ScriptedActorEngine(
 			new Map([
@@ -796,13 +796,13 @@ describe("Scheduler — terminal routes", () => {
 			task: "Verify loop with no escape.",
 			steps: [
 				{
-					kind: "files_exist",
-					id: "check",
+					type: "files_exist",
+					name: "check",
 					paths: ["/tmp/pi-relay-nonexistent-sentinel-file"],
-					onSuccess: "done",
-					onFailure: "check",
+					on_success: "done",
+					on_failure: "check",
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
 			],
 		};
 		const engine = new ScriptedActorEngine(new Map());
@@ -815,25 +815,25 @@ describe("Scheduler — terminal routes", () => {
 	it("rejects a completion that routes to a reader without writing the required artifact", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Diagnose then fix.",
-			artifacts: [{ id: "diag", description: "d", fields: ["cause"] }],
+			artifacts: [{ name: "diag", description: "d", fields: ["cause"] }],
 			steps: [
 				{
-					kind: "action",
-					id: "diagnose",
+					type: "action",
+					name: "diagnose",
 					actor: "worker",
 					instruction: "find bug",
 					writes: ["diag"],
 					routes: { found: "fix", clean: "done" },
 				},
 				{
-					kind: "action",
-					id: "fix",
+					type: "action",
+					name: "fix",
 					actor: "worker",
 					instruction: "fix it",
 					reads: ["diag"],
 					routes: { done: "done" },
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
 			],
 		};
 		const engine = new ScriptedActorEngine(
@@ -851,17 +851,17 @@ describe("Scheduler — terminal routes", () => {
 	it("allows routing without writing when the target does not read the artifact", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Optional write.",
-			artifacts: [{ id: "notes", description: "n" }],
+			artifacts: [{ name: "notes", description: "n" }],
 			steps: [
 				{
-					kind: "action",
-					id: "work",
+					type: "action",
+					name: "work",
 					actor: "worker",
 					instruction: "do",
 					writes: ["notes"],
 					routes: { done: "done" },
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
 			],
 		};
 		const engine = new ScriptedActorEngine(new Map([["work", [completed("done")]]]));
@@ -876,8 +876,8 @@ describe("Scheduler — terminal routes", () => {
 			artifacts: [],
 			steps: [
 				{
-					kind: "action",
-					id: "decide",
+					type: "action",
+					name: "decide",
 					actor: "worker",
 					instruction: "decide",
 					reads: [],
@@ -888,19 +888,19 @@ describe("Scheduler — terminal routes", () => {
 					},
 				},
 				{
-					kind: "terminal",
-					id: "success_terminal",
+					type: "terminal",
+					name: "success_terminal",
 					outcome: "success",
 					summary: "ok",
 				},
 				{
-					kind: "terminal",
-					id: "failure_terminal",
+					type: "terminal",
+					name: "failure_terminal",
 					outcome: "failure",
 					summary: "never reached",
 				},
 			],
-			entryStep: "decide",
+			entry_step: "decide",
 		};
 		const engine = new ScriptedActorEngine(new Map([["decide", [completed("good")]]]));
 		const { scheduler } = buildScheduler(plan, engine);
@@ -917,27 +917,27 @@ describe("Scheduler — command step artifact reads", () => {
 	it("provides read artifacts as files in RELAY_INPUT", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Action writes, command reads from RELAY_INPUT.",
-			artifacts: [{ id: "candidate", description: "test value" }],
+			artifacts: [{ name: "candidate", description: "test value" }],
 			steps: [
 				{
-					kind: "action",
-					id: "produce",
+					type: "action",
+					name: "produce",
 					actor: "worker",
 					instruction: "Write candidate.",
 					writes: ["candidate"],
 					routes: { done: "check" },
 				},
 				{
-					kind: "command",
-					id: "check",
+					type: "command",
+					name: "check",
 					command:
 						"node -e \"const v = require('fs').readFileSync(require('path').join(process.env.RELAY_INPUT, 'candidate'), 'utf-8'); process.exit(v === 'hello' ? 0 : 1)\"",
 					reads: ["candidate"],
-					onSuccess: "done",
-					onFailure: "failed",
+					on_success: "done",
+					on_failure: "failed",
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
-				{ kind: "terminal", id: "failed", outcome: "failure", summary: "bad" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "failed", outcome: "failure", summary: "bad" },
 			],
 		};
 		const engine = new ScriptedActorEngine(new Map([["produce", [completed("done", { candidate: "hello" })]]]));
@@ -949,27 +949,27 @@ describe("Scheduler — command step artifact reads", () => {
 	it("serializes structured artifacts as JSON files in RELAY_INPUT", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Action writes record, command reads JSON from RELAY_INPUT.",
-			artifacts: [{ id: "result", description: "structured", fields: ["score", "label"] }],
+			artifacts: [{ name: "result", description: "structured", fields: ["score", "label"] }],
 			steps: [
 				{
-					kind: "action",
-					id: "produce",
+					type: "action",
+					name: "produce",
 					actor: "worker",
 					instruction: "Write result.",
 					writes: ["result"],
 					routes: { done: "check" },
 				},
 				{
-					kind: "command",
-					id: "check",
+					type: "command",
+					name: "check",
 					command:
 						"node -e \"const v = JSON.parse(require('fs').readFileSync(require('path').join(process.env.RELAY_INPUT, 'result'), 'utf-8')); process.exit(v.score === 42 ? 0 : 1)\"",
 					reads: ["result"],
-					onSuccess: "done",
-					onFailure: "failed",
+					on_success: "done",
+					on_failure: "failed",
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
-				{ kind: "terminal", id: "failed", outcome: "failure", summary: "bad" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "failed", outcome: "failure", summary: "bad" },
 			],
 		};
 		const engine = new ScriptedActorEngine(
@@ -983,34 +983,34 @@ describe("Scheduler — command step artifact reads", () => {
 	it("omits input files for artifacts not yet committed", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Command reads artifact that hasn't been written yet.",
-			artifacts: [{ id: "data", description: "d" }],
+			artifacts: [{ name: "data", description: "d" }],
 			steps: [
 				{
-					kind: "action",
-					id: "early",
+					type: "action",
+					name: "early",
 					actor: "worker",
 					instruction: "Does not write data.",
 					routes: { done: "check" },
 				},
 				{
-					kind: "command",
-					id: "check",
+					type: "command",
+					name: "check",
 					command:
 						"node -e \"const fs = require('fs'); const p = require('path').join(process.env.RELAY_INPUT || '/nonexistent', 'data'); process.exit(fs.existsSync(p) ? 1 : 0)\"",
 					reads: ["data"],
-					onSuccess: "done",
-					onFailure: "failed",
+					on_success: "done",
+					on_failure: "failed",
 				},
 				{
-					kind: "action",
-					id: "late",
+					type: "action",
+					name: "late",
 					actor: "worker",
 					instruction: "Writes data but never reached.",
 					writes: ["data"],
 					routes: { done: "done" },
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
-				{ kind: "terminal", id: "failed", outcome: "failure", summary: "bad" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "failed", outcome: "failure", summary: "bad" },
 			],
 		};
 		const engine = new ScriptedActorEngine(new Map([["early", [completed("done")]]]));
@@ -1024,18 +1024,18 @@ describe("Scheduler — command step writes", () => {
 	it("commits a text artifact written to RELAY_OUTPUT by a command step", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Command writes a text artifact.",
-			artifacts: [{ id: "score", description: "score" }],
+			artifacts: [{ name: "score", description: "score" }],
 			steps: [
 				{
-					kind: "command",
-					id: "grade",
+					type: "command",
+					name: "grade",
 					command:
 						"node -e \"require('fs').writeFileSync(require('path').join(process.env.RELAY_OUTPUT, 'score'), '0.85')\"",
 					writes: ["score"],
-					onSuccess: "done",
-					onFailure: "done",
+					on_success: "done",
+					on_failure: "done",
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
 			],
 		};
 		const engine = new ScriptedActorEngine(new Map());
@@ -1044,24 +1044,24 @@ describe("Scheduler — command step writes", () => {
 		scheduler.subscribe((e) => events.push(e));
 		const report = await scheduler.run();
 		expect(report.outcome).toBe("success");
-		expect(events.some((e) => e.kind === "artifact_committed")).toBe(true);
+		expect(events.some((e) => e.type === "artifact_committed")).toBe(true);
 	});
 
 	it("commits a JSON artifact written to RELAY_OUTPUT for a record-shaped contract", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Command writes a JSON artifact.",
-			artifacts: [{ id: "result", description: "result", fields: ["value", "label"] }],
+			artifacts: [{ name: "result", description: "result", fields: ["value", "label"] }],
 			steps: [
 				{
-					kind: "command",
-					id: "grade",
+					type: "command",
+					name: "grade",
 					command:
 						"node -e \"require('fs').writeFileSync(require('path').join(process.env.RELAY_OUTPUT, 'result'), JSON.stringify({value: 42, label: 'good'}))\"",
 					writes: ["result"],
-					onSuccess: "done",
-					onFailure: "done",
+					on_success: "done",
+					on_failure: "done",
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
 			],
 		};
 		const engine = new ScriptedActorEngine(new Map());
@@ -1074,19 +1074,19 @@ describe("Scheduler — command step writes", () => {
 	it("commits artifacts even when the command exits non-zero", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Command fails but still writes.",
-			artifacts: [{ id: "feedback", description: "feedback" }],
+			artifacts: [{ name: "feedback", description: "feedback" }],
 			steps: [
 				{
-					kind: "command",
-					id: "grade",
+					type: "command",
+					name: "grade",
 					command:
 						"node -e \"require('fs').writeFileSync(require('path').join(process.env.RELAY_OUTPUT, 'feedback'), 'needs work'); process.exit(1)\"",
 					writes: ["feedback"],
-					onSuccess: "ok",
-					onFailure: "retry",
+					on_success: "ok",
+					on_failure: "retry",
 				},
-				{ kind: "terminal", id: "ok", outcome: "success", summary: "ok" },
-				{ kind: "terminal", id: "retry", outcome: "failure", summary: "failed" },
+				{ type: "terminal", name: "ok", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "retry", outcome: "failure", summary: "failed" },
 			],
 		};
 		const engine = new ScriptedActorEngine(new Map());
@@ -1095,31 +1095,31 @@ describe("Scheduler — command step writes", () => {
 		scheduler.subscribe((e) => events.push(e));
 		const report = await scheduler.run();
 		expect(report.outcome).toBe("failure");
-		expect(events.some((e) => e.kind === "artifact_committed")).toBe(true);
+		expect(events.some((e) => e.type === "artifact_committed")).toBe(true);
 	});
 
 	it("does not commit when the command writes nothing to RELAY_OUTPUT", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Command declares writes but produces nothing.",
-			artifacts: [{ id: "output", description: "out" }],
+			artifacts: [{ name: "output", description: "out" }],
 			steps: [
 				{
-					kind: "action",
-					id: "setup",
+					type: "action",
+					name: "setup",
 					actor: "worker",
 					instruction: "Write output so the artifact has a producer.",
 					writes: ["output"],
 					routes: { done: "grade" },
 				},
 				{
-					kind: "command",
-					id: "grade",
+					type: "command",
+					name: "grade",
 					command: 'node -e "process.exit(0)"',
 					writes: ["output"],
-					onSuccess: "done",
-					onFailure: "done",
+					on_success: "done",
+					on_failure: "done",
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
 			],
 		};
 		const engine = new ScriptedActorEngine(new Map([["setup", [completed("done", { output: "initial" })]]]));
@@ -1128,25 +1128,25 @@ describe("Scheduler — command step writes", () => {
 		scheduler.subscribe((e) => events.push(e));
 		const report = await scheduler.run();
 		expect(report.outcome).toBe("success");
-		const commandCommits = events.filter((e) => e.kind === "artifact_committed" && unwrap(e.writerStep) === "grade");
+		const commandCommits = events.filter((e) => e.type === "artifact_committed" && unwrap(e.writerStep) === "grade");
 		expect(commandCommits.length).toBe(0);
 	});
 
 	it("skips malformed JSON for record-shaped artifacts without failing the run", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Command writes invalid JSON for a record artifact.",
-			artifacts: [{ id: "result", description: "result", fields: ["score"] }],
+			artifacts: [{ name: "result", description: "result", fields: ["score"] }],
 			steps: [
 				{
-					kind: "command",
-					id: "grade",
+					type: "command",
+					name: "grade",
 					command:
 						"node -e \"require('fs').writeFileSync(require('path').join(process.env.RELAY_OUTPUT, 'result'), 'not json')\"",
 					writes: ["result"],
-					onSuccess: "done",
-					onFailure: "done",
+					on_success: "done",
+					on_failure: "done",
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
 			],
 		};
 		const engine = new ScriptedActorEngine(new Map());
@@ -1155,7 +1155,7 @@ describe("Scheduler — command step writes", () => {
 		scheduler.subscribe((e) => events.push(e));
 		const report = await scheduler.run();
 		expect(report.outcome).toBe("success");
-		const commits = events.filter((e) => e.kind === "artifact_committed");
+		const commits = events.filter((e) => e.type === "artifact_committed");
 		expect(commits.length).toBe(0);
 	});
 });
@@ -1164,25 +1164,25 @@ describe("Scheduler — verify reader write enforcement", () => {
 	it("retries when action routes to a verify reader without writing the required artifact", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Action must write before verify reads.",
-			artifacts: [{ id: "candidate", description: "c" }],
+			artifacts: [{ name: "candidate", description: "c" }],
 			steps: [
 				{
-					kind: "action",
-					id: "produce",
+					type: "action",
+					name: "produce",
 					actor: "worker",
 					instruction: "Write candidate.",
 					writes: ["candidate"],
 					routes: { done: "grade" },
 				},
 				{
-					kind: "command",
-					id: "grade",
+					type: "command",
+					name: "grade",
 					command: "echo $candidate",
 					reads: ["candidate"],
-					onSuccess: "done",
-					onFailure: "done",
+					on_success: "done",
+					on_failure: "done",
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
 			],
 		};
 		const engine = new ScriptedActorEngine(
@@ -1197,24 +1197,24 @@ describe("Scheduler — verify reader write enforcement", () => {
 	it("does not enforce when verify step has no reads", async () => {
 		const plan: PlanDraftDoc = {
 			task: "Action routes to verify without reads.",
-			artifacts: [{ id: "notes", description: "n" }],
+			artifacts: [{ name: "notes", description: "n" }],
 			steps: [
 				{
-					kind: "action",
-					id: "work",
+					type: "action",
+					name: "work",
 					actor: "worker",
 					instruction: "Work.",
 					writes: ["notes"],
 					routes: { done: "check" },
 				},
 				{
-					kind: "command",
-					id: "check",
+					type: "command",
+					name: "check",
 					command: 'node -e "process.exit(0)"',
-					onSuccess: "done",
-					onFailure: "done",
+					on_success: "done",
+					on_failure: "done",
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
 			],
 		};
 		const engine = new ScriptedActorEngine(new Map([["work", [completed("done")]]]));
@@ -1233,8 +1233,8 @@ describe("Scheduler — check result forwarding", () => {
 			artifacts: [],
 			steps: [
 				{
-					kind: "action",
-					id: "implement",
+					type: "action",
+					name: "implement",
 					actor: "worker",
 					instruction: "implement",
 					reads: [],
@@ -1242,24 +1242,24 @@ describe("Scheduler — check result forwarding", () => {
 					routes: { done: "verify" },
 				},
 				{
-					kind: "command",
-					id: "verify",
+					type: "command",
+					name: "verify",
 					command: 'node -e "process.exit(1)"',
-					onSuccess: "done",
-					onFailure: "fix",
+					on_success: "done",
+					on_failure: "fix",
 				},
 				{
-					kind: "action",
-					id: "fix",
+					type: "action",
+					name: "fix",
 					actor: "worker",
 					instruction: "fix the issue",
 					reads: [],
 					writes: [],
 					routes: { done: "done" },
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
 			],
-			entryStep: "implement",
+			entry_step: "implement",
 		};
 		const engine = new ScriptedActorEngine(
 			new Map([
@@ -1297,25 +1297,25 @@ describe("Scheduler — check result forwarding", () => {
 			artifacts: [],
 			steps: [
 				{
-					kind: "command",
-					id: "pre-check",
+					type: "command",
+					name: "pre-check",
 					command: 'node -e "process.exit(0)"',
-					onSuccess: "act",
-					onFailure: "fail",
+					on_success: "act",
+					on_failure: "fail",
 				},
 				{
-					kind: "action",
-					id: "act",
+					type: "action",
+					name: "act",
 					actor: "worker",
 					instruction: "do work",
 					reads: [],
 					writes: [],
 					routes: { done: "done" },
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
-				{ kind: "terminal", id: "fail", outcome: "failure", summary: "failed" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "fail", outcome: "failure", summary: "failed" },
 			],
-			entryStep: "pre-check",
+			entry_step: "pre-check",
 		};
 		const engine = new ScriptedActorEngine(
 			new Map([
@@ -1350,8 +1350,8 @@ describe("Scheduler — check result forwarding", () => {
 			artifacts: [],
 			steps: [
 				{
-					kind: "action",
-					id: "first",
+					type: "action",
+					name: "first",
 					actor: "worker",
 					instruction: "first",
 					reads: [],
@@ -1359,17 +1359,17 @@ describe("Scheduler — check result forwarding", () => {
 					routes: { done: "second" },
 				},
 				{
-					kind: "action",
-					id: "second",
+					type: "action",
+					name: "second",
 					actor: "worker",
 					instruction: "second",
 					reads: [],
 					writes: [],
 					routes: { done: "done" },
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
 			],
-			entryStep: "first",
+			entry_step: "first",
 		};
 		const engine = new ScriptedActorEngine(
 			new Map([

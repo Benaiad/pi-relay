@@ -7,14 +7,15 @@
  * primary instructional surface for how Relay should be used.
  *
  * The static type `PlanDraftDoc` is the "wire format" — plain strings for
- * identifiers. The compiler's job is to read a validated `PlanDraftDoc` and
- * produce a branded `PlanDraft` (see `types.ts`) with every identifier
- * checked against the plan's declared steps, actors, and artifacts.
+ * identifiers, snake_case field names. The compiler's job is to read a
+ * validated `PlanDraftDoc` and produce a branded `PlanDraft` (see `types.ts`)
+ * with every identifier checked against the plan's declared steps, actors,
+ * and artifacts.
  */
 
 import { type Static, Type } from "typebox";
 
-const IdField = (description: string) =>
+const NameField = (description: string) =>
 	Type.String({
 		description,
 		minLength: 1,
@@ -24,24 +25,22 @@ const IdField = (description: string) =>
 
 const ActionStepSchema = Type.Object(
 	{
-		kind: Type.Literal("action"),
-		id: IdField("Unique step identifier within this plan."),
-		actor: IdField(
-			"ActorId of the agent that will run this step. Must match an actor discovered in the relay-actors directory.",
-		),
+		type: Type.Literal("action"),
+		name: NameField("Unique step name within this plan."),
+		actor: NameField("Actor name — must match one of the available actors."),
 		instruction: Type.String({
 			minLength: 1,
 			maxLength: 8000,
 			description: "Task instruction handed to the actor, describing exactly what to do.",
 		}),
 		reads: Type.Optional(
-			Type.Array(IdField("An ArtifactId this actor may read."), {
+			Type.Array(NameField("An artifact name this step may read."), {
 				description:
 					"Artifacts visible to this step's actor in its input snapshot. Every read must have a writer. Defaults to none.",
 			}),
 		),
 		writes: Type.Optional(
-			Type.Array(IdField("An ArtifactId this step may commit."), {
+			Type.Array(NameField("An artifact name this step may commit."), {
 				description:
 					"Artifacts this step is allowed to produce. Each artifact has at most one writing step. Defaults to none.",
 			}),
@@ -52,15 +51,15 @@ const ActionStepSchema = Type.Object(
 				maxLength: 128,
 				pattern: "^[a-zA-Z0-9_.:-]+$",
 			}),
-			IdField("StepId the runtime transitions to when this route is emitted."),
+			NameField("Step name the runtime transitions to when this route is emitted."),
 			{
 				minProperties: 1,
 				description:
-					'Map of route names to target step IDs, e.g. { "done": "next-step", "failure": "handle-error" }. ' +
+					'Map of route names to target step names, e.g. { "done": "next-step", "failure": "handle-error" }. ' +
 					"The actor must emit exactly one of these route names on completion.",
 			},
 		),
-		maxRuns: Type.Optional(
+		max_runs: Type.Optional(
 			Type.Integer({
 				minimum: 1,
 				maximum: 10_000,
@@ -73,7 +72,7 @@ const ActionStepSchema = Type.Object(
 	},
 	{
 		description:
-			"An LLM-backed step. The 'routes' field is REQUIRED: a map of route names to target step IDs " +
+			"An LLM-backed step. The 'routes' field is REQUIRED: a map of route names to target step names " +
 			'(e.g. { "done": "next-step", "error": "handle-error" }). The actor emits exactly one of ' +
 			"the declared route names when it finishes, and the runtime transitions to that step.",
 	},
@@ -81,39 +80,39 @@ const ActionStepSchema = Type.Object(
 
 const CommandStepSchema = Type.Object(
 	{
-		kind: Type.Literal("command"),
-		id: IdField("Unique step identifier within this plan."),
+		type: Type.Literal("command"),
+		name: NameField("Unique step name within this plan."),
 		command: Type.String({
 			minLength: 1,
 			description: "Shell command to run, e.g. 'npm test' or 'cargo test && cargo clippy'. " + "Executed via bash.",
 		}),
 		reads: Type.Optional(
-			Type.Array(IdField("An artifact ID this command step may access."), {
+			Type.Array(NameField("An artifact name this command step may access."), {
 				description:
 					"Artifacts available as files in the $RELAY_INPUT directory. " +
-					"Read: cat $RELAY_INPUT/artifact_id. " +
+					"Read: cat $RELAY_INPUT/artifact_name. " +
 					"Format: plain text (no fields), JSON object (fields), JSON array (fields + list). " +
 					"Defaults to none.",
 			}),
 		),
 		writes: Type.Optional(
-			Type.Array(IdField("An artifact ID this command step may produce."), {
+			Type.Array(NameField("An artifact name this command step may produce."), {
 				description:
 					"Artifacts this step may write to the $RELAY_OUTPUT directory. " +
-					"Write: echo value > $RELAY_OUTPUT/artifact_id. " +
+					"Write: echo value > $RELAY_OUTPUT/artifact_name. " +
 					"Format: plain text (no fields), JSON object (fields), JSON array (fields + list). " +
 					"Both directories are created by the runtime — do NOT mkdir them. Defaults to none.",
 			}),
 		),
-		timeoutMs: Type.Optional(
+		timeout: Type.Optional(
 			Type.Integer({
-				minimum: 100,
-				maximum: 600_000,
-				description: "Timeout in milliseconds. Defaults to 600000 (10 minutes).",
+				minimum: 1,
+				maximum: 7200,
+				description: "Timeout in seconds. Defaults to 600 (10 minutes). Maximum 7200 (2 hours).",
 			}),
 		),
-		onSuccess: IdField("StepId transitioned to when the command exits 0."),
-		onFailure: IdField("StepId transitioned to when the command exits non-zero or times out."),
+		on_success: NameField("Step name to transition to when the command exits 0."),
+		on_failure: NameField("Step name to transition to when the command exits non-zero or times out."),
 	},
 	{
 		description:
@@ -125,8 +124,8 @@ const CommandStepSchema = Type.Object(
 
 const FilesExistStepSchema = Type.Object(
 	{
-		kind: Type.Literal("files_exist"),
-		id: IdField("Unique step identifier within this plan."),
+		type: Type.Literal("files_exist"),
+		name: NameField("Unique step name within this plan."),
 		paths: Type.Array(
 			Type.String({
 				minLength: 1,
@@ -137,8 +136,8 @@ const FilesExistStepSchema = Type.Object(
 				description: "Paths that must all exist for the check to pass. Failure reason lists which are missing.",
 			},
 		),
-		onSuccess: IdField("StepId transitioned to when all paths exist."),
-		onFailure: IdField("StepId transitioned to when one or more paths are missing."),
+		on_success: NameField("Step name to transition to when all paths exist."),
+		on_failure: NameField("Step name to transition to when one or more paths are missing."),
 	},
 	{
 		description:
@@ -149,8 +148,8 @@ const FilesExistStepSchema = Type.Object(
 
 const TerminalStepSchema = Type.Object(
 	{
-		kind: Type.Literal("terminal"),
-		id: IdField("Unique step identifier within this plan."),
+		type: Type.Literal("terminal"),
+		name: NameField("Unique step name within this plan."),
 		outcome: Type.Union([Type.Literal("success"), Type.Literal("failure")], {
 			description: "Whether reaching this terminal represents the plan succeeding or failing.",
 		}),
@@ -171,14 +170,14 @@ const StepSchema = Type.Union([ActionStepSchema, CommandStepSchema, FilesExistSt
 
 const ArtifactContractSchema = Type.Object(
 	{
-		id: IdField("Unique artifact identifier within this plan."),
+		name: NameField("Unique artifact name within this plan."),
 		description: Type.String({
 			minLength: 1,
 			maxLength: 1000,
 			description: "What this artifact represents, e.g. 'parsed requirements' or 'test output JSON'.",
 		}),
 		fields: Type.Optional(
-			Type.Array(IdField("A field name the artifact value must contain."), {
+			Type.Array(NameField("A field name the artifact value must contain."), {
 				minItems: 1,
 				description: "Named fields the artifact value must include. " + "Omit for plain text artifacts.",
 			}),
@@ -192,7 +191,7 @@ const ArtifactContractSchema = Type.Object(
 		),
 	},
 	{
-		description: "Compile-time declaration of an artifact's identity, description, and structure.",
+		description: "Compile-time declaration of an artifact's name, description, and structure.",
 	},
 );
 
@@ -203,7 +202,7 @@ export const PlanDraftSchema = Type.Object(
 			maxLength: 4000,
 			description: "Natural-language description of what this plan accomplishes.",
 		}),
-		successCriteria: Type.Optional(
+		success_criteria: Type.Optional(
 			Type.String({
 				maxLength: 2000,
 				description: "How success will be judged. Referenced by actors and reviewers as part of their context.",
@@ -220,7 +219,7 @@ export const PlanDraftSchema = Type.Object(
 			description:
 				"All steps in the plan. Must contain the entry step and at least one terminal step. Max 64 steps.",
 		}),
-		entryStep: Type.Optional(IdField("StepId where execution begins. Defaults to the first step in `steps`.")),
+		entry_step: Type.Optional(NameField("Step name where execution begins. Defaults to the first step in `steps`.")),
 	},
 	{
 		description:

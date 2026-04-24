@@ -13,13 +13,13 @@ const actors = {
 const planWithTwoWriters: PlanDraftDoc = {
 	task: "t",
 	artifacts: [
-		{ id: "a", description: "a", fields: ["value"] },
-		{ id: "b", description: "b" },
+		{ name: "a", description: "a", fields: ["value"] },
+		{ name: "b", description: "b" },
 	],
 	steps: [
 		{
-			kind: "action",
-			id: "first",
+			type: "action",
+			name: "first",
 			actor: "worker",
 			instruction: "first",
 			reads: [],
@@ -27,17 +27,17 @@ const planWithTwoWriters: PlanDraftDoc = {
 			routes: { next: "second" },
 		},
 		{
-			kind: "action",
-			id: "second",
+			type: "action",
+			name: "second",
 			actor: "worker",
 			instruction: "second",
 			reads: ["a"],
 			writes: ["b"],
 			routes: { done: "end" },
 		},
-		{ kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+		{ type: "terminal", name: "end", outcome: "success", summary: "ok" },
 	],
-	entryStep: "first",
+	entry_step: "first",
 };
 
 const buildStore = () => {
@@ -156,20 +156,20 @@ describe("ArtifactStore", () => {
 	it("accumulates values across multiple commits", () => {
 		const plan: PlanDraftDoc = {
 			task: "t",
-			artifacts: [{ id: "log", description: "log", fields: ["tried"] }],
+			artifacts: [{ name: "log", description: "log", fields: ["tried"] }],
 			steps: [
 				{
-					kind: "action",
-					id: "step",
+					type: "action",
+					name: "step",
 					actor: "worker",
 					instruction: "do",
 					reads: ["log"],
 					writes: ["log"],
 					routes: { done: "end" },
 				},
-				{ kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "end", outcome: "success", summary: "ok" },
 			],
-			entryStep: "step",
+			entry_step: "step",
 		};
 		const result = compile(plan, actors, { generateId: () => "pid" });
 		if (!isOk(result)) throw new Error("compile should succeed");
@@ -209,17 +209,17 @@ describe("ArtifactStore", () => {
 	it("text shape accepts string values", () => {
 		const plan: PlanDraftDoc = {
 			task: "t",
-			artifacts: [{ id: "a", description: "a" }],
+			artifacts: [{ name: "a", description: "a" }],
 			steps: [
 				{
-					kind: "action",
-					id: "s",
+					type: "action",
+					name: "s",
 					actor: "worker",
 					instruction: "do",
 					writes: ["a"],
 					routes: { done: "end" },
 				},
-				{ kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "end", outcome: "success", summary: "ok" },
 			],
 		};
 		const result = compile(plan, actors, { generateId: () => "pid" });
@@ -231,17 +231,17 @@ describe("ArtifactStore", () => {
 	it("text shape rejects non-string values", () => {
 		const plan: PlanDraftDoc = {
 			task: "t",
-			artifacts: [{ id: "a", description: "a" }],
+			artifacts: [{ name: "a", description: "a" }],
 			steps: [
 				{
-					kind: "action",
-					id: "s",
+					type: "action",
+					name: "s",
 					actor: "worker",
 					instruction: "do",
 					writes: ["a"],
 					routes: { done: "end" },
 				},
-				{ kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "end", outcome: "success", summary: "ok" },
 			],
 		};
 		const result = compile(plan, actors, { generateId: () => "pid" });
@@ -255,17 +255,17 @@ describe("ArtifactStore", () => {
 	it("record shape accepts object with all declared fields", () => {
 		const plan: PlanDraftDoc = {
 			task: "t",
-			artifacts: [{ id: "a", description: "a", fields: ["x", "y"] }],
+			artifacts: [{ name: "a", description: "a", fields: ["x", "y"] }],
 			steps: [
 				{
-					kind: "action",
-					id: "s",
+					type: "action",
+					name: "s",
 					actor: "worker",
 					instruction: "do",
 					writes: ["a"],
 					routes: { done: "end" },
 				},
-				{ kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "end", outcome: "success", summary: "ok" },
 			],
 		};
 		const result = compile(plan, actors, { generateId: () => "pid" });
@@ -277,17 +277,17 @@ describe("ArtifactStore", () => {
 	it("record shape permits extra fields", () => {
 		const plan: PlanDraftDoc = {
 			task: "t",
-			artifacts: [{ id: "a", description: "a", fields: ["x"] }],
+			artifacts: [{ name: "a", description: "a", fields: ["x"] }],
 			steps: [
 				{
-					kind: "action",
-					id: "s",
+					type: "action",
+					name: "s",
 					actor: "worker",
 					instruction: "do",
 					writes: ["a"],
 					routes: { done: "end" },
 				},
-				{ kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "end", outcome: "success", summary: "ok" },
 			],
 		};
 		const result = compile(plan, actors, { generateId: () => "pid" });
@@ -299,17 +299,17 @@ describe("ArtifactStore", () => {
 	it("record shape rejects object missing a field", () => {
 		const plan: PlanDraftDoc = {
 			task: "t",
-			artifacts: [{ id: "a", description: "a", fields: ["x", "y"] }],
+			artifacts: [{ name: "a", description: "a", fields: ["x", "y"] }],
 			steps: [
 				{
-					kind: "action",
-					id: "s",
+					type: "action",
+					name: "s",
 					actor: "worker",
 					instruction: "do",
 					writes: ["a"],
 					routes: { done: "end" },
 				},
-				{ kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "end", outcome: "success", summary: "ok" },
 			],
 		};
 		const result = compile(plan, actors, { generateId: () => "pid" });
@@ -323,17 +323,17 @@ describe("ArtifactStore", () => {
 	it("record_list shape accepts array of conforming objects", () => {
 		const plan: PlanDraftDoc = {
 			task: "t",
-			artifacts: [{ id: "a", description: "a", fields: ["f"], list: true }],
+			artifacts: [{ name: "a", description: "a", fields: ["f"], list: true }],
 			steps: [
 				{
-					kind: "action",
-					id: "s",
+					type: "action",
+					name: "s",
 					actor: "worker",
 					instruction: "do",
 					writes: ["a"],
 					routes: { done: "end" },
 				},
-				{ kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "end", outcome: "success", summary: "ok" },
 			],
 		};
 		const result = compile(plan, actors, { generateId: () => "pid" });
@@ -345,17 +345,17 @@ describe("ArtifactStore", () => {
 	it("record_list shape accepts empty array", () => {
 		const plan: PlanDraftDoc = {
 			task: "t",
-			artifacts: [{ id: "a", description: "a", fields: ["f"], list: true }],
+			artifacts: [{ name: "a", description: "a", fields: ["f"], list: true }],
 			steps: [
 				{
-					kind: "action",
-					id: "s",
+					type: "action",
+					name: "s",
 					actor: "worker",
 					instruction: "do",
 					writes: ["a"],
 					routes: { done: "end" },
 				},
-				{ kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "end", outcome: "success", summary: "ok" },
 			],
 		};
 		const result = compile(plan, actors, { generateId: () => "pid" });
@@ -367,17 +367,17 @@ describe("ArtifactStore", () => {
 	it("record_list shape rejects element missing a field", () => {
 		const plan: PlanDraftDoc = {
 			task: "t",
-			artifacts: [{ id: "a", description: "a", fields: ["f", "g"], list: true }],
+			artifacts: [{ name: "a", description: "a", fields: ["f", "g"], list: true }],
 			steps: [
 				{
-					kind: "action",
-					id: "s",
+					type: "action",
+					name: "s",
 					actor: "worker",
 					instruction: "do",
 					writes: ["a"],
 					routes: { done: "end" },
 				},
-				{ kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "end", outcome: "success", summary: "ok" },
 			],
 		};
 		const result = compile(plan, actors, { generateId: () => "pid" });
@@ -397,17 +397,17 @@ describe("ArtifactStore", () => {
 	it("record_list shape rejects non-array value", () => {
 		const plan: PlanDraftDoc = {
 			task: "t",
-			artifacts: [{ id: "a", description: "a", fields: ["f"], list: true }],
+			artifacts: [{ name: "a", description: "a", fields: ["f"], list: true }],
 			steps: [
 				{
-					kind: "action",
-					id: "s",
+					type: "action",
+					name: "s",
 					actor: "worker",
 					instruction: "do",
 					writes: ["a"],
 					routes: { done: "end" },
 				},
-				{ kind: "terminal", id: "end", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "end", outcome: "success", summary: "ok" },
 			],
 		};
 		const result = compile(plan, actors, { generateId: () => "pid" });

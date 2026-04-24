@@ -14,7 +14,7 @@ parameters:
 ---
 
 task: "{{task}}"
-successCriteria: "{{criteria}}"
+success_criteria: "{{criteria}}"
 artifacts:
   - id: notes
     description: Implementation and fix notes from the worker.
@@ -27,16 +27,16 @@ artifacts:
     fields: [approved, issues, fixes]
 
 steps:
-  - kind: action
-    id: implement
+  - type: action
+    name: implement
     actor: worker
     instruction: |
       {{task}}
       Write a summary of your changes to the notes artifact.
     writes: [notes]
     routes: { done: spec_review }
-  - kind: action
-    id: spec_review
+  - type: action
+    name: spec_review
     actor: reviewer
     instruction: |
       Review the implementation for spec compliance only.
@@ -55,8 +55,8 @@ steps:
     routes:
       approved: quality_review
       changes_requested: fix
-  - kind: action
-    id: quality_review
+  - type: action
+    name: quality_review
     actor: reviewer
     instruction: |
       Review the implementation for code quality only.
@@ -78,8 +78,8 @@ steps:
     routes:
       approved: verify
       changes_requested: fix
-  - kind: action
-    id: fix
+  - type: action
+    name: fix
     actor: worker
     instruction: |
       Read the spec_verdict and quality_verdict artifacts.
@@ -88,16 +88,16 @@ steps:
     reads: [spec_verdict, quality_verdict]
     writes: [notes]
     routes: { done: spec_review }
-  - kind: command
-    id: verify
+  - type: command
+    name: verify
     command: "{{verify}}"
-    onSuccess: done
-    onFailure: failed
-  - kind: terminal
-    id: done
+    on_success: done
+    on_failure: failed
+  - type: terminal
+    name: done
     outcome: success
     summary: "Implemented, reviewed (spec + quality), and verified."
-  - kind: terminal
-    id: failed
+  - type: terminal
+    name: failed
     outcome: failure
     summary: Verification failed after review approval.

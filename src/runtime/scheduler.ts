@@ -12,7 +12,7 @@
  *   1. Seed the ready queue with the program's entry step.
  *   2. While the queue is non-empty and not aborted:
  *      a. Pop the next step.
- *      b. Dispatch by kind. Action → actor engine. Command → check engine.
+ *      b. Dispatch by type. Action → actor engine. Command → check engine.
  *         Terminal → emit `terminal_reached` and stop.
  *      c. On action failure (`no_completion` or `engine_error`), retry
  *         implicitly up to 3 times before following the failure route.
@@ -68,7 +68,7 @@ const IMPLICIT_RETRY_ATTEMPTS = 3;
 const MAX_CHECK_DISPLAY_BUFFER = 32 * 1024;
 
 const describeCommandStep = (step: CommandStep | FilesExistStep): string => {
-	switch (step.kind) {
+	switch (step.type) {
 		case "command":
 			return `command: ${step.command}`;
 		case "files_exist":
@@ -223,7 +223,7 @@ export class Scheduler {
 		this.hasRun = true;
 
 		this.emit({
-			kind: "run_started",
+			type: "run_started",
 			at: this.clock(),
 			planId: this.program.id,
 		});
@@ -231,7 +231,7 @@ export class Scheduler {
 
 		while (this.readyQueue.length > 0) {
 			if (this.signal?.aborted) {
-				this.emit({ kind: "run_aborted", at: this.clock() });
+				this.emit({ type: "run_aborted", at: this.clock() });
 				break;
 			}
 
@@ -243,7 +243,7 @@ export class Scheduler {
 				return buildRunReport(this.state, this.audit);
 			}
 
-			const maxRuns = (step.kind === "action" ? step.maxRuns : undefined) ?? DEFAULT_MAX_RUNS;
+			const maxRuns = (step.type === "action" ? step.maxRuns : undefined) ?? DEFAULT_MAX_RUNS;
 			const priorAttempts = this.state.steps.get(nextId)?.attempts ?? 0;
 			if (priorAttempts >= maxRuns) {
 				this.finishWith(
@@ -294,12 +294,12 @@ export class Scheduler {
 	}
 
 	private enqueueReady(stepId: StepId): void {
-		this.emit({ kind: "step_ready", at: this.clock(), stepId });
+		this.emit({ type: "step_ready", at: this.clock(), stepId });
 		this.readyQueue.push(stepId);
 	}
 
 	private finishWith(phase: RunPhase, summary: string): void {
-		this.emit({ kind: "run_finished", at: this.clock(), phase, summary });
+		this.emit({ type: "run_finished", at: this.clock(), phase, summary });
 	}
 
 	// ==========================================================================
@@ -307,7 +307,7 @@ export class Scheduler {
 	// ==========================================================================
 
 	private async executeStep(step: Step): Promise<void> {
-		switch (step.kind) {
+		switch (step.type) {
 			case "action":
 				await this.executeAction(step);
 				return;
@@ -327,9 +327,9 @@ export class Scheduler {
 		const actor = this.actorsByName.get(step.actor);
 		if (!actor) {
 			this.emit({
-				kind: "step_failed",
+				type: "step_failed",
 				at: this.clock(),
-				stepId: step.id,
+				stepId: step.name,
 				reason: `actor '${unwrap(step.actor)}' not found at runtime`,
 			});
 			this.followFailureOrTerminal(step, `actor '${unwrap(step.actor)}' not found`);
@@ -340,14 +340,14 @@ export class Scheduler {
 		// pass to the actor contains only completed prior attempts — not the
 		// one we're about to start. The audit log is the source of truth here
 		// because the run state resets transcripts on re-entry.
-		const priorAttemptHistory = buildAttemptHistories(this.audit.entries(), this.program).get(step.id) ?? [];
+		const priorAttemptHistory = buildAttemptHistories(this.audit.entries(), this.program).get(step.name) ?? [];
 		const priorAttempts = priorAttemptHistory.map((entry): PriorAttempt => summarizePriorAttempt(entry));
 
-		const attempt = (this.state.steps.get(step.id)?.attempts ?? 0) + 1;
+		const attempt = (this.state.steps.get(step.name)?.attempts ?? 0) + 1;
 		this.emit({
-			kind: "step_started",
+			type: "step_started",
 			at: this.clock(),
-			stepId: step.id,
+			stepId: step.name,
 			attempt,
 		});
 
@@ -366,13 +366,13 @@ export class Scheduler {
 			priorCheckResult,
 			stepActorResolver: (sid) => {
 				const s = this.program.steps.get(sid);
-				return s?.kind === "action" ? unwrap(s.actor) : undefined;
+				return s?.type === "action" ? unwrap(s.actor) : undefined;
 			},
 			onProgress: (progress) => {
 				this.emit({
-					kind: "action_progress",
+					type: "action_progress",
 					at: this.clock(),
-					stepId: step.id,
+					stepId: step.name,
 					item: progress.item,
 					usage: progress.usage,
 				});
@@ -398,9 +398,9 @@ export class Scheduler {
 				return;
 			case "no_completion":
 				this.emit({
-					kind: "action_no_completion",
+					type: "action_no_completion",
 					at: this.clock(),
-					stepId: step.id,
+					stepId: step.name,
 					reason: outcome.reason,
 					usage: outcome.usage,
 				});
@@ -408,16 +408,16 @@ export class Scheduler {
 				return;
 			case "engine_error":
 				this.emit({
-					kind: "action_engine_error",
+					type: "action_engine_error",
 					at: this.clock(),
-					stepId: step.id,
+					stepId: step.name,
 					reason: outcome.reason,
 					usage: outcome.usage,
 				});
 				this.applyRetryOrFail(step, outcome.reason);
 				return;
 			case "aborted":
-				this.emit({ kind: "run_aborted", at: this.clock() });
+				this.emit({ type: "run_aborted", at: this.clock() });
 				return;
 		}
 	}
@@ -429,13 +429,13 @@ export class Scheduler {
 		writes: ReadonlyMap<ArtifactId, unknown>,
 		usage: ActorUsage,
 	): void {
-		const currentAttempt = this.state.steps.get(step.id)?.attempts ?? 1;
-		const commitResult = this.artifactStore.commit(step.id, writes, currentAttempt);
+		const currentAttempt = this.state.steps.get(step.name)?.attempts ?? 1;
+		const commitResult = this.artifactStore.commit(step.name, writes, currentAttempt);
 		if (!commitResult.ok) {
 			this.emit({
-				kind: "artifact_rejected",
+				type: "artifact_rejected",
 				at: this.clock(),
-				stepId: step.id,
+				stepId: step.name,
 				violation: commitResult.error,
 			});
 			this.applyRetryOrFail(step, `artifact commit rejected: ${commitResult.error.kind}`);
@@ -443,17 +443,17 @@ export class Scheduler {
 		}
 		for (const artifactId of writes.keys()) {
 			this.emit({
-				kind: "artifact_committed",
+				type: "artifact_committed",
 				at: this.clock(),
 				artifactId,
-				writerStep: step.id,
+				writerStep: step.name,
 			});
 		}
-		const targetId = this.program.edges.get(edgeKey(step.id, route));
+		const targetId = this.program.edges.get(edgeKey(step.name, route));
 		if (targetId) {
 			const targetStep = this.program.steps.get(targetId);
 			const targetReads =
-				targetStep?.kind === "action" || targetStep?.kind === "command" ? targetStep.reads : undefined;
+				targetStep?.type === "action" || targetStep?.type === "command" ? targetStep.reads : undefined;
 			if (targetReads && targetReads.length > 0) {
 				const missingForTarget = targetReads.filter(
 					(readId) => step.writes.includes(readId) && !writes.has(readId),
@@ -470,37 +470,37 @@ export class Scheduler {
 		}
 
 		this.emit({
-			kind: "action_completed",
+			type: "action_completed",
 			at: this.clock(),
-			stepId: step.id,
+			stepId: step.name,
 			route,
 			assistant_summary,
 			usage,
 		});
-		this.followRoute(step.id, route);
+		this.followRoute(step.name, route);
 	}
 
 	private async executeCommand(step: CommandStep): Promise<void> {
-		const attempt = (this.state.steps.get(step.id)?.attempts ?? 0) + 1;
+		const attempt = (this.state.steps.get(step.name)?.attempts ?? 0) + 1;
 		this.emit({
-			kind: "step_started",
+			type: "step_started",
 			at: this.clock(),
-			stepId: step.id,
+			stepId: step.name,
 			attempt,
 		});
 
-		this.checkOutputChunks.set(step.id, []);
-		this.checkOutputLens.set(step.id, 0);
+		this.checkOutputChunks.set(step.name, []);
+		this.checkOutputLens.set(step.name, 0);
 
 		const onOutput = (text: string) => {
-			const chunks = this.checkOutputChunks.get(step.id);
+			const chunks = this.checkOutputChunks.get(step.name);
 			if (!chunks) return;
 			chunks.push(text);
-			let len = (this.checkOutputLens.get(step.id) ?? 0) + text.length;
+			let len = (this.checkOutputLens.get(step.name) ?? 0) + text.length;
 			while (len > MAX_CHECK_DISPLAY_BUFFER && chunks.length > 1) {
 				len -= chunks.shift()!.length;
 			}
-			this.checkOutputLens.set(step.id, len);
+			this.checkOutputLens.set(step.name, len);
 			this.notifyOutputHandlers();
 		};
 
@@ -519,8 +519,8 @@ export class Scheduler {
 				{ cwd: this.cwd, signal: this.signal, env, ops: this.ops },
 				onOutput,
 			);
-			this.checkOutputChunks.delete(step.id);
-			this.checkOutputLens.delete(step.id);
+			this.checkOutputChunks.delete(step.name);
+			this.checkOutputLens.delete(step.name);
 
 			if (outputDir) {
 				await this.commitCommandWrites(step, outputDir, attempt);
@@ -528,36 +528,36 @@ export class Scheduler {
 
 			const description = describeCommandStep(step);
 
-			if (outcome.kind === "pass") {
+			if (outcome.type === "pass") {
 				this.lastCheckResult = {
-					stepId: step.id,
+					stepId: step.name,
 					outcome: "passed",
 					description,
 				};
 				this.emit({
-					kind: "check_passed",
+					type: "check_passed",
 					at: this.clock(),
-					stepId: step.id,
+					stepId: step.name,
 					exitCode: outcome.exitCode,
 					output: outcome.output,
 				});
-				this.followRoute(step.id, makeRouteId("success"));
+				this.followRoute(step.name, makeRouteId("success"));
 			} else {
 				const reason = outcome.reason ?? `exited with code ${outcome.exitCode ?? "unknown"}`;
 				this.lastCheckResult = {
-					stepId: step.id,
+					stepId: step.name,
 					outcome: "failed",
 					description,
 				};
 				this.emit({
-					kind: "check_failed",
+					type: "check_failed",
 					at: this.clock(),
-					stepId: step.id,
+					stepId: step.name,
 					exitCode: outcome.exitCode,
 					output: outcome.output,
 					reason,
 				});
-				this.followRoute(step.id, makeRouteId("failure"));
+				this.followRoute(step.name, makeRouteId("failure"));
 			}
 		} finally {
 			if (inputDir) await rm(inputDir, { recursive: true, force: true }).catch(() => {});
@@ -588,39 +588,39 @@ export class Scheduler {
 				continue;
 			}
 
-			const value = parseCommandOutput(raw, contract.shape.kind);
+			const value = parseCommandOutput(raw, contract.shape.type);
 			if (value === undefined) continue;
 			writes.set(artifactId, value);
 		}
 
 		if (writes.size === 0) return;
 
-		const commitResult = this.artifactStore.commit(step.id, writes, attempt);
+		const commitResult = this.artifactStore.commit(step.name, writes, attempt);
 		if (!commitResult.ok) {
 			this.emit({
-				kind: "artifact_rejected",
+				type: "artifact_rejected",
 				at: this.clock(),
-				stepId: step.id,
+				stepId: step.name,
 				violation: commitResult.error,
 			});
 			return;
 		}
 		for (const artifactId of writes.keys()) {
 			this.emit({
-				kind: "artifact_committed",
+				type: "artifact_committed",
 				at: this.clock(),
 				artifactId,
-				writerStep: step.id,
+				writerStep: step.name,
 			});
 		}
 	}
 
 	private async executeFilesExist(step: FilesExistStep): Promise<void> {
-		const attempt = (this.state.steps.get(step.id)?.attempts ?? 0) + 1;
+		const attempt = (this.state.steps.get(step.name)?.attempts ?? 0) + 1;
 		this.emit({
-			kind: "step_started",
+			type: "step_started",
 			at: this.clock(),
-			stepId: step.id,
+			stepId: step.name,
 			attempt,
 		});
 
@@ -631,43 +631,43 @@ export class Scheduler {
 		});
 		const description = describeCommandStep(step);
 
-		if (outcome.kind === "pass") {
+		if (outcome.type === "pass") {
 			this.lastCheckResult = {
-				stepId: step.id,
+				stepId: step.name,
 				outcome: "passed",
 				description,
 			};
 			this.emit({
-				kind: "check_passed",
+				type: "check_passed",
 				at: this.clock(),
-				stepId: step.id,
+				stepId: step.name,
 				exitCode: null,
 				output: "",
 			});
-			this.followRoute(step.id, makeRouteId("success"));
+			this.followRoute(step.name, makeRouteId("success"));
 		} else {
 			this.lastCheckResult = {
-				stepId: step.id,
+				stepId: step.name,
 				outcome: "failed",
 				description,
 			};
 			this.emit({
-				kind: "check_failed",
+				type: "check_failed",
 				at: this.clock(),
-				stepId: step.id,
+				stepId: step.name,
 				exitCode: null,
 				output: "",
 				reason: outcome.reason ?? "check failed",
 			});
-			this.followRoute(step.id, makeRouteId("failure"));
+			this.followRoute(step.name, makeRouteId("failure"));
 		}
 	}
 
 	private executeTerminal(step: TerminalStep): void {
 		this.emit({
-			kind: "terminal_reached",
+			type: "terminal_reached",
 			at: this.clock(),
-			stepId: step.id,
+			stepId: step.name,
 			outcome: step.outcome,
 			summary: step.summary,
 		});
@@ -679,24 +679,24 @@ export class Scheduler {
 	// ==========================================================================
 
 	private applyRetryOrFail(step: ActionStep, reason: string): void {
-		const runtime = this.state.steps.get(step.id);
+		const runtime = this.state.steps.get(step.name);
 		const attempts = runtime?.attempts ?? 1;
 		const maxAttempts = IMPLICIT_RETRY_ATTEMPTS;
 		if (attempts < maxAttempts) {
 			this.emit({
-				kind: "step_retry_scheduled",
+				type: "step_retry_scheduled",
 				at: this.clock(),
-				stepId: step.id,
+				stepId: step.name,
 				nextAttempt: attempts + 1,
 				reason,
 			});
-			this.readyQueue.unshift(step.id);
+			this.readyQueue.unshift(step.name);
 			return;
 		}
 		this.emit({
-			kind: "step_failed",
+			type: "step_failed",
 			at: this.clock(),
-			stepId: step.id,
+			stepId: step.name,
 			reason,
 		});
 		this.followFailureOrTerminal(step, `${SYNTHETIC_FAILURE_REASON_PREFIX}${reason}`);
@@ -705,9 +705,9 @@ export class Scheduler {
 	private followFailureOrTerminal(step: ActionStep, reason: string): void {
 		for (const candidate of FAILURE_ROUTE_CANDIDATES) {
 			const routeId = makeRouteId(candidate);
-			const target = this.program.edges.get(edgeKey(step.id, routeId));
+			const target = this.program.edges.get(edgeKey(step.name, routeId));
 			if (target !== undefined) {
-				this.followRoute(step.id, routeId);
+				this.followRoute(step.name, routeId);
 				return;
 			}
 		}
@@ -774,7 +774,7 @@ const serializeForFile = (value: unknown): string => {
 	return JSON.stringify(value);
 };
 
-const parseCommandOutput = (raw: string, shapeKind: ArtifactShape["kind"]): unknown | undefined => {
+const parseCommandOutput = (raw: string, shapeKind: ArtifactShape["type"]): unknown | undefined => {
 	if (shapeKind === "text") return raw;
 	try {
 		return JSON.parse(raw);

@@ -11,7 +11,7 @@ parameters:
 ---
 
 task: "Fix: {{bug}}"
-successCriteria: "Verification passes and the root cause is documented."
+success_criteria: "Verification passes and the root cause is documented."
 artifacts:
   - id: diagnosis
     description: "Root cause analysis: what's wrong, where, and the minimal fix."
@@ -21,8 +21,8 @@ artifacts:
     description: What was changed to fix the bug.
 
 steps:
-  - kind: action
-    id: diagnose
+  - type: action
+    name: diagnose
     actor: worker
     instruction: |
       Investigate this bug:
@@ -41,8 +41,8 @@ steps:
     routes:
       found: fix
       clean: not_a_bug
-  - kind: action
-    id: fix
+  - type: action
+    name: fix
     actor: worker
     instruction: |
       Read the diagnosis artifact and apply the fix it describes.
@@ -52,20 +52,20 @@ steps:
     reads: [diagnosis]
     writes: [fix_notes]
     routes: { done: verify }
-  - kind: command
-    id: verify
+  - type: command
+    name: verify
     command: "{{verify}}"
-    onSuccess: done
-    onFailure: failed
-  - kind: terminal
-    id: done
+    on_success: done
+    on_failure: failed
+  - type: terminal
+    name: done
     outcome: success
     summary: Bug fixed and verified.
-  - kind: terminal
-    id: not_a_bug
+  - type: terminal
+    name: not_a_bug
     outcome: success
     summary: Investigation found no bug — the reported behavior is not a defect.
-  - kind: terminal
-    id: failed
+  - type: terminal
+    name: failed
     outcome: failure
     summary: Verification failed after fix attempt.

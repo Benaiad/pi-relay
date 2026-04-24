@@ -19,9 +19,9 @@ describe("buildTaskPrompt", () => {
 		[
 			ArtifactId("spec"),
 			{
-				id: ArtifactId("spec"),
+				name: ArtifactId("spec"),
 				description: "Parsed requirements",
-				shape: { kind: "text" },
+				shape: { type: "text" },
 			},
 		],
 	]);

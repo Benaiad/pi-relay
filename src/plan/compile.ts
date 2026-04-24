@@ -12,7 +12,7 @@
  *
  * The compiler DOES enforce:
  *   - At least one step
- *   - Unique step ids
+ *   - Unique step names
  *   - Entry step is defined
  *   - Every actor reference resolves against the supplied registry
  *   - Every route target resolves to a real step
@@ -51,28 +51,28 @@ export const compile = (
 	options: CompileOptions = {},
 ): Result<Program, CompileError> => {
 	if (doc.steps.length === 0) {
-		return err({ kind: "empty_plan" });
+		return err({ type: "empty_plan" });
 	}
 
 	const stepsResult = brandSteps(doc);
 	if (!stepsResult.ok) return stepsResult;
 	const { steps: stepsById, stepOrder } = stepsResult.value;
 
-	const hasTerminal = stepOrder.some((id) => stepsById.get(id)?.kind === "terminal");
+	const hasTerminal = stepOrder.some((id) => stepsById.get(id)?.type === "terminal");
 	if (!hasTerminal) {
-		return err({ kind: "no_terminal" });
+		return err({ type: "no_terminal" });
 	}
 
-	const entryStep = doc.entryStep ? StepId(doc.entryStep) : stepOrder[0]!;
+	const entryStep = doc.entry_step ? StepId(doc.entry_step) : stepOrder[0]!;
 	if (!stepsById.has(entryStep)) {
 		return err({
-			kind: "missing_entry",
+			type: "missing_entry",
 			entryStep,
 			availableSteps: stepOrder,
 		});
 	}
-	if (stepsById.get(entryStep)?.kind === "terminal") {
-		return err({ kind: "terminal_entry", entryStep });
+	if (stepsById.get(entryStep)?.type === "terminal") {
+		return err({ type: "terminal_entry", entryStep });
 	}
 
 	const actorCheck = validateActors(stepsById, actors);
@@ -91,7 +91,7 @@ export const compile = (
 	const program: Program = {
 		id: PlanId(generateId()),
 		task: doc.task,
-		successCriteria: doc.successCriteria,
+		successCriteria: doc.success_criteria,
 		entryStep,
 		steps: stepsById,
 		stepOrder,
@@ -120,17 +120,17 @@ const brandSteps = (doc: PlanDraftDoc): Result<BrandedStepsResult, CompileError>
 
 	for (const stepDoc of doc.steps) {
 		const step = brandStep(stepDoc);
-		if (stepsById.has(step.id)) {
-			return err({ kind: "duplicate_step", stepId: step.id });
+		if (stepsById.has(step.name)) {
+			return err({ type: "duplicate_step", stepId: step.name });
 		}
-		stepsById.set(step.id, step);
-		stepOrder.push(step.id);
+		stepsById.set(step.name, step);
+		stepOrder.push(step.name);
 	}
 	return ok({ steps: stepsById, stepOrder });
 };
 
 const brandStep = (doc: PlanDraftDoc["steps"][number]): Step => {
-	switch (doc.kind) {
+	switch (doc.type) {
 		case "action":
 			return brandAction(doc);
 		case "command":
@@ -142,39 +142,39 @@ const brandStep = (doc: PlanDraftDoc["steps"][number]): Step => {
 	}
 };
 
-const brandAction = (doc: Extract<PlanDraftDoc["steps"][number], { kind: "action" }>): ActionStep => ({
-	kind: "action",
-	id: StepId(doc.id),
+const brandAction = (doc: Extract<PlanDraftDoc["steps"][number], { type: "action" }>): ActionStep => ({
+	type: "action",
+	name: StepId(doc.name),
 	actor: ActorId(doc.actor),
 	instruction: doc.instruction,
 	reads: (doc.reads ?? []).map((r) => ArtifactId(r)),
 	writes: (doc.writes ?? []).map((w) => ArtifactId(w)),
 	routes: new Map(Object.entries(doc.routes).map(([route, to]) => [RouteId(route), StepId(to)])),
-	maxRuns: doc.maxRuns,
+	maxRuns: doc.max_runs,
 });
 
-const brandCommand = (doc: Extract<PlanDraftDoc["steps"][number], { kind: "command" }>): CommandStep => ({
-	kind: "command",
-	id: StepId(doc.id),
+const brandCommand = (doc: Extract<PlanDraftDoc["steps"][number], { type: "command" }>): CommandStep => ({
+	type: "command",
+	name: StepId(doc.name),
 	command: doc.command,
 	reads: (doc.reads ?? []).map((r) => ArtifactId(r)),
 	writes: (doc.writes ?? []).map((w) => ArtifactId(w)),
-	timeoutMs: doc.timeoutMs,
-	onSuccess: StepId(doc.onSuccess),
-	onFailure: StepId(doc.onFailure),
+	timeout: doc.timeout,
+	onSuccess: StepId(doc.on_success),
+	onFailure: StepId(doc.on_failure),
 });
 
-const brandFilesExist = (doc: Extract<PlanDraftDoc["steps"][number], { kind: "files_exist" }>): FilesExistStep => ({
-	kind: "files_exist",
-	id: StepId(doc.id),
+const brandFilesExist = (doc: Extract<PlanDraftDoc["steps"][number], { type: "files_exist" }>): FilesExistStep => ({
+	type: "files_exist",
+	name: StepId(doc.name),
 	paths: doc.paths,
-	onSuccess: StepId(doc.onSuccess),
-	onFailure: StepId(doc.onFailure),
+	onSuccess: StepId(doc.on_success),
+	onFailure: StepId(doc.on_failure),
 });
 
-const brandTerminal = (doc: Extract<PlanDraftDoc["steps"][number], { kind: "terminal" }>): TerminalStep => ({
-	kind: "terminal",
-	id: StepId(doc.id),
+const brandTerminal = (doc: Extract<PlanDraftDoc["steps"][number], { type: "terminal" }>): TerminalStep => ({
+	type: "terminal",
+	name: StepId(doc.name),
 	outcome: doc.outcome,
 	summary: doc.summary,
 });
@@ -185,11 +185,11 @@ const validateActors = (
 ): Result<ReadonlySet<ActorId>, CompileError> => {
 	const referenced = new Set<ActorId>();
 	for (const step of steps.values()) {
-		if (step.kind !== "action") continue;
+		if (step.type !== "action") continue;
 		if (!actors.has(step.actor)) {
 			return err({
-				kind: "missing_actor",
-				stepId: step.id,
+				type: "missing_actor",
+				stepId: step.name,
 				actor: step.actor,
 				availableActors: actors.names(),
 			});
@@ -209,19 +209,19 @@ const buildEdges = (
 	const edges = new Map<EdgeKey, StepId>();
 
 	for (const step of steps.values()) {
-		switch (step.kind) {
+		switch (step.type) {
 			case "action":
 				for (const [route, target] of step.routes) {
 					if (!steps.has(target)) {
 						return err({
-							kind: "missing_route_target",
-							from: step.id,
+							type: "missing_route_target",
+							from: step.name,
 							route,
 							target,
 							availableSteps: stepOrder,
 						});
 					}
-					edges.set(edgeKey(step.id, route), target);
+					edges.set(edgeKey(step.name, route), target);
 				}
 				break;
 
@@ -229,8 +229,8 @@ const buildEdges = (
 			case "files_exist":
 				if (!steps.has(step.onSuccess)) {
 					return err({
-						kind: "missing_route_target",
-						from: step.id,
+						type: "missing_route_target",
+						from: step.name,
 						route: SUCCESS_ROUTE,
 						target: step.onSuccess,
 						availableSteps: stepOrder,
@@ -238,15 +238,15 @@ const buildEdges = (
 				}
 				if (!steps.has(step.onFailure)) {
 					return err({
-						kind: "missing_route_target",
-						from: step.id,
+						type: "missing_route_target",
+						from: step.name,
 						route: FAILURE_ROUTE,
 						target: step.onFailure,
 						availableSteps: stepOrder,
 					});
 				}
-				edges.set(edgeKey(step.id, SUCCESS_ROUTE), step.onSuccess);
-				edges.set(edgeKey(step.id, FAILURE_ROUTE), step.onFailure);
+				edges.set(edgeKey(step.name, SUCCESS_ROUTE), step.onSuccess);
+				edges.set(edgeKey(step.name, FAILURE_ROUTE), step.onFailure);
 				break;
 
 			case "terminal":
@@ -269,17 +269,17 @@ const buildArtifacts = (
 ): Result<ArtifactIndices, CompileError> => {
 	const artifacts = new Map<ArtifactId, ArtifactContract>();
 	for (const c of contracts) {
-		const id = ArtifactId(c.id);
-		if (artifacts.has(id)) {
-			return err({ kind: "duplicate_artifact", artifactId: id });
+		const name = ArtifactId(c.name);
+		if (artifacts.has(name)) {
+			return err({ type: "duplicate_artifact", artifactId: name });
 		}
 		const shape = c.fields
 			? c.list
-				? { kind: "record_list" as const, fields: c.fields }
-				: { kind: "record" as const, fields: c.fields }
-			: { kind: "text" as const };
+				? { type: "record_list" as const, fields: c.fields }
+				: { type: "record" as const, fields: c.fields }
+			: { type: "text" as const };
 
-		artifacts.set(id, { id, description: c.description, shape });
+		artifacts.set(name, { name, description: c.description, shape });
 	}
 
 	const writers = new Map<ArtifactId, StepId>();
@@ -287,43 +287,43 @@ const buildArtifacts = (
 	const readers = new Map<ArtifactId, Set<StepId>>();
 
 	for (const step of steps.values()) {
-		if (step.kind !== "action" && step.kind !== "command") continue;
+		if (step.type !== "action" && step.type !== "command") continue;
 
 		for (const writeId of step.writes) {
 			const contract = artifacts.get(writeId);
 			if (contract === undefined) {
 				return err({
-					kind: "missing_artifact_contract",
+					type: "missing_artifact_contract",
 					artifactId: writeId,
-					stepId: step.id,
+					stepId: step.name,
 					direction: "write",
 				});
 			}
 			const prior = writers.get(writeId);
-			if (prior === undefined) writers.set(writeId, step.id);
+			if (prior === undefined) writers.set(writeId, step.name);
 			const bucket = allowedWriters.get(writeId) ?? new Set<StepId>();
-			bucket.add(step.id);
+			bucket.add(step.name);
 			allowedWriters.set(writeId, bucket);
 		}
 
 		for (const readId of step.reads) {
 			if (!artifacts.has(readId)) {
 				return err({
-					kind: "missing_artifact_contract",
+					type: "missing_artifact_contract",
 					artifactId: readId,
-					stepId: step.id,
+					stepId: step.name,
 					direction: "read",
 				});
 			}
 			const set = readers.get(readId) ?? new Set<StepId>();
-			set.add(step.id);
+			set.add(step.name);
 			readers.set(readId, set);
 		}
 	}
 
-	for (const id of artifacts.keys()) {
-		if (!writers.has(id)) {
-			return err({ kind: "missing_artifact_producer", artifactId: id });
+	for (const name of artifacts.keys()) {
+		if (!writers.has(name)) {
+			return err({ type: "missing_artifact_producer", artifactId: name });
 		}
 	}
 

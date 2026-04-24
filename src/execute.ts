@@ -62,7 +62,7 @@ export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<
 					text: `${toolName} compile failed: ${message}\n\nAvailable actors: ${actorList}`,
 				},
 			],
-			details: { kind: "compile_failed", message },
+			details: { type: "compile_failed", message },
 		};
 	}
 
@@ -86,7 +86,7 @@ export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<
 								text: `${toolName} plan cancelled: user opened the refine editor but submitted no feedback.`,
 							},
 						],
-						details: { kind: "cancelled", reason: "empty refinement feedback" },
+						details: { type: "cancelled", reason: "empty refinement feedback" },
 					};
 				}
 				return {
@@ -104,7 +104,7 @@ export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<
 							].join("\n"),
 						},
 					],
-					details: { kind: "refined", feedback: trimmed },
+					details: { type: "refined", feedback: trimmed },
 				};
 			}
 
@@ -116,7 +116,7 @@ export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<
 							text: `${toolName} plan cancelled by user. The plan was not executed. Task: ${plan.task}`,
 						},
 					],
-					details: { kind: "cancelled", reason: "user declined plan review" },
+					details: { type: "cancelled", reason: "user declined plan review" },
 				};
 			}
 		}
@@ -157,7 +157,7 @@ export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<
 		const checkOutput = buildCheckOutputSnapshot(scheduler, state);
 		onUpdate({
 			content: [{ type: "text", text: renderRunReportText(report) }],
-			details: { kind: "state", state, attemptTimeline, checkOutput },
+			details: { type: "state", state, attemptTimeline, checkOutput },
 		});
 	};
 
@@ -171,7 +171,7 @@ export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<
 		return {
 			content: [{ type: "text", text: renderRunReportText(report, artifactStore) }],
 			details: {
-				kind: "state",
+				type: "state",
 				state: finalState,
 				attemptTimeline: finalTimeline,
 			},
@@ -219,7 +219,7 @@ export const summarizePlanImpact = (
 	let mayRunCommands = false;
 
 	for (const step of plan.steps) {
-		if (step.kind === "action") {
+		if (step.type === "action") {
 			actionStepCount += 1;
 			uniqueActors.add(step.actor);
 			const actor = actorsByName.get(ActorId(step.actor));
@@ -232,12 +232,12 @@ export const summarizePlanImpact = (
 				if (EDIT_TOOLS.has(tool)) mayEdit = true;
 				if (COMMAND_TOOLS.has(tool)) mayRunCommands = true;
 			}
-		} else if (step.kind === "command") {
+		} else if (step.type === "command") {
 			commandStepCount += 1;
 			const cmd = step.command;
 			commandChecks.push(cmd.length > 80 ? `${cmd.slice(0, 80)}…` : cmd);
 			mayRunCommands = true;
-		} else if (step.kind === "files_exist") {
+		} else if (step.type === "files_exist") {
 			commandStepCount += 1;
 		} else {
 			terminalStepCount += 1;

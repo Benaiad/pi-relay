@@ -50,7 +50,7 @@ class SimpleActorEngine implements ActorEngine {
 	readonly calls: string[] = [];
 
 	async runAction(request: ActionRequest): Promise<ActionOutcome> {
-		this.calls.push(unwrap(request.step.id));
+		this.calls.push(unwrap(request.step.name));
 		const writes = new Map<ReturnType<typeof ArtifactId>, unknown>();
 		for (const w of request.step.writes) {
 			writes.set(w, { result: "done" });
@@ -91,30 +91,30 @@ parameters:
 ---
 
 task: "Rename {{old_name}} to {{new_name}} in {{module}}"
-entryStep: rename
+entry_step: rename
 artifacts:
-  - id: notes
+  - name: notes
     description: Rename notes.
     fields: [result]
 steps:
-  - kind: action
-    id: rename
+  - type: action
+    name: rename
     actor: worker
     instruction: "Rename {{old_name}} to {{new_name}} in {{module}}"
     reads: []
     writes: [notes]
     routes: { done: verify }
-  - kind: command
-    id: verify
+  - type: command
+    name: verify
     command: echo ok
-    onSuccess: success
-    onFailure: failed
-  - kind: terminal
-    id: success
+    on_success: success
+    on_failure: failed
+  - type: terminal
+    name: success
     outcome: success
     summary: Rename verified.
-  - kind: terminal
-    id: failed
+  - type: terminal
+    name: failed
     outcome: failure
     summary: Tests failed.
 `;
@@ -235,7 +235,7 @@ describe("replay integration", () => {
 		const compileResult = compile(instantiation.value.plan, emptyRegistry);
 		expect(compileResult.ok).toBe(false);
 		if (compileResult.ok) return;
-		expect(compileResult.error.kind).toBe("missing_actor");
+		expect(compileResult.error.type).toBe("missing_actor");
 	});
 
 	it("unresolved placeholder produces a clear error", async () => {

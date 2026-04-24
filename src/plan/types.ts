@@ -3,16 +3,16 @@
  *
  * These types use branded IDs everywhere. They are the "inside" form the
  * compiler produces and the runtime consumes. The wire format the model sees
- * (the TypeBox schema in `draft.ts`) uses plain strings; the compiler bridges
- * the two by branding IDs as it walks the doc.
+ * (the TypeBox schema in `draft.ts`) uses plain strings and snake_case; the
+ * compiler bridges the two by branding IDs and mapping field names.
  */
 
 import type { ActorId, ArtifactId, RouteId, StepId } from "./ids.js";
 
 export type ArtifactShape =
-	| { readonly kind: "text" }
-	| { readonly kind: "record"; readonly fields: readonly string[] }
-	| { readonly kind: "record_list"; readonly fields: readonly string[] };
+	| { readonly type: "text" }
+	| { readonly type: "record"; readonly fields: readonly string[] }
+	| { readonly type: "record_list"; readonly fields: readonly string[] };
 
 /**
  * Compile-time declaration of an artifact.
@@ -27,7 +27,7 @@ export type ArtifactShape =
  * Readers see the full history as an array of entries.
  */
 export interface ArtifactContract {
-	readonly id: ArtifactId;
+	readonly name: ArtifactId;
 	readonly description: string;
 	readonly shape: ArtifactShape;
 }
@@ -38,8 +38,8 @@ export interface ArtifactContract {
  * committed by the actor via its completion tool call.
  */
 export interface ActionStep {
-	readonly kind: "action";
-	readonly id: StepId;
+	readonly type: "action";
+	readonly name: StepId;
 	readonly actor: ActorId;
 	readonly instruction: string;
 	readonly reads: readonly ArtifactId[];
@@ -53,12 +53,12 @@ export interface ActionStep {
  * Succeeds iff the command exits 0 within the timeout.
  */
 export interface CommandStep {
-	readonly kind: "command";
-	readonly id: StepId;
+	readonly type: "command";
+	readonly name: StepId;
 	readonly command: string;
 	readonly reads: readonly ArtifactId[];
 	readonly writes: readonly ArtifactId[];
-	readonly timeoutMs?: number;
+	readonly timeout?: number;
 	readonly onSuccess: StepId;
 	readonly onFailure: StepId;
 }
@@ -68,8 +68,8 @@ export interface CommandStep {
  * Succeeds iff every path exists. Failure reason lists which paths are missing.
  */
 export interface FilesExistStep {
-	readonly kind: "files_exist";
-	readonly id: StepId;
+	readonly type: "files_exist";
+	readonly name: StepId;
 	readonly paths: readonly string[];
 	readonly onSuccess: StepId;
 	readonly onFailure: StepId;
@@ -80,15 +80,15 @@ export interface FilesExistStep {
  * emits `RunFinished` and the scheduler exits its loop.
  */
 export interface TerminalStep {
-	readonly kind: "terminal";
-	readonly id: StepId;
+	readonly type: "terminal";
+	readonly name: StepId;
 	readonly outcome: TerminalOutcome;
 	readonly summary: string;
 }
 
 export type TerminalOutcome = "success" | "failure";
 
-/** The discriminated union of every step kind. Exhaustive matching is enforced. */
+/** The discriminated union of every step type. Exhaustive matching is enforced. */
 export type Step = ActionStep | CommandStep | FilesExistStep | TerminalStep;
 
 /**

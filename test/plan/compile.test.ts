@@ -21,18 +21,18 @@ const basicPlan: PlanDraftDoc = {
 	task: "Plan, implement, and verify.",
 	artifacts: [
 		{
-			id: "requirements",
+			name: "requirements",
 			description: "Parsed requirements",
 		},
 		{
-			id: "notes",
+			name: "notes",
 			description: "Implementer notes",
 		},
 	],
 	steps: [
 		{
-			kind: "action",
-			id: "plan",
+			type: "action",
+			name: "plan",
 			actor: "planner",
 			instruction: "Write requirements.",
 			reads: [],
@@ -40,8 +40,8 @@ const basicPlan: PlanDraftDoc = {
 			routes: { next: "implement" },
 		},
 		{
-			kind: "action",
-			id: "implement",
+			type: "action",
+			name: "implement",
 			actor: "worker",
 			instruction: "Apply the requirements.",
 			reads: ["requirements"],
@@ -49,13 +49,13 @@ const basicPlan: PlanDraftDoc = {
 			routes: { done: "done" },
 		},
 		{
-			kind: "terminal",
-			id: "done",
+			type: "terminal",
+			name: "done",
 			outcome: "success",
 			summary: "Implementation complete.",
 		},
 	],
-	entryStep: "plan",
+	entry_step: "plan",
 };
 
 describe("compile", () => {
@@ -83,37 +83,37 @@ describe("compile", () => {
 		const result = compile(bad, defaultActors, fixedIdOptions);
 		expect(isErr(result)).toBe(true);
 		if (!isErr(result)) return;
-		expect(result.error.kind).toBe("empty_plan");
+		expect(result.error.type).toBe("empty_plan");
 	});
 
 	it("rejects a plan with no terminal step", () => {
 		const bad: PlanDraftDoc = {
 			...basicPlan,
-			steps: basicPlan.steps.filter((s) => s.kind !== "terminal"),
+			steps: basicPlan.steps.filter((s) => s.type !== "terminal"),
 		};
 		const result = compile(bad, defaultActors, fixedIdOptions);
 		if (!isErr(result)) throw new Error("expected error");
-		expect(result.error.kind).toBe("no_terminal");
+		expect(result.error.type).toBe("no_terminal");
 	});
 
 	it("rejects a plan whose entry step is a terminal", () => {
 		const bad: PlanDraftDoc = {
 			task: "Instant done",
 			steps: [
-				{ kind: "terminal", id: "done", outcome: "success", summary: "Nothing happened." },
+				{ type: "terminal", name: "done", outcome: "success", summary: "Nothing happened." },
 				{
-					kind: "action",
-					id: "work",
+					type: "action",
+					name: "work",
 					actor: "worker",
 					instruction: "Do things.",
 					routes: { done: "done" },
 				},
 			],
-			entryStep: "done",
+			entry_step: "done",
 		};
 		const result = compile(bad, defaultActors, fixedIdOptions);
 		if (!isErr(result)) throw new Error("expected error");
-		expect(result.error.kind).toBe("terminal_entry");
+		expect(result.error.type).toBe("terminal_entry");
 	});
 
 	it("rejects duplicate step ids", () => {
@@ -124,11 +124,11 @@ describe("compile", () => {
 		};
 		const result = compile(bad, defaultActors, fixedIdOptions);
 		if (!isErr(result)) throw new Error("expected error");
-		expect(result.error.kind).toBe("duplicate_step");
+		expect(result.error.type).toBe("duplicate_step");
 	});
 
 	it("uses the first step as entry when entryStep is omitted", () => {
-		const { entryStep: _, ...planWithoutEntry } = basicPlan;
+		const { entry_step: _, ...planWithoutEntry } = basicPlan;
 		const result = compile(planWithoutEntry, defaultActors, fixedIdOptions);
 		expect(isOk(result)).toBe(true);
 		if (!isOk(result)) return;
@@ -136,11 +136,11 @@ describe("compile", () => {
 	});
 
 	it("rejects an explicit entryStep that does not exist", () => {
-		const bad: PlanDraftDoc = { ...basicPlan, entryStep: "does-not-exist" };
+		const bad: PlanDraftDoc = { ...basicPlan, entry_step: "does-not-exist" };
 		const result = compile(bad, defaultActors, fixedIdOptions);
 		if (!isErr(result)) throw new Error("expected error");
-		expect(result.error.kind).toBe("missing_entry");
-		if (result.error.kind === "missing_entry") {
+		expect(result.error.type).toBe("missing_entry");
+		if (result.error.type === "missing_entry") {
 			expect(unwrap(result.error.entryStep)).toBe("does-not-exist");
 			expect(result.error.availableSteps.map(unwrap)).toEqual(["plan", "implement", "done"]);
 		}
@@ -150,25 +150,25 @@ describe("compile", () => {
 		const result = compile(basicPlan, defaultActors, fixedIdOptions);
 		if (!isOk(result)) throw new Error("expected ok");
 		const contract = result.value.artifacts.get(ArtifactId("requirements"));
-		expect(contract?.shape).toEqual({ kind: "text" });
+		expect(contract?.shape).toEqual({ type: "text" });
 	});
 
 	it("derives record shape for artifacts with fields", () => {
 		const plan: PlanDraftDoc = {
 			...basicPlan,
 			artifacts: [
-				{ id: "requirements", description: "reqs", fields: ["x", "y"] },
-				{ id: "notes", description: "notes" },
+				{ name: "requirements", description: "reqs", fields: ["x", "y"] },
+				{ name: "notes", description: "notes" },
 			],
 		};
 		const result = compile(plan, defaultActors, fixedIdOptions);
 		if (!isOk(result)) throw new Error("expected ok");
 		expect(result.value.artifacts.get(ArtifactId("requirements"))?.shape).toEqual({
-			kind: "record",
+			type: "record",
 			fields: ["x", "y"],
 		});
 		expect(result.value.artifacts.get(ArtifactId("notes"))?.shape).toEqual({
-			kind: "text",
+			type: "text",
 		});
 	});
 
@@ -176,14 +176,14 @@ describe("compile", () => {
 		const plan: PlanDraftDoc = {
 			...basicPlan,
 			artifacts: [
-				{ id: "requirements", description: "reqs", fields: ["a"], list: true },
-				{ id: "notes", description: "notes" },
+				{ name: "requirements", description: "reqs", fields: ["a"], list: true },
+				{ name: "notes", description: "notes" },
 			],
 		};
 		const result = compile(plan, defaultActors, fixedIdOptions);
 		if (!isOk(result)) throw new Error("expected ok");
 		expect(result.value.artifacts.get(ArtifactId("requirements"))?.shape).toEqual({
-			kind: "record_list",
+			type: "record_list",
 			fields: ["a"],
 		});
 	});
@@ -193,15 +193,15 @@ describe("compile", () => {
 			task: "No artifacts needed.",
 			steps: [
 				{
-					kind: "action",
-					id: "work",
+					type: "action",
+					name: "work",
 					actor: "worker",
 					instruction: "Do the thing.",
 					routes: { done: "done" },
 				},
 				{
-					kind: "terminal",
-					id: "done",
+					type: "terminal",
+					name: "done",
 					outcome: "success",
 					summary: "Done.",
 				},
@@ -212,7 +212,7 @@ describe("compile", () => {
 		if (!isOk(result)) return;
 		expect(result.value.artifacts.size).toBe(0);
 		const step = result.value.steps.get(StepId("work"));
-		if (step?.kind !== "action") throw new Error("expected action");
+		if (step?.type !== "action") throw new Error("expected action");
 		expect(step.reads).toEqual([]);
 		expect(step.writes).toEqual([]);
 	});
@@ -220,8 +220,8 @@ describe("compile", () => {
 	it("rejects a step referencing an unknown actor", () => {
 		const result = compile(basicPlan, emptyActors, fixedIdOptions);
 		if (!isErr(result)) throw new Error("expected error");
-		expect(result.error.kind).toBe("missing_actor");
-		if (result.error.kind === "missing_actor") {
+		expect(result.error.type).toBe("missing_actor");
+		if (result.error.type === "missing_actor") {
 			expect(unwrap(result.error.actor)).toBe("planner");
 			expect(result.error.availableActors).toEqual([]);
 		}
@@ -229,15 +229,15 @@ describe("compile", () => {
 
 	it("rejects a route targeting a non-existent step", () => {
 		const planStep = basicPlan.steps[0]!;
-		if (planStep.kind !== "action") throw new Error("expected action");
+		if (planStep.type !== "action") throw new Error("expected action");
 		const bad: PlanDraftDoc = {
 			...basicPlan,
 			steps: [{ ...planStep, routes: { next: "nowhere" } }, ...basicPlan.steps.slice(1)],
 		};
 		const result = compile(bad, defaultActors, fixedIdOptions);
 		if (!isErr(result)) throw new Error("expected error");
-		expect(result.error.kind).toBe("missing_route_target");
-		if (result.error.kind === "missing_route_target") {
+		expect(result.error.type).toBe("missing_route_target");
+		if (result.error.type === "missing_route_target") {
 			expect(unwrap(result.error.from)).toBe("plan");
 			expect(unwrap(result.error.target)).toBe("nowhere");
 		}
@@ -245,7 +245,7 @@ describe("compile", () => {
 
 	it("allows multiple steps to write the same artifact", () => {
 		const implementStep = basicPlan.steps[1]!;
-		if (implementStep.kind !== "action") throw new Error("expected action");
+		if (implementStep.type !== "action") throw new Error("expected action");
 		const plan: PlanDraftDoc = {
 			...basicPlan,
 			steps: [basicPlan.steps[0]!, { ...implementStep, writes: ["requirements", "notes"] }, basicPlan.steps[2]!],
@@ -256,14 +256,14 @@ describe("compile", () => {
 
 	it("rejects a step reading an undeclared artifact", () => {
 		const implementStep = basicPlan.steps[1]!;
-		if (implementStep.kind !== "action") throw new Error("expected action");
+		if (implementStep.type !== "action") throw new Error("expected action");
 		const bad: PlanDraftDoc = {
 			...basicPlan,
 			steps: [basicPlan.steps[0]!, { ...implementStep, reads: ["ghost"] }, basicPlan.steps[2]!],
 		};
 		const result = compile(bad, defaultActors, fixedIdOptions);
 		if (!isErr(result)) throw new Error("expected error");
-		expect(result.error.kind).toBe("missing_artifact_contract");
+		expect(result.error.type).toBe("missing_artifact_contract");
 	});
 
 	it("rejects an artifact with no writer", () => {
@@ -272,15 +272,15 @@ describe("compile", () => {
 			artifacts: [
 				...(basicPlan.artifacts ?? []),
 				{
-					id: "unused",
+					name: "unused",
 					description: "never produced",
 				},
 			],
 		};
 		const result = compile(bad, defaultActors, fixedIdOptions);
 		if (!isErr(result)) throw new Error("expected error");
-		expect(result.error.kind).toBe("missing_artifact_producer");
-		if (result.error.kind === "missing_artifact_producer") {
+		expect(result.error.type).toBe("missing_artifact_producer");
+		if (result.error.type === "missing_artifact_producer") {
 			expect(unwrap(result.error.artifactId)).toBe("unused");
 		}
 	});
@@ -291,24 +291,24 @@ describe("compile", () => {
 			artifacts: [
 				...(basicPlan.artifacts ?? []),
 				{
-					id: "requirements",
+					name: "requirements",
 					description: "dup",
 				},
 			],
 		};
 		const result = compile(bad, defaultActors, fixedIdOptions);
 		if (!isErr(result)) throw new Error("expected error");
-		expect(result.error.kind).toBe("duplicate_artifact");
+		expect(result.error.type).toBe("duplicate_artifact");
 	});
 
 	it("compiles a files_exist step with pass and fail routes", () => {
 		const plan: PlanDraftDoc = {
 			task: "Run tests and branch on outcome.",
-			artifacts: [{ id: "spec", description: "spec" }],
+			artifacts: [{ name: "spec", description: "spec" }],
 			steps: [
 				{
-					kind: "action",
-					id: "write",
+					type: "action",
+					name: "write",
 					actor: "worker",
 					instruction: "Write a spec.",
 					reads: [],
@@ -316,21 +316,21 @@ describe("compile", () => {
 					routes: { ready: "verify" },
 				},
 				{
-					kind: "files_exist",
-					id: "verify",
+					type: "files_exist",
+					name: "verify",
 					paths: ["/tmp/does-not-matter"],
-					onSuccess: "ok",
-					onFailure: "broken",
+					on_success: "ok",
+					on_failure: "broken",
 				},
-				{ kind: "terminal", id: "ok", outcome: "success", summary: "passed" },
+				{ type: "terminal", name: "ok", outcome: "success", summary: "passed" },
 				{
-					kind: "terminal",
-					id: "broken",
+					type: "terminal",
+					name: "broken",
 					outcome: "failure",
 					summary: "failed",
 				},
 			],
-			entryStep: "write",
+			entry_step: "write",
 		};
 		const result = compile(plan, defaultActors, fixedIdOptions);
 		expect(isOk(result)).toBe(true);
@@ -345,35 +345,35 @@ describe("compile", () => {
 			artifacts: [],
 			steps: [
 				{
-					kind: "files_exist",
-					id: "verify",
+					type: "files_exist",
+					name: "verify",
 					paths: ["/tmp/x"],
-					onSuccess: "done",
-					onFailure: "ghost",
+					on_success: "done",
+					on_failure: "ghost",
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
 			],
-			entryStep: "verify",
+			entry_step: "verify",
 		};
 		const result = compile(plan, defaultActors, fixedIdOptions);
 		if (!isErr(result)) throw new Error("expected error");
-		expect(result.error.kind).toBe("missing_route_target");
+		expect(result.error.type).toBe("missing_route_target");
 	});
 
 	it("accepts artifact ids with hyphens", () => {
 		const plan: PlanDraftDoc = {
 			task: "Hyphenated artifact ids.",
-			artifacts: [{ id: "my-artifact", description: "hyphenated" }],
+			artifacts: [{ name: "my-artifact", description: "hyphenated" }],
 			steps: [
 				{
-					kind: "action",
-					id: "work",
+					type: "action",
+					name: "work",
 					actor: "worker",
 					instruction: "Do it.",
 					writes: ["my-artifact"],
 					routes: { done: "done" },
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
 			],
 		};
 		const result = compile(plan, defaultActors, fixedIdOptions);
@@ -383,26 +383,26 @@ describe("compile", () => {
 	it("accepts a command step with reads", () => {
 		const plan: PlanDraftDoc = {
 			task: "Action writes, verify reads.",
-			artifacts: [{ id: "result", description: "result" }],
+			artifacts: [{ name: "result", description: "result" }],
 			steps: [
 				{
-					kind: "action",
-					id: "produce",
+					type: "action",
+					name: "produce",
 					actor: "worker",
 					instruction: "Write result.",
 					writes: ["result"],
 					routes: { done: "check" },
 				},
 				{
-					kind: "command",
-					id: "check",
+					type: "command",
+					name: "check",
 					command: "echo $result",
 					reads: ["result"],
-					onSuccess: "done",
-					onFailure: "failed",
+					on_success: "done",
+					on_failure: "failed",
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
-				{ kind: "terminal", id: "failed", outcome: "failure", summary: "bad" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "failed", outcome: "failure", summary: "bad" },
 			],
 		};
 		const result = compile(plan, defaultActors, fixedIdOptions);
@@ -417,20 +417,20 @@ describe("compile", () => {
 			artifacts: [],
 			steps: [
 				{
-					kind: "command",
-					id: "check",
+					type: "command",
+					name: "check",
 					command: "echo $ghost",
 					reads: ["ghost"],
-					onSuccess: "done",
-					onFailure: "done",
+					on_success: "done",
+					on_failure: "done",
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
 			],
 		};
 		const result = compile(plan, defaultActors, fixedIdOptions);
 		if (!isErr(result)) throw new Error("expected error");
-		expect(result.error.kind).toBe("missing_artifact_contract");
-		if (result.error.kind === "missing_artifact_contract") {
+		expect(result.error.type).toBe("missing_artifact_contract");
+		if (result.error.type === "missing_artifact_contract") {
 			expect(unwrap(result.error.stepId)).toBe("check");
 			expect(result.error.direction).toBe("read");
 		}
@@ -442,14 +442,14 @@ describe("compile", () => {
 			artifacts: [],
 			steps: [
 				{
-					kind: "command",
-					id: "check",
+					type: "command",
+					name: "check",
 					command: "echo hello",
 					reads: [],
-					onSuccess: "done",
-					onFailure: "done",
+					on_success: "done",
+					on_failure: "done",
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
 			],
 		};
 		const result = compile(plan, defaultActors, fixedIdOptions);
@@ -460,28 +460,28 @@ describe("compile", () => {
 		const plan: PlanDraftDoc = {
 			task: "Command writes an artifact.",
 			artifacts: [
-				{ id: "input", description: "in" },
-				{ id: "output", description: "out" },
+				{ name: "input", description: "in" },
+				{ name: "output", description: "out" },
 			],
 			steps: [
 				{
-					kind: "action",
-					id: "produce",
+					type: "action",
+					name: "produce",
 					actor: "worker",
 					instruction: "Write input.",
 					writes: ["input"],
 					routes: { done: "grade" },
 				},
 				{
-					kind: "command",
-					id: "grade",
+					type: "command",
+					name: "grade",
 					command: "./grader.sh",
 					reads: ["input"],
 					writes: ["output"],
-					onSuccess: "done",
-					onFailure: "done",
+					on_success: "done",
+					on_failure: "done",
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
 			],
 		};
 		const result = compile(plan, defaultActors, fixedIdOptions);
@@ -497,27 +497,27 @@ describe("compile", () => {
 			artifacts: [],
 			steps: [
 				{
-					kind: "command",
-					id: "grade",
+					type: "command",
+					name: "grade",
 					command: "./grader.sh",
 					writes: ["ghost"],
-					onSuccess: "done",
-					onFailure: "done",
+					on_success: "done",
+					on_failure: "done",
 				},
-				{ kind: "terminal", id: "done", outcome: "success", summary: "ok" },
+				{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
 			],
 		};
 		const result = compile(plan, defaultActors, fixedIdOptions);
 		if (!isErr(result)) throw new Error("expected error");
-		expect(result.error.kind).toBe("missing_artifact_contract");
-		if (result.error.kind === "missing_artifact_contract") {
+		expect(result.error.type).toBe("missing_artifact_contract");
+		if (result.error.type === "missing_artifact_contract") {
 			expect(unwrap(result.error.stepId)).toBe("grade");
 			expect(result.error.direction).toBe("write");
 		}
 	});
 
 	it("formats compile errors into readable messages", () => {
-		const result = compile({ ...basicPlan, entryStep: "nonexistent" }, defaultActors, fixedIdOptions);
+		const result = compile({ ...basicPlan, entry_step: "nonexistent" }, defaultActors, fixedIdOptions);
 		if (!isErr(result)) throw new Error("expected error");
 		const msg = formatCompileError(result.error);
 		expect(msg).toContain("'nonexistent'");

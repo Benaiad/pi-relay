@@ -100,7 +100,7 @@ const validateRecord = (value: unknown, fields: readonly string[]): Result<void,
 };
 
 const validateShape = (value: unknown, contract: ArtifactContract): Result<void, string> => {
-	switch (contract.shape.kind) {
+	switch (contract.shape.type) {
 		case "text":
 			return typeof value === "string" ? ok(undefined) : err(`expected a string, got ${typeof value}`);
 		case "record":

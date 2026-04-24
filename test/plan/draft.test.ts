@@ -4,21 +4,21 @@ import { type PlanDraftDoc, PlanDraftSchema } from "../../src/plan/draft.js";
 
 const validPlan: PlanDraftDoc = {
 	task: "Add a feature flag to the user service and run the test suite before committing.",
-	successCriteria: "Tests pass and the flag is wired to the canonical feature registry.",
+	success_criteria: "Tests pass and the flag is wired to the canonical feature registry.",
 	artifacts: [
 		{
-			id: "requirements",
+			name: "requirements",
 			description: "Parsed requirements",
 		},
 		{
-			id: "implementation_notes",
+			name: "implementation_notes",
 			description: "Notes from the implementer",
 		},
 	],
 	steps: [
 		{
-			kind: "action",
-			id: "plan-changes",
+			type: "action",
+			name: "plan-changes",
 			actor: "planner",
 			instruction: "Identify the files that need to change and record them in requirements.",
 			reads: [],
@@ -26,8 +26,8 @@ const validPlan: PlanDraftDoc = {
 			routes: { success: "implement" },
 		},
 		{
-			kind: "action",
-			id: "implement",
+			type: "action",
+			name: "implement",
 			actor: "worker",
 			instruction: "Apply the changes described in requirements.",
 			reads: ["requirements"],
@@ -35,27 +35,27 @@ const validPlan: PlanDraftDoc = {
 			routes: { done: "run-tests" },
 		},
 		{
-			kind: "command",
-			id: "run-tests",
+			type: "command",
+			name: "run-tests",
 			command: "npm test",
-			timeoutMs: 120_000,
-			onSuccess: "done",
-			onFailure: "failed",
+			timeout: 120,
+			on_success: "done",
+			on_failure: "failed",
 		},
 		{
-			kind: "terminal",
-			id: "done",
+			type: "terminal",
+			name: "done",
 			outcome: "success",
 			summary: "Feature flag shipped and tests are green.",
 		},
 		{
-			kind: "terminal",
-			id: "failed",
+			type: "terminal",
+			name: "failed",
 			outcome: "failure",
 			summary: "Tests failed after implementation.",
 		},
 	],
-	entryStep: "plan-changes",
+	entry_step: "plan-changes",
 };
 
 describe("PlanDraftSchema", () => {
@@ -78,8 +78,8 @@ describe("PlanDraftSchema", () => {
 			...validPlan,
 			steps: [
 				{
-					kind: "action",
-					id: "broken",
+					type: "action",
+					name: "broken",
 					actor: "worker",
 					instruction: "Do the thing.",
 					reads: [],
@@ -97,8 +97,8 @@ describe("PlanDraftSchema", () => {
 			...validPlan,
 			steps: [
 				{
-					kind: "nonsense",
-					id: "weird",
+					type: "nonsense",
+					name: "weird",
 					actor: "worker",
 					instruction: "hi",
 					reads: [],
@@ -118,11 +118,11 @@ describe("PlanDraftSchema", () => {
 				validPlan.steps[0],
 				validPlan.steps[1],
 				{
-					kind: "verify_nope",
-					id: "run-tests",
+					type: "verify_nope",
+					name: "run-tests",
 					command: "npm test",
-					onSuccess: "done",
-					onFailure: "failed",
+					on_success: "done",
+					on_failure: "failed",
 				},
 				...validPlan.steps.slice(3),
 			],
@@ -130,10 +130,10 @@ describe("PlanDraftSchema", () => {
 		expect(Value.Check(PlanDraftSchema, bad)).toBe(false);
 	});
 
-	it("rejects an id that violates the pattern", () => {
+	it("rejects a name that violates the pattern", () => {
 		const bad = {
 			...validPlan,
-			steps: [{ ...validPlan.steps[0], id: "has space" }, ...validPlan.steps.slice(1)],
+			steps: [{ ...validPlan.steps[0], name: "has space" }, ...validPlan.steps.slice(1)],
 		};
 		expect(Value.Check(PlanDraftSchema, bad)).toBe(false);
 	});
@@ -144,8 +144,8 @@ describe("PlanDraftSchema", () => {
 			artifacts: [],
 			steps: [
 				{
-					kind: "action",
-					id: "greet",
+					type: "action",
+					name: "greet",
 					actor: "worker",
 					instruction: "Produce a one-line greeting.",
 					reads: [],
@@ -153,31 +153,31 @@ describe("PlanDraftSchema", () => {
 					routes: { done: "end" },
 				},
 				{
-					kind: "terminal",
-					id: "end",
+					type: "terminal",
+					name: "end",
 					outcome: "success",
 					summary: "Greeted.",
 				},
 			],
-			entryStep: "greet",
+			entry_step: "greet",
 		};
 		expect(Value.Check(PlanDraftSchema, minimal)).toBe(true);
 	});
 
-	it("accepts a plan without entryStep, artifacts, reads, or writes", () => {
+	it("accepts a plan without entry_step, artifacts, reads, or writes", () => {
 		const minimal: PlanDraftDoc = {
 			task: "Say hello.",
 			steps: [
 				{
-					kind: "action",
-					id: "greet",
+					type: "action",
+					name: "greet",
 					actor: "worker",
 					instruction: "Produce a one-line greeting.",
 					routes: { done: "end" },
 				},
 				{
-					kind: "terminal",
-					id: "end",
+					type: "terminal",
+					name: "end",
 					outcome: "success",
 					summary: "Greeted.",
 				},
@@ -189,7 +189,7 @@ describe("PlanDraftSchema", () => {
 	it("accepts an artifact with fields", () => {
 		const plan = {
 			...validPlan,
-			artifacts: [{ id: "a", description: "a", fields: ["x", "y"] }],
+			artifacts: [{ name: "a", description: "a", fields: ["x", "y"] }],
 		};
 		expect(Value.Check(PlanDraftSchema, plan)).toBe(true);
 	});
@@ -197,7 +197,7 @@ describe("PlanDraftSchema", () => {
 	it("accepts an artifact with fields and list", () => {
 		const plan = {
 			...validPlan,
-			artifacts: [{ id: "a", description: "a", fields: ["x"], list: true }],
+			artifacts: [{ name: "a", description: "a", fields: ["x"], list: true }],
 		};
 		expect(Value.Check(PlanDraftSchema, plan)).toBe(true);
 	});
@@ -205,7 +205,7 @@ describe("PlanDraftSchema", () => {
 	it("rejects an artifact with an empty fields array", () => {
 		const plan = {
 			...validPlan,
-			artifacts: [{ id: "a", description: "a", fields: [] }],
+			artifacts: [{ name: "a", description: "a", fields: [] }],
 		};
 		expect(Value.Check(PlanDraftSchema, plan)).toBe(false);
 	});

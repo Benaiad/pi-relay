@@ -37,8 +37,8 @@ const formatPlan = (plan: PlanDraftDoc, theme: Theme, expanded: boolean): string
 	const lines: string[] = [];
 
 	lines.push(buildHeader(plan, theme));
-	if (plan.successCriteria) {
-		lines.push(`  ${theme.fg("muted", `success when: ${plan.successCriteria}`)}`);
+	if (plan.success_criteria) {
+		lines.push(`  ${theme.fg("muted", `success when: ${plan.success_criteria}`)}`);
 	}
 	lines.push(`  ${theme.fg("muted", buildCountSummary(plan))}`);
 	lines.push("");
@@ -67,7 +67,7 @@ const buildHeader = (plan: PlanDraftDoc, theme: Theme): string => {
 
 const buildCountSummary = (plan: PlanDraftDoc): string => {
 	const actorNames = new Set<string>();
-	for (const step of plan.steps) if (step.kind === "action") actorNames.add(step.actor);
+	for (const step of plan.steps) if (step.type === "action") actorNames.add(step.actor);
 	const agentList = actorNames.size > 0 ? Array.from(actorNames).join(", ") : "none";
 	return `${plan.steps.length} steps · agents: ${agentList}`;
 };
@@ -82,7 +82,7 @@ const buildStepBlock = (
 	theme: Theme,
 	expanded: boolean,
 ): string[] => {
-	switch (step.kind) {
+	switch (step.type) {
 		case "action":
 			return buildActionBlock(step, index, theme, expanded);
 		case "command":
@@ -95,7 +95,7 @@ const buildStepBlock = (
 };
 
 const buildActionBlock = (
-	step: Extract<PlanDraftDoc["steps"][number], { kind: "action" }>,
+	step: Extract<PlanDraftDoc["steps"][number], { type: "action" }>,
 	index: number,
 	theme: Theme,
 	expanded: boolean,
@@ -103,7 +103,7 @@ const buildActionBlock = (
 	const lines: string[] = [];
 	const header =
 		`  ${theme.fg("accent", `${index}.`)} ` +
-		`${theme.fg("toolTitle", step.id)} ` +
+		`${theme.fg("toolTitle", step.name)} ` +
 		theme.fg("muted", `— ${step.actor}`);
 	lines.push(header);
 
@@ -137,14 +137,14 @@ const buildActionBlock = (
 };
 
 const buildCommandBlock = (
-	step: Extract<PlanDraftDoc["steps"][number], { kind: "command" }>,
+	step: Extract<PlanDraftDoc["steps"][number], { type: "command" }>,
 	index: number,
 	theme: Theme,
 ): string[] => {
-	const timeoutSuffix = step.timeoutMs ? `  (timeout ${Math.round(step.timeoutMs / 1000)}s)` : "";
+	const timeoutSuffix = step.timeout ? `  (timeout ${step.timeout}s)` : "";
 	const description = `$ ${step.command}${timeoutSuffix}`;
 	const lines = [
-		`  ${theme.fg("warning", `${index}.`)} ${theme.fg("toolTitle", step.id)}  ${theme.fg("toolOutput", description)}`,
+		`  ${theme.fg("warning", `${index}.`)} ${theme.fg("toolTitle", step.name)}  ${theme.fg("toolOutput", description)}`,
 	];
 	if (step.reads && step.reads.length > 0) {
 		lines.push(`     ${theme.fg("dim", `Uses: ${step.reads.join(", ")}`)}`);
@@ -152,31 +152,31 @@ const buildCommandBlock = (
 	if (step.writes && step.writes.length > 0) {
 		lines.push(`     ${theme.fg("dim", `Produces: ${step.writes.join(", ")}`)}`);
 	}
-	lines.push(`     ${theme.fg("dim", `Success → ${step.onSuccess}, failure → ${step.onFailure}`)}`);
+	lines.push(`     ${theme.fg("dim", `Success → ${step.on_success}, failure → ${step.on_failure}`)}`);
 	return lines;
 };
 
 const buildFilesExistBlock = (
-	step: Extract<PlanDraftDoc["steps"][number], { kind: "files_exist" }>,
+	step: Extract<PlanDraftDoc["steps"][number], { type: "files_exist" }>,
 	index: number,
 	theme: Theme,
 ): string[] => {
 	const description =
 		step.paths.length === 1 ? `File exists: ${step.paths[0]}` : `Files exist: ${step.paths.join(", ")}`;
 	return [
-		`  ${theme.fg("warning", `${index}.`)} ${theme.fg("toolTitle", step.id)}  ${theme.fg("toolOutput", description)}`,
-		`     ${theme.fg("dim", `Success → ${step.onSuccess}, failure → ${step.onFailure}`)}`,
+		`  ${theme.fg("warning", `${index}.`)} ${theme.fg("toolTitle", step.name)}  ${theme.fg("toolOutput", description)}`,
+		`     ${theme.fg("dim", `Success → ${step.on_success}, failure → ${step.on_failure}`)}`,
 	];
 };
 
 const buildTerminalBlock = (
-	step: Extract<PlanDraftDoc["steps"][number], { kind: "terminal" }>,
+	step: Extract<PlanDraftDoc["steps"][number], { type: "terminal" }>,
 	index: number,
 	theme: Theme,
 ): string[] => {
 	const color = step.outcome === "success" ? "success" : "error";
 	const glyph = step.outcome === "success" ? "✓" : "✗";
-	const header = `  ${theme.fg(color, `${index}.`)} ${theme.fg("toolTitle", step.id)} ${theme.fg(color, glyph)}`;
+	const header = `  ${theme.fg(color, `${index}.`)} ${theme.fg("toolTitle", step.name)} ${theme.fg(color, glyph)}`;
 	const summary = `     ${theme.fg("dim", step.summary)}`;
 	return [header, summary];
 };

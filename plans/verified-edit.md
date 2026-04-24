@@ -16,24 +16,24 @@ artifacts:
     description: What was changed — files touched and a one-line description per file.
 
 steps:
-  - kind: action
-    id: implement
+  - type: action
+    name: implement
     actor: worker
     instruction: |
       {{task}}
       Write a summary of your changes to the change_notes artifact.
     writes: [change_notes]
     routes: { done: verify }
-  - kind: command
-    id: verify
+  - type: command
+    name: verify
     command: "{{verify}}"
-    onSuccess: done
-    onFailure: failed
-  - kind: terminal
-    id: done
+    on_success: done
+    on_failure: failed
+  - type: terminal
+    name: done
     outcome: success
     summary: Change applied and verified.
-  - kind: terminal
-    id: failed
+  - type: terminal
+    name: failed
     outcome: failure
     summary: Verification failed after change.

@@ -79,7 +79,7 @@ const runAction = async (config: SdkEngineConfig, request: ActionRequest): Promi
 		artifactContracts,
 		request.priorAttempts,
 		actor.name,
-		step.id,
+		step.name,
 		request.stepActorResolver,
 		request.priorCheckResult,
 	);
@@ -147,7 +147,7 @@ const runAction = async (config: SdkEngineConfig, request: ActionRequest): Promi
 						const item: TranscriptItem = { kind: "text", text: part.text };
 						transcript.push(item);
 						onProgress?.({
-							stepId: step.id,
+							stepId: step.name,
 							actor: step.actor,
 							item,
 							usage: snapshotUsage(usage),
@@ -164,7 +164,7 @@ const runAction = async (config: SdkEngineConfig, request: ActionRequest): Promi
 				};
 				transcript.push(item);
 				onProgress?.({
-					stepId: step.id,
+					stepId: step.name,
 					actor: step.actor,
 					item,
 					usage: snapshotUsage(usage),

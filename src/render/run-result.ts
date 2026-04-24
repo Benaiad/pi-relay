@@ -310,9 +310,9 @@ const appendAttemptBlock = (
 	// Header: `─── ✓ stepId  — actor` (for actions) or `─── ✓ stepId`
 	// (for checks and terminals). No "action(actor)" label. Retries are
 	// marked `(retry)` or `(retry N)` for N > 2.
-	const actorTag = step.kind === "action" ? `  ${theme.fg("muted", `— ${unwrap(step.actor)}`)}` : "";
+	const actorTag = step.type === "action" ? `  ${theme.fg("muted", `— ${unwrap(step.actor)}`)}` : "";
 	const retryTag =
-		step.kind === "action" && attempt.attemptNumber > 1
+		step.type === "action" && attempt.attemptNumber > 1
 			? `  ${theme.fg("warning", attempt.attemptNumber === 2 ? "(retry)" : `(retry ${attempt.attemptNumber - 1})`)}`
 			: "";
 	container.addChild(
@@ -323,7 +323,7 @@ const appendAttemptBlock = (
 		),
 	);
 
-	if (step.kind === "action") {
+	if (step.type === "action") {
 		// Action body: walk the transcript in its natural chronological order
 		// and interleave text narration with tool calls. This captures the
 		// actor's actual thought flow: "I'll add lang. → read → edit → Let me
@@ -332,12 +332,12 @@ const appendAttemptBlock = (
 		// blocks and headings; mid-reply text renders as plain truncated
 		// lines for compactness.
 		renderActionTranscript(container, attempt.transcript, theme, mdTheme);
-	} else if (step.kind === "command" || step.kind === "files_exist") {
+	} else if (step.type === "command" || step.type === "files_exist") {
 		container.addChild(new Text(`  ${theme.fg("toolOutput", describeCommandStepInline(step))}`, 0, 0));
 		if (liveCheckOutput && liveCheckOutput.length > 0) {
 			appendCheckOutputPreview(container, liveCheckOutput, theme);
 		}
-	} else if (step.kind === "terminal") {
+	} else if (step.type === "terminal") {
 		// Terminal body: the full summary prose. The icon already conveys
 		// success vs failure; no need for a kind label or truncation.
 		container.addChild(new Text(`  ${theme.fg("toolOutput", step.summary)}`, 0, 0));
@@ -475,8 +475,8 @@ const appendCheckOutputPreview = (container: Container, output: string, theme: T
 
 const GENERIC_ROUTE_NAMES = new Set(["done", "next", "continue", "ok", "success"]);
 
-const describeCommandStepInline = (step: Extract<Step, { kind: "command" } | { kind: "files_exist" }>): string => {
-	switch (step.kind) {
+const describeCommandStepInline = (step: Extract<Step, { type: "command" } | { type: "files_exist" }>): string => {
+	switch (step.type) {
 		case "command":
 			return `$ ${step.command}`;
 		case "files_exist":
@@ -496,7 +496,7 @@ const iconForAttemptOutcome = (outcome: AttemptOutcome, step: Step): StatusIcon 
 		case "check_fail":
 			return iconFor("failed");
 		case "terminal": {
-			const terminalOutcome: TerminalOutcome = step.kind === "terminal" ? step.outcome : "success";
+			const terminalOutcome: TerminalOutcome = step.type === "terminal" ? step.outcome : "success";
 			return iconFor(terminalOutcome === "success" ? "succeeded" : "failed");
 		}
 		case "open":
@@ -530,12 +530,12 @@ const findFailedStep = (state: RelayRunState): { stepId: StepId; runtime: StepRu
 };
 
 const describeActiveStep = (step: Step, runtime: StepRuntimeState, theme: Theme, liveCheckOutput?: string): string => {
-	if (step.kind === "command" || step.kind === "files_exist") {
+	if (step.type === "command" || step.type === "files_exist") {
 		const lastLine = lastNonEmptyLine(liveCheckOutput);
 		if (lastLine) return theme.fg("toolOutput", truncate(lastLine, 80));
 		return theme.fg("dim", describeCommandStepShort(step));
 	}
-	if (step.kind === "terminal") return theme.fg("dim", `[${step.outcome}]`);
+	if (step.type === "terminal") return theme.fg("dim", `[${step.outcome}]`);
 	const lastCall = [...runtime.transcript]
 		.reverse()
 		.find((item): item is Extract<TranscriptItem, { kind: "tool_call" }> => item.kind === "tool_call");
@@ -566,8 +566,8 @@ const hasExpandedDetail = (state: RelayRunState): boolean => {
 	return false;
 };
 
-const describeCommandStepShort = (step: Extract<Step, { kind: "command" } | { kind: "files_exist" }>): string => {
-	switch (step.kind) {
+const describeCommandStepShort = (step: Extract<Step, { type: "command" } | { type: "files_exist" }>): string => {
+	switch (step.type) {
 		case "command":
 			return step.command;
 		case "files_exist":

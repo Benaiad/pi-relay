@@ -66,30 +66,30 @@ export interface RelayRunState {
 /** Every state change the scheduler emits. */
 export type RelayEvent =
 	| {
-			readonly kind: "run_started";
+			readonly type: "run_started";
 			readonly at: number;
 			readonly planId: PlanId;
 	  }
 	| {
-			readonly kind: "step_ready";
+			readonly type: "step_ready";
 			readonly at: number;
 			readonly stepId: StepId;
 	  }
 	| {
-			readonly kind: "step_started";
+			readonly type: "step_started";
 			readonly at: number;
 			readonly stepId: StepId;
 			readonly attempt: number;
 	  }
 	| {
-			readonly kind: "action_progress";
+			readonly type: "action_progress";
 			readonly at: number;
 			readonly stepId: StepId;
 			readonly item: TranscriptItem;
 			readonly usage: ActorUsage;
 	  }
 	| {
-			readonly kind: "action_completed";
+			readonly type: "action_completed";
 			readonly at: number;
 			readonly stepId: StepId;
 			readonly route: RouteId;
@@ -97,28 +97,28 @@ export type RelayEvent =
 			readonly usage: ActorUsage;
 	  }
 	| {
-			readonly kind: "action_no_completion";
+			readonly type: "action_no_completion";
 			readonly at: number;
 			readonly stepId: StepId;
 			readonly reason: string;
 			readonly usage: ActorUsage;
 	  }
 	| {
-			readonly kind: "action_engine_error";
+			readonly type: "action_engine_error";
 			readonly at: number;
 			readonly stepId: StepId;
 			readonly reason: string;
 			readonly usage: ActorUsage;
 	  }
 	| {
-			readonly kind: "check_passed";
+			readonly type: "check_passed";
 			readonly at: number;
 			readonly stepId: StepId;
 			readonly exitCode: number | null;
 			readonly output: string;
 	  }
 	| {
-			readonly kind: "check_failed";
+			readonly type: "check_failed";
 			readonly at: number;
 			readonly stepId: StepId;
 			readonly exitCode: number | null;
@@ -126,44 +126,44 @@ export type RelayEvent =
 			readonly reason: string;
 	  }
 	| {
-			readonly kind: "artifact_committed";
+			readonly type: "artifact_committed";
 			readonly at: number;
 			readonly artifactId: ArtifactId;
 			readonly writerStep: StepId;
 	  }
 	| {
-			readonly kind: "artifact_rejected";
+			readonly type: "artifact_rejected";
 			readonly at: number;
 			readonly stepId: StepId;
 			readonly violation: ContractViolation;
 	  }
 	| {
-			readonly kind: "step_retry_scheduled";
+			readonly type: "step_retry_scheduled";
 			readonly at: number;
 			readonly stepId: StepId;
 			readonly nextAttempt: number;
 			readonly reason: string;
 	  }
 	| {
-			readonly kind: "step_failed";
+			readonly type: "step_failed";
 			readonly at: number;
 			readonly stepId: StepId;
 			readonly reason: string;
 	  }
 	| {
-			readonly kind: "terminal_reached";
+			readonly type: "terminal_reached";
 			readonly at: number;
 			readonly stepId: StepId;
 			readonly outcome: TerminalOutcome;
 			readonly summary: string;
 	  }
 	| {
-			readonly kind: "run_finished";
+			readonly type: "run_finished";
 			readonly at: number;
 			readonly phase: RunPhase;
 			readonly summary: string;
 	  }
-	| { readonly kind: "run_aborted"; readonly at: number };
+	| { readonly type: "run_aborted"; readonly at: number };
 
 // ============================================================================
 // Reducer
@@ -213,7 +213,7 @@ export const initRunState = (program: Program): RelayRunState => {
  */
 export const applyEvent = (state: RelayRunState, event: RelayEvent): RelayRunState => {
 	const nextEventCount = state.eventCount + 1;
-	switch (event.kind) {
+	switch (event.type) {
 		case "run_started":
 			return {
 				...state,

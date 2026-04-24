@@ -72,7 +72,7 @@ export interface AttemptSummary {
 
 export interface StepSummary {
 	readonly stepId: StepId;
-	readonly kind: Step["kind"];
+	readonly type: Step["type"];
 	readonly status: StepStatus;
 	readonly attemptCount: number;
 	readonly attempts: readonly AttemptSummary[];
@@ -157,7 +157,7 @@ const buildStepSummary = (stepId: StepId, state: RelayRunState, attempts: readon
 	}
 	return {
 		stepId,
-		kind: step.kind,
+		type: step.type,
 		status: runtime.status,
 		attemptCount: runtime.attempts,
 		attempts,
@@ -170,10 +170,10 @@ const buildStepSummary = (stepId: StepId, state: RelayRunState, attempts: readon
 		lastRoute: runtime.lastRoute,
 		lastReason: runtime.lastReason,
 		usage: runtime.usage,
-		actorName: step.kind === "action" ? unwrap(step.actor) : undefined,
+		actorName: step.type === "action" ? unwrap(step.actor) : undefined,
 		commandDescription: describeCheckStep(step),
-		terminalOutcome: step.kind === "terminal" ? step.outcome : undefined,
-		terminalSummary: step.kind === "terminal" ? step.summary : undefined,
+		terminalOutcome: step.type === "terminal" ? step.outcome : undefined,
+		terminalSummary: step.type === "terminal" ? step.summary : undefined,
 	};
 };
 
@@ -249,7 +249,7 @@ export const buildAttemptTimeline = (events: readonly RelayEvent[], program: Pro
 	};
 
 	for (const event of events) {
-		switch (event.kind) {
+		switch (event.type) {
 			case "step_started":
 				open.set(event.stepId, {
 					attemptNumber: event.attempt,
@@ -291,7 +291,7 @@ export const buildAttemptTimeline = (events: readonly RelayEvent[], program: Pro
 				if (!entry) break;
 				close(event.stepId, {
 					attemptNumber: entry.attemptNumber,
-					outcome: event.kind === "action_no_completion" ? "no_completion" : "engine_error",
+					outcome: event.type === "action_no_completion" ? "no_completion" : "engine_error",
 					reason: event.reason,
 					transcript: entry.transcript,
 					usage: event.usage,
@@ -477,7 +477,7 @@ const renderStepSection = (lines: string[], step: StepSummary, attempts: readonl
 	const runCount = attempts.length;
 	const runSuffix = runCount > 1 ? ` (${runCount} runs)` : "";
 
-	switch (step.kind) {
+	switch (step.type) {
 		case "action":
 			lines.push(`## ${stepId} -- actor: ${step.actorName ?? "unknown"}${runSuffix}`);
 			break;
@@ -542,7 +542,7 @@ const formatPriorAttemptOneLiner = (step: StepSummary, attempt: AttemptSummary):
 };
 
 const renderAttemptDetail = (lines: string[], step: StepSummary, attempt: AttemptSummary): void => {
-	switch (step.kind) {
+	switch (step.type) {
 		case "action":
 			renderActionDetail(lines, attempt);
 			break;
@@ -639,7 +639,7 @@ const outcomeLabel = (outcome: RunOutcome): string => {
 };
 
 const describeCheckStep = (step: Step): string | undefined => {
-	switch (step.kind) {
+	switch (step.type) {
 		case "command":
 			return `$ ${step.command}`;
 		case "files_exist":

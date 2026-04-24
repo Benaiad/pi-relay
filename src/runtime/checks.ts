@@ -37,7 +37,7 @@ export interface CheckContext {
 }
 
 export interface CheckOutcome {
-	readonly kind: "pass" | "fail";
+	readonly type: "pass" | "fail";
 	readonly exitCode: number | null;
 	readonly output: string;
 	readonly reason?: string;
@@ -55,9 +55,9 @@ export const runFilesExist = async (step: FilesExistStep, ctx: CheckContext): Pr
 			missing.push(p);
 		}
 	}
-	if (missing.length === 0) return { kind: "pass", exitCode: null, output: "" };
+	if (missing.length === 0) return { type: "pass", exitCode: null, output: "" };
 	const label = missing.length === 1 ? "file does not exist" : "files do not exist";
-	return { kind: "fail", exitCode: null, output: "", reason: `${label}: ${missing.join(", ")}` };
+	return { type: "fail", exitCode: null, output: "", reason: `${label}: ${missing.join(", ")}` };
 };
 
 export const runCommand = async (
@@ -65,7 +65,7 @@ export const runCommand = async (
 	ctx: CheckContext,
 	onOutput?: CheckOutputCallback,
 ): Promise<CheckOutcome> => {
-	const timeoutMs = step.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
+	const timeoutMs = step.timeout ? step.timeout * 1000 : DEFAULT_COMMAND_TIMEOUT_MS;
 
 	const chunks: string[] = [];
 	let chunksLen = 0;
@@ -90,9 +90,9 @@ export const runCommand = async (
 			env: ctx.env,
 		});
 
-		if (exitCode === 0) return { kind: "pass", exitCode: 0, output: drainOutput() };
+		if (exitCode === 0) return { type: "pass", exitCode: 0, output: drainOutput() };
 		return {
-			kind: "fail",
+			type: "fail",
 			exitCode: exitCode ?? null,
 			output: drainOutput(),
 			reason: `exited with code ${exitCode ?? "unknown"}`,
@@ -101,12 +101,12 @@ export const runCommand = async (
 		const message = err instanceof Error ? err.message : String(err);
 		const output = drainOutput();
 		if (message === "aborted") {
-			return { kind: "fail", exitCode: null, output, reason: "check aborted" };
+			return { type: "fail", exitCode: null, output, reason: "check aborted" };
 		}
 		if (message.startsWith("timeout:")) {
-			return { kind: "fail", exitCode: null, output, reason: `timed out after ${timeoutMs}ms` };
+			return { type: "fail", exitCode: null, output, reason: `timed out after ${timeoutMs}ms` };
 		}
-		return { kind: "fail", exitCode: null, output, reason: `failed to spawn: ${message}` };
+		return { type: "fail", exitCode: null, output, reason: `failed to spawn: ${message}` };
 	}
 };
 

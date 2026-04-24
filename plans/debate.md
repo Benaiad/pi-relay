@@ -14,7 +14,7 @@ parameters:
 ---
 
 task: "Debate: {{topic}}"
-successCriteria: "The judge declares the question resolved with a justified verdict, or max rounds are reached."
+success_criteria: "The judge declares the question resolved with a justified verdict, or max rounds are reached."
 artifacts:
   - id: debate_log
     description: "Full debate history — arguments, critiques, and verdicts from all rounds."
@@ -22,8 +22,8 @@ artifacts:
     list: true
 
 steps:
-  - kind: action
-    id: argue
+  - type: action
+    name: argue
     actor: advocate
     instruction: |
       The topic: {{topic}}
@@ -42,9 +42,9 @@ steps:
     reads: [debate_log]
     writes: [debate_log]
     routes: { done: challenge }
-    maxRuns: "{{max_rounds}}"
-  - kind: action
-    id: challenge
+    max_runs: "{{max_rounds}}"
+  - type: action
+    name: challenge
     actor: critic
     instruction: |
       The topic: {{topic}}
@@ -60,9 +60,9 @@ steps:
     reads: [debate_log]
     writes: [debate_log]
     routes: { done: evaluate }
-    maxRuns: "{{max_rounds}}"
-  - kind: action
-    id: evaluate
+    max_runs: "{{max_rounds}}"
+  - type: action
+    name: evaluate
     actor: judge
     instruction: |
       The topic: {{topic}}
@@ -80,8 +80,8 @@ steps:
     routes:
       resolved: done
       unresolved: argue
-    maxRuns: "{{max_rounds}}"
-  - kind: terminal
-    id: done
+    max_runs: "{{max_rounds}}"
+  - type: terminal
+    name: done
     outcome: success
     summary: "Debate concluded with a verdict."
