@@ -230,6 +230,7 @@ const runAction = async (config: SdkEngineConfig, request: ActionRequest): Promi
 		return {
 			kind: "completed",
 			route: routeId,
+			assistant_summary: completion.assistant_summary,
 			writes,
 			usage: snapshotUsage(usage),
 			transcript,

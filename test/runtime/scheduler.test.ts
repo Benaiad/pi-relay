@@ -98,6 +98,7 @@ const completed =
 		return {
 			kind: "completed",
 			route: RouteId(route),
+			assistant_summary: "Completed.",
 			writes: writeMap,
 			usage: fakeUsage(),
 			transcript: [],
@@ -1271,6 +1272,7 @@ describe("Scheduler — check result forwarding", () => {
 							return {
 								kind: "completed",
 								route: RouteId("done"),
+								assistant_summary: "Completed.",
 								writes: new Map(),
 								usage: fakeUsage(),
 								transcript: [],
@@ -1325,6 +1327,7 @@ describe("Scheduler — check result forwarding", () => {
 							return {
 								kind: "completed",
 								route: RouteId("done"),
+								assistant_summary: "Completed.",
 								writes: new Map(),
 								usage: fakeUsage(),
 								transcript: [],
@@ -1379,6 +1382,7 @@ describe("Scheduler — check result forwarding", () => {
 							return {
 								kind: "completed",
 								route: RouteId("done"),
+								assistant_summary: "Completed.",
 								writes: new Map(),
 								usage: fakeUsage(),
 								transcript: [],

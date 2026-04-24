@@ -154,6 +154,7 @@ export type ActionOutcome =
 	| {
 			readonly kind: "completed";
 			readonly route: RouteId;
+			readonly assistant_summary: string;
 			readonly writes: ReadonlyMap<ArtifactId, unknown>;
 			readonly usage: ActorUsage;
 			readonly transcript: readonly TranscriptItem[];

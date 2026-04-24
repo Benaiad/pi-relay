@@ -81,7 +81,7 @@ describe("buildCompletionTool", () => {
 		expect(issuesProp.items.properties).toHaveProperty("description");
 	});
 
-	it("makes artifact properties optional", () => {
+	it("makes artifact properties optional but route and assistant_summary required", () => {
 		const contracts = new Map<ReturnType<typeof ArtifactId>, ArtifactContract>([
 			[ArtifactId("notes"), textContract("notes", "Notes")],
 		]);
@@ -89,6 +89,7 @@ describe("buildCompletionTool", () => {
 		const schema = tool.parameters as { required?: string[] };
 		const required = schema.required ?? [];
 		expect(required).toContain("route");
+		expect(required).toContain("assistant_summary");
 		expect(required).not.toContain("notes");
 	});
 
@@ -115,28 +116,35 @@ describe("buildCompletionTool", () => {
 	describe("execute", () => {
 		it("returns terminate: true", async () => {
 			const tool = buildCompletionTool([RouteId("done")], [], new Map());
-			const result = await tool.execute("call-1", { route: "done" }, undefined, undefined, {} as any);
+			const result = await tool.execute(
+				"call-1",
+				{ route: "done", assistant_summary: "Done." },
+				undefined,
+				undefined,
+				{} as any,
+			);
 			expect(result.terminate).toBe(true);
 		});
 
-		it("returns route and artifacts in details", async () => {
+		it("returns route, assistant_summary, and artifacts in details", async () => {
 			const contracts = new Map<ReturnType<typeof ArtifactId>, ArtifactContract>([
 				[ArtifactId("notes"), textContract("notes", "Notes")],
 			]);
 			const tool = buildCompletionTool([RouteId("done")], [ArtifactId("notes")], contracts);
 			const result = await tool.execute(
 				"call-1",
-				{ route: "done", notes: "some text" },
+				{ route: "done", assistant_summary: "Wrote review notes.", notes: "some text" },
 				undefined,
 				undefined,
 				{} as any,
 			);
 			const details = result.details as CompletionDetails;
 			expect(details.route).toBe("done");
+			expect(details.assistant_summary).toBe("Wrote review notes.");
 			expect(details.artifacts).toEqual({ notes: "some text" });
 		});
 
-		it("separates route from artifact values in details", async () => {
+		it("separates route and assistant_summary from artifact values in details", async () => {
 			const contracts = new Map<ReturnType<typeof ArtifactId>, ArtifactContract>([
 				[ArtifactId("a"), textContract("a", "A")],
 				[ArtifactId("b"), textContract("b", "B")],
@@ -144,15 +152,17 @@ describe("buildCompletionTool", () => {
 			const tool = buildCompletionTool([RouteId("done")], [ArtifactId("a"), ArtifactId("b")], contracts);
 			const result = await tool.execute(
 				"call-1",
-				{ route: "done", a: "val-a", b: "val-b" },
+				{ route: "done", assistant_summary: "Produced both artifacts.", a: "val-a", b: "val-b" },
 				undefined,
 				undefined,
 				{} as any,
 			);
 			const details = result.details as CompletionDetails;
 			expect(details.route).toBe("done");
+			expect(details.assistant_summary).toBe("Produced both artifacts.");
 			expect(details.artifacts).toEqual({ a: "val-a", b: "val-b" });
 			expect(details.artifacts).not.toHaveProperty("route");
+			expect(details.artifacts).not.toHaveProperty("assistant_summary");
 		});
 	});
 });

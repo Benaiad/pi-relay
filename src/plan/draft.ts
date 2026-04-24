@@ -73,8 +73,9 @@ const ActionStepSchema = Type.Object(
 	},
 	{
 		description:
-			"An LLM-backed step. The actor runs with the declared tool list and must call `complete_step` with " +
-			"the chosen route and any artifact writes.",
+			"An LLM-backed step. The 'routes' field is REQUIRED: a map of route names to target step IDs " +
+			'(e.g. { "done": "next-step", "error": "handle-error" }). The actor emits exactly one of ' +
+			"the declared route names when it finishes, and the runtime transitions to that step.",
 	},
 );
 

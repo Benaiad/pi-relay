@@ -23,6 +23,7 @@ const TOOL_NAME = "turn_complete";
 /** The structured details carried by the tool result. */
 export interface CompletionDetails {
 	readonly route: string;
+	readonly assistant_summary: string;
 	readonly artifacts: Record<string, unknown>;
 }
 
@@ -47,14 +48,22 @@ export const buildCompletionTool = (
 		artifactProperties[unwrap(id)] = Type.Optional(shapeToSchema(contract.shape, contract.description));
 	}
 
+	const summarySchema = Type.String({
+		minLength: 1,
+		maxLength: 2000,
+		description: "Brief summary of what you did and why you chose this route.",
+	});
+
 	const hasArtifacts = Object.keys(artifactProperties).length > 0;
 	const parameters = hasArtifacts
 		? Type.Object({
 				route: routeSchema,
+				assistant_summary: summarySchema,
 				...artifactProperties,
 			})
 		: Type.Object({
 				route: routeSchema,
+				assistant_summary: summarySchema,
 			});
 
 	return defineTool({
@@ -66,14 +75,19 @@ export const buildCompletionTool = (
 			"Call turn_complete exactly once, as your final action, after all work is done.",
 			"Do not call turn_complete until every task requirement is met.",
 			"Choose the route that best describes the outcome of your work.",
+			"In assistant_summary, describe what you did and why you chose this route. Be specific — this is the only text the caller sees.",
 		],
 		parameters,
 
 		async execute(_toolCallId, params) {
-			const { route, ...artifacts } = params as Record<string, unknown>;
+			const { route, assistant_summary, ...artifacts } = params as Record<string, unknown>;
 			return {
 				content: [{ type: "text", text: `Completion: route=${route}` }],
-				details: { route: route as string, artifacts } satisfies CompletionDetails,
+				details: {
+					route: route as string,
+					assistant_summary: assistant_summary as string,
+					artifacts,
+				} satisfies CompletionDetails,
 				terminate: true,
 			};
 		},

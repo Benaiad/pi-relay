@@ -67,6 +67,7 @@ class SimpleActorEngine implements ActorEngine {
 		return {
 			kind: "completed",
 			route,
+			assistant_summary: "Completed step.",
 			writes,
 			usage: fakeUsage(),
 			transcript: [],
