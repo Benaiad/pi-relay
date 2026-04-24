@@ -508,7 +508,7 @@ export class Scheduler {
 			const extra: Record<string, string> = {};
 			if (inputDir) extra.RELAY_INPUT = inputDir;
 			if (outputDir) extra.RELAY_OUTPUT = outputDir;
-			const env = Object.keys(extra).length > 0 ? buildShellEnv(extra) : undefined;
+			const env = buildShellEnv(extra);
 
 			const resolvedCommand = this.shellCommandPrefix ? `${this.shellCommandPrefix}\n${step.command}` : step.command;
 
@@ -728,8 +728,9 @@ export class Scheduler {
  * ensures `{agentDir}/bin` is on PATH so commands have access to Pi-managed
  * binaries. Extra variables (e.g. RELAY_INPUT, RELAY_OUTPUT) are merged on top.
  *
- * When no extra env is needed, callers should pass `env: undefined` so
- * `createLocalBashOperations` falls back to its own `getShellEnv()` call.
+ * Always called for command steps (even without extra vars) so the env
+ * construction path is consistent, matching Pi's bash tool which always
+ * passes env explicitly via `resolveSpawnContext`.
  */
 const buildShellEnv = (extraEnv: Readonly<Record<string, string>>): NodeJS.ProcessEnv => {
 	const binDir = join(getAgentDir(), "bin");
