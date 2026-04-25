@@ -214,7 +214,7 @@ export const PlanDraftSchema = Type.Object(
 			Type.Array(ArtifactContractSchema, {
 				description:
 					"Artifacts passed between steps. Defaults to none. " +
-					"Without fields: plain text. With fields: an object with those keys. " +
+					"Without fields: plain text. With fields: an object with those keys (all text values). " +
 					"With fields + list: an array of such objects.",
 			}),
 		),
