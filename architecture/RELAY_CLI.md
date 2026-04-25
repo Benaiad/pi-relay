@@ -51,16 +51,10 @@ config.
 -e @file.json         Load parameters from JSON file
 --dry-run             Validate and show the compiled plan, then exit. No LLM calls.
 --output <mode>       json (default if !TTY) | text (default if TTY) | stream-json
---timeout <seconds>   Process-level timeout (default: 3600)
---max-cost <usd>      Abort if LLM cost exceeds this
 --model <name>        Default model for actors (e.g. claude-sonnet-4-5)
 --thinking <level>    Default thinking level (default: medium)
 --api-key <key>       API key (defaults to ANTHROPIC_API_KEY env var)
 ```
-
-Every flag has a `RELAY_` env var: `RELAY_TIMEOUT`, `RELAY_MAX_COST`,
-`RELAY_MODEL`, `RELAY_THINKING`, `RELAY_OUTPUT_MODE`. Plus
-`ANTHROPIC_API_KEY` for auth. Precedence: flag > env var > default.
 
 ## No Jinja
 
@@ -97,15 +91,12 @@ parameters:
   - name: verify
     description: Verification command.
     default: "npm test"
-  - name: lint
-    description: Lint command.
-    default: "npm run lint"
 ```
 
 ```bash
 # Only task is required
 relay plans/verified-edit.md -e task="Fix the bug"
-# verify defaults to "npm test", lint defaults to "npm run lint"
+# verify defaults to "npm test"
 ```
 
 ### Type change
@@ -178,27 +169,10 @@ Or omitted entirely (defaults to `process.cwd()`).
 `PlanTemplate` gains `readonly cwd?: string`. `TemplateInstantiation` gains
 `readonly cwd?: string` (after substitution).
 
-### Why no `--cwd` flag
-
-`cwd` is just a parameter. `-e cwd=packages/api` does the same thing a
-`--cwd` flag would, without special-casing. One mechanism for all
-template variables.
-
 ## What changes in the codebase
 
 `executePlan` in `execute.ts` couples compile→schedule→run to
 `ExtensionContext` and `ExtensionAPI`. The CLI can't provide these.
-
-`executePlan` does six things:
-
-1. Validate actors against the model registry
-2. Compile the plan
-3. Show an interactive review dialog *(pi-only)*
-4. Construct the scheduler with an actor engine
-5. Run the scheduler
-6. Format the result as `AgentToolResult<RelayDetails>` *(pi-only)*
-
-Steps 1–2 and 4–5 are the engine. Steps 3 and 6 are extension glue.
 
 ### New function: `runPlan` in `src/core/run-plan.ts`
 
@@ -209,10 +183,16 @@ interface RunPlanConfig {
   readonly modelRegistry: ModelRegistry;
   readonly cwd: string;
   readonly signal?: AbortSignal;
-  readonly onEvent?: SchedulerEventHandler;
-  readonly onOutput?: (stepId: StepId, text: string) => void;
+  readonly onProgress?: (progress: RunPlanProgress) => void;
   readonly shellPath?: string;
   readonly shellCommandPrefix?: string;
+}
+
+interface RunPlanProgress {
+  readonly event: RelayEvent;
+  readonly state: RelayRunState;
+  readonly report: RunReport;
+  readonly checkOutput?: ReadonlyMap<StepId, string>;
 }
 
 interface RunPlanResult {
@@ -225,19 +205,16 @@ interface RunPlanResult {
 function runPlan(config: RunPlanConfig): Promise<RunPlanResult>
 ```
 
-Takes a pre-compiled `Program` and validated actors. Callers (extension and
-CLI) both compile and validate before calling `runPlan`. No double
-compilation.
+Takes a pre-compiled `Program` and validated actors. `onProgress` fires on
+every scheduler event with a state snapshot — callers use it for streaming
+output (CLI) or TUI updates (extension).
 
-`onEvent` forwards scheduler events (for cost tracking, stream-json output).
-`onOutput` forwards command step stdout (for text-mode progress, stream-json).
-
-`executePlan` becomes a wrapper: extract values from context, show review
-dialog, compile, call `runPlan`, format as `AgentToolResult<RelayDetails>`.
+`executePlan` becomes a wrapper: compile, review dialog, call `runPlan`,
+format as `AgentToolResult<RelayDetails>`.
 
 ### Headless environment
 
-Uses `createAgentSessionServices` (pi's pattern) for the service layer:
+Uses `createAgentSessionServices` (pi's pattern):
 
 ```typescript
 const authStorage = AuthStorage.create();
@@ -246,9 +223,7 @@ if (cliApiKey) {
 }
 
 const services = await createAgentSessionServices({
-  cwd,
-  agentDir,
-  authStorage,
+  cwd, agentDir, authStorage,
   resourceLoaderOptions: {
     noExtensions: true, noSkills: true,
     noPromptTemplates: true, noThemes: true, noContextFiles: true,
@@ -257,11 +232,9 @@ const services = await createAgentSessionServices({
 const { modelRegistry, settingsManager } = services;
 ```
 
-`ANTHROPIC_API_KEY` is picked up automatically by `AuthStorage.getApiKey()`
-via `getEnvApiKey("anthropic")`. For `--api-key`, use
-`authStorage.setRuntimeApiKey()` — same as pi's own `--api-key`.
+`ANTHROPIC_API_KEY` picked up automatically by `AuthStorage.getApiKey()`.
 
-### CLI entry point: `src/cli/main.ts`
+### CLI data flow
 
 ```
 parse args (template file, -e params, options)
@@ -274,9 +247,9 @@ instantiateTemplate(template, params) → plan + cwd
   ↓
 resolve cwd (template cwd or process.cwd())
   ↓
-discover actors (bundled + user + project)
+discover actors (bundled + project)
   ↓
-compile plan (validate structure, resolve actors, build program)
+compile plan
   ↓
 if --dry-run → print plan summary → exit 0
   ↓
@@ -284,7 +257,7 @@ build services via createAgentSessionServices
   ↓
 validate actors against model registry
   ↓
-runPlan({ program, actorsByName, registry, cwd, signal })
+runPlan({ program, actorsByName, registry, cwd })
   ↓
 format output (json/text/stream-json)
   ↓
@@ -293,13 +266,8 @@ exit(code)
 
 ### `--dry-run`
 
-Runs the full validation pipeline — parse, substitute, discover actors,
-resolve cwd, compile — then prints the compiled plan and exits. No LLM
-calls, no service construction, no API key needed.
-
-```bash
-relay plans/verified-edit.md -e task="Fix the bug" -e verify="npm test" --dry-run
-```
+Parse, substitute, discover actors, compile — then print the compiled plan
+and exit. No LLM calls, no service construction, no API key needed.
 
 ```
 Template: plans/verified-edit.md
@@ -323,9 +291,6 @@ Actors:
 Plan compiles. Ready to run.
 ```
 
-Exit 0 if valid. Same exit 2/3 codes if params are wrong or compilation
-fails.
-
 ## Output
 
 ### Exit codes
@@ -333,17 +298,16 @@ fails.
 | Code | Meaning |
 |------|---------|
 | 0    | Success terminal reached |
-| 1    | Failure terminal or incomplete |
+| 1    | Failure terminal, incomplete, or aborted |
 | 2    | Bad args, missing params, file not found |
 | 3    | Compile error, missing actor |
-| 4    | Runtime error, no API key, cost cap exceeded |
-| 124  | Timeout |
+| 4    | Runtime error, no API key |
 
 ### JSON output (default when piped)
 
 ```typescript
 interface CliOutput {
-  readonly outcome: "success" | "failure" | "incomplete" | "aborted" | "timeout" | "error";
+  readonly outcome: "success" | "failure" | "incomplete" | "aborted" | "error";
   readonly exit_code: number;
   readonly duration_ms: number;
   readonly cost_usd: number;
@@ -372,22 +336,6 @@ Progress to stderr. Markdown report to stdout (`renderRunReportText`).
 ### Stream JSON (`--output stream-json`)
 
 NDJSON to stdout. One `RelayEvent` per line. Final line is `CliOutput`.
-
-## Timeout and cost
-
-**Process timeout** (`--timeout`): `setTimeout` → `abort()`. Exit 124.
-
-**Cost cap** (`--max-cost`): subscribe to scheduler events via `onEvent`,
-sum `usage.cost`, abort when exceeded. Exit 4.
-
-Both use the existing `AbortSignal` path. No scheduler changes. The CLI
-tracks `abortReason: "timeout" | "cost" | "signal" | undefined` to
-distinguish the cause for exit code selection.
-
-## Signals
-
-SIGINT → abort → exit 130. SIGTERM → abort → exit 143.
-Second SIGINT → force exit (for when a step is stuck).
 
 ## Error messages
 
@@ -429,29 +377,7 @@ Unchanged:
 
 **Auth in CI works out of the box.** `AuthStorage.getApiKey()` checks env
 vars via `getEnvApiKey()` from `pi-ai`, which maps `"anthropic"` →
-`ANTHROPIC_API_KEY`. `ModelRegistry.getAvailable()` uses
-`AuthStorage.hasAuth()` which also checks env vars. No special registration
-needed — just set `ANTHROPIC_API_KEY` in CI.
-
-For an explicit `--api-key` flag, use `authStorage.setRuntimeApiKey(provider,
-key)` — same mechanism pi's own `--api-key` uses (main.ts line 578).
-
-## Design decisions
-
-1. **No relay config filtering in CLI.** The extension uses
-   `loadRelayConfig()` to filter disabled actors/plans. The CLI ignores this
-   — in CI the template explicitly names its actors, and the user's desktop
-   deny-list shouldn't affect headless runs.
-
-2. **Actor discovery scope.** The extension uses `discoverActors(cwd, "user")`
-   (no project-scoped actors — they trigger a review dialog). The CLI uses
-   `"both"` since there's no dialog and project actors in the repo are
-   trusted.
-
-3. **`cwd` is a regular parameter.** No special `--cwd` flag, no project root
-   resolution, no `RELAY_CWD` env var. Templates declare `cwd: "{{cwd}}"`
-   with a `default: "."` parameter. Users override with `-e cwd=path`. One
-   mechanism for all variables.
+`ANTHROPIC_API_KEY`. No special registration needed.
 
 ## Open questions
 
