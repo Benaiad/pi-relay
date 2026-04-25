@@ -123,17 +123,20 @@ both forms during transition:
 - `required: false` → `default: ""` (preserves existing behavior)
 - `default: "value"` → new form, takes precedence over `required`
 
-## Template `cwd`
+## Plan `cwd`
 
-`cwd` is a frontmatter config field that participates in normal parameter
-substitution. It's a regular `{{placeholder}}` — no special resolution, no
-dedicated CLI flag.
+`cwd` is a field on `PlanDraftDoc` — the plan itself, not the template
+frontmatter. Both the ad-hoc `relay` tool and templates set it the same way.
+
+### In a template
+
+`cwd` goes in the plan body and participates in normal `{{placeholder}}`
+substitution:
 
 ```yaml
 ---
 name: bug-fix
 description: Diagnose, fix, verify.
-cwd: "{{cwd}}"
 parameters:
   - name: cwd
     description: Working directory.
@@ -143,31 +146,41 @@ parameters:
   - name: verify
     description: Shell command that proves the fix.
 ---
+
+cwd: "{{cwd}}"
+task: "{{bug}}"
+steps:
+  - type: action
+    name: diagnose
+    ...
 ```
 
-No `-e cwd=...` → defaults to `"."` → resolved relative to `process.cwd()`.
-With `-e cwd=packages/api` → resolved relative to `process.cwd()`.
+No `-e cwd=...` → defaults to `"."`. With `-e cwd=packages/api` → that
+directory becomes the working directory for all steps.
 
-Can also be hardcoded:
+### In an ad-hoc relay plan
 
-```yaml
-cwd: packages/api
+The model sets `cwd` directly:
+
+```json
+{
+  "cwd": "packages/api",
+  "task": "Fix the auth bug",
+  "steps": [...]
+}
 ```
-
-Or omitted entirely (defaults to `process.cwd()`).
 
 ### How it works
 
-1. `cwd` is extracted from frontmatter as a string (may contain `{{...}}`)
-2. During `instantiateTemplate`, placeholders in `cwd` are substituted from
-   the args map (same as plan body substitution)
-3. After substitution, the resolved `cwd` string is returned in
-   `TemplateInstantiation`
-4. The CLI resolves it relative to `process.cwd()` (standard path behavior)
-5. Validated: must exist, must be a directory
+1. `cwd` is an optional field in `PlanDraftSchema`
+2. In templates, it's substituted along with the rest of the plan body
+3. `executePlan` / CLI reads `plan.cwd` and resolves it relative to
+   `process.cwd()` (or `ctx.cwd` in the extension)
+4. If absent, uses `process.cwd()` (CLI) or `ctx.cwd` (extension)
+5. The resolved cwd is passed to `runPlan`, which passes it to the scheduler
 
-`PlanTemplate` gains `readonly cwd?: string`. `TemplateInstantiation` gains
-`readonly cwd?: string` (after substitution).
+One code path for both relay and replay. No special `cwdOverride`, no
+changes to `replay.ts`, no cwd in template frontmatter.
 
 ## What changes in the codebase
 
@@ -209,8 +222,8 @@ Takes a pre-compiled `Program` and validated actors. `onProgress` fires on
 every scheduler event with a state snapshot — callers use it for streaming
 output (CLI) or TUI updates (extension).
 
-`executePlan` becomes a wrapper: compile, review dialog, call `runPlan`,
-format as `AgentToolResult<RelayDetails>`.
+`executePlan` becomes a wrapper: resolve cwd from `plan.cwd`, compile,
+review dialog, call `runPlan`, format as `AgentToolResult<RelayDetails>`.
 
 ### Headless environment
 
@@ -243,9 +256,9 @@ load template from file path
   ↓
 merge params: @file.json + -e flags + parameter defaults
   ↓
-instantiateTemplate(template, params) → plan + cwd
+instantiateTemplate(template, params) → PlanDraftDoc (with cwd)
   ↓
-resolve cwd (template cwd or process.cwd())
+resolve cwd from plan.cwd (or process.cwd())
   ↓
 discover actors (bundled + project)
   ↓
@@ -357,17 +370,17 @@ New:
   src/cli/main.ts              # One-shot CLI entry point
 
 Modified:
-  src/execute.ts               # Wrapper around runPlan + review dialog
+  src/execute.ts               # Resolve plan.cwd, wrapper around runPlan
+  src/plan/draft.ts            # PlanDraftSchema gains optional cwd field
   src/templates/types.ts       # TemplateParameter: default replaces required
-                               # PlanTemplate: gains cwd?: string
-  src/templates/discovery.ts   # Extract cwd + default from frontmatter
-  src/templates/substitute.ts  # Apply defaults, cwd in TemplateInstantiation
-  src/replay.ts                # Honor template cwd in extension path
+  src/templates/discovery.ts   # Parse default from frontmatter
+  src/templates/substitute.ts  # Apply parameter defaults
   src/pi-relay.ts              # Extract findPackageRoot to shared util
   package.json                 # bin entry
 
 Unchanged:
-  src/plan/                    # compile, draft, types, program, ids
+  src/replay.ts                # cwd flows through PlanDraftDoc naturally
+  src/plan/compile.ts          # cwd is not a compilation concern
   src/actors/                  # discovery, validate, sdk-engine
   src/runtime/                 # scheduler, artifacts, audit, events, checks
   src/render/                  # TUI — not used by CLI

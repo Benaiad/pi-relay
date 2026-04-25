@@ -60,19 +60,19 @@ interface RunPlanResult {
 ```
 
 **What moves into `runPlan`** (from execute.ts):
-- Lines 138–157: scheduler construction with `createSdkActorEngine`
-- Lines 159–194: event subscription, `scheduler.run()`, report building
+- Scheduler construction with `createSdkActorEngine` (lines 138–157)
+- Event subscription, `scheduler.run()`, report building (lines 159–194)
+
+`runPlan` fires `onProgress` on every scheduler event with a snapshot of
+`{ event, state, report, checkOutput }`. The caller decides how to present
+it (TUI updates for extension, NDJSON for CLI, throttled or not).
 
 **What stays in `executePlan`**:
 - Actor validation, compilation (needs `ExtensionContext`)
+- cwd resolution from `plan.cwd` (new, see Step 3)
 - Review dialog (needs `ctx.hasUI`, `ctx.ui.select`)
 - `AgentToolResult<RelayDetails>` formatting
-
-`executePlan` passes an `onProgress` callback to `runPlan`. The callback
-receives `{ event, state, report, checkOutput }` on every scheduler event —
-the same data `emitUpdate` currently reads from the scheduler directly. This
-replaces the pattern where `executePlan` subscribes to the scheduler and
-calls `scheduler.getState()` / `scheduler.getAudit()`.
+- `onUpdate` throttling (100ms debounce, driven by `onProgress` callback)
 
 **Verify**: `npm run build && npm test` — behavior unchanged.
 
@@ -84,6 +84,12 @@ Keep `required` as derived field (`required = default === undefined`).
 **`src/templates/discovery.ts`**: In `parseParameters`, parse `default` from
 frontmatter entry. Support both old (`required: true/false`) and new
 (`default: "value"`) forms.
+
+```typescript
+const hasDefault = "default" in e && typeof e.default === "string";
+const required = hasDefault ? false : e.required !== false;
+const defaultValue = hasDefault ? (e.default as string) : undefined;
+```
 
 **`src/templates/substitute.ts`**: Before missing-params check, apply
 defaults:
@@ -105,30 +111,44 @@ no default + missing → error.
 
 **Verify**: `npm run build && npm test`
 
-### Step 3: Template `cwd`
+### Step 3: Plan `cwd`
 
-**`src/templates/types.ts`**: Add `cwd?: string` to `PlanTemplate`.
-
-**`src/templates/discovery.ts`**: Extract `cwd` from frontmatter in
-`parseTemplateFile`.
-
-**`src/templates/substitute.ts`**: Add `cwd?: string` to
-`TemplateInstantiation`. Substitute placeholders in cwd using the same
-args map:
+**`src/plan/draft.ts`**: Add optional `cwd` to `PlanDraftSchema`:
 
 ```typescript
-const resolvedCwd = template.cwd
-  ? template.cwd.replace(PLACEHOLDER_RE, (match, name: string) =>
-      substitutionMap.get(name) ?? match)
-  : undefined;
+cwd: Type.Optional(
+  Type.String({
+    description: "Working directory for all steps. Resolved relative to " +
+      "the caller's cwd. Defaults to the caller's cwd when omitted.",
+  }),
+),
 ```
 
-Check for residual placeholders in resolved cwd.
+This is the only schema change. The compiler doesn't need to know about
+`cwd` — it's not a compilation concern. The scheduler already receives
+`cwd` as a constructor argument.
 
-**`src/replay.ts`**: After instantiation, resolve `instantiation.value.cwd`
-relative to `ctx.cwd` and pass the effective cwd through to `executePlan`.
+**`src/execute.ts`**: After compilation, resolve cwd:
 
-**Tests**: cwd substitution, residual placeholder → error.
+```typescript
+const effectiveCwd = plan.cwd
+  ? resolve(ctx.cwd, plan.cwd)
+  : ctx.cwd;
+```
+
+Pass `effectiveCwd` to `runPlan` instead of `ctx.cwd`. Validate it exists
+and is a directory.
+
+No changes to `replay.ts`. The template's `cwd: "{{cwd}}"` is in the plan
+body, gets substituted by `instantiateTemplate` along with everything else,
+and arrives in the `PlanDraftDoc` as `plan.cwd`. `executePlan` picks it up
+from there. One code path.
+
+No changes to `PlanTemplate` or `TemplateInstantiation`. The cwd lives in
+the plan, not in template metadata.
+
+**Tests**: Template with `cwd: "{{cwd}}"` parameter + default, ad-hoc plan
+with `cwd: "subdir"`.
 
 **Verify**: `npm run build && npm test`
 
@@ -161,7 +181,7 @@ interface CliArgs {
 Parse `-e key=value`, `-e @file.json`, `--dry-run`, `--output`, `--model`,
 `--thinking`, `--api-key`, `--help`. First non-flag arg is template path.
 
-**`src/cli/output.ts`**: Formatters for json, text, stream-json output modes.
+**`src/cli/output.ts`**: Formatters for json, text, stream-json.
 
 **`src/cli/main.ts`**:
 
@@ -169,7 +189,6 @@ Parse `-e key=value`, `-e @file.json`, `--dry-run`, `--output`, `--model`,
 async function main(args: string[]): Promise<void> {
   const parsed = parseCliArgs(args);
   if (parsed.help) { printHelp(); return; }
-  // ... diagnostics check ...
 
   // Load template from file
   const template = parseTemplateFile(resolve(parsed.templatePath), "project", warnings);
@@ -177,20 +196,18 @@ async function main(args: string[]): Promise<void> {
   // Merge params: @file + -e flags
   const params = { ...(paramsFromFile ?? {}), ...parsed.params };
 
-  // Instantiate (applies defaults, substitutes cwd)
+  // Instantiate (applies defaults, substitutes plan body including cwd)
   const instantiation = instantiateTemplate(template, params);
+  const plan = instantiation.value.plan;
 
-  // Resolve cwd
-  const cwd = instantiation.value.cwd
-    ? resolve(process.cwd(), instantiation.value.cwd)
-    : process.cwd();
+  // Resolve cwd from plan
+  const cwd = plan.cwd ? resolve(process.cwd(), plan.cwd) : process.cwd();
 
-  // Discover actors (bundled + project)
-  const packageRoot = findPackageRoot(...);
+  // Discover actors
   const actorDiscovery = discoverActors(cwd, "both", { bundledDir });
 
   // Compile
-  const compileResult = compile(instantiation.value.plan, registry);
+  const compileResult = compile(plan, actorRegistryFromDiscovery(actorDiscovery));
 
   // Dry run
   if (parsed.dryRun) { printPlanSummary(...); return; }
@@ -209,7 +226,8 @@ async function main(args: string[]): Promise<void> {
 
   // Run
   const result = await runPlan({
-    program, actorsByName, modelRegistry: services.modelRegistry, cwd,
+    program: compileResult.value, actorsByName,
+    modelRegistry: services.modelRegistry, cwd,
     onProgress: (progress) => { /* stream output */ },
     shellPath: services.settingsManager.getShellPath(),
     shellCommandPrefix: services.settingsManager.getShellCommandPrefix(),
@@ -239,9 +257,11 @@ Add to `package.json`:
 
 ### Step 7: Tests
 
-- `src/core/run-plan.test.ts` — fake actor engine, success/failure/abort
+- `src/core/run-plan.test.ts` — fake actor engine, success/failure/abort,
+  onProgress fires
 - `src/cli/args.test.ts` — `-e` parsing, `@file`, `--dry-run`, errors
-- Extend `src/templates/substitute.test.ts` — defaults, cwd
+- Extend `src/templates/substitute.test.ts` — parameter defaults
+- Plan cwd: template with `cwd: "{{cwd}}"` + default, ad-hoc with `cwd`
 
 **Verify**: `npm test`
 
@@ -250,20 +270,26 @@ Add to `package.json`:
 ```
 Step 1 (runPlan)     ← independent
 Step 2 (defaults)    ← independent
-Step 3 (cwd)         ← depends on 2
+Step 3 (plan cwd)    ← independent (only touches draft.ts + execute.ts)
 Step 4 (packageRoot) ← independent
 Step 5 (CLI)         ← depends on 1, 2, 3, 4
 Step 6 (package)     ← depends on 5
 Step 7 (tests)       ← depends on all
 ```
 
+Steps 1–4 are all independent.
+
 ## Risks
 
 1. **`parseTemplateFile` is module-private.** Change `const` to
    `export const` in discovery.ts.
 
-2. **`findModel` in `actors/validate.ts` is already exported.** CLI reuses
-   it for `--model` resolution.
+2. **Adding `cwd` to `PlanDraftSchema` changes the tool description.** The
+   model sees a new optional field. This is intentional — the model can set
+   cwd on ad-hoc plans.
 
-3. **Actor discovery scope.** Extension uses `"user"`, CLI uses `"both"`.
-   Intentional: CLI includes project actors, no review dialog needed.
+3. **Existing plans don't have `cwd`.** The field is optional and defaults
+   to the caller's cwd. No migration needed.
+
+4. **`findModel` in `actors/validate.ts` is already exported.** CLI reuses
+   it for `--model` resolution.
