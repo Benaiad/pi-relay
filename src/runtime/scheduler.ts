@@ -39,11 +39,11 @@ import { type BashOperations, createLocalBashOperations, getAgentDir } from "@ma
 import type {
 	ActionOutcome,
 	ActionRequest,
-	ActorConfig,
 	ActorEngine,
 	ActorUsage,
 	PriorAttempt,
 	PriorCheckResult,
+	ValidatedActor,
 } from "../actors/types.js";
 import { emptyUsage } from "../actors/types.js";
 import type { ActorId, ArtifactId, RouteId, StepId } from "../plan/ids.js";
@@ -132,7 +132,7 @@ const oneLineLimit = (text: string, limit: number): string => {
 export interface SchedulerConfig {
 	readonly program: Program;
 	readonly actorEngine: ActorEngine;
-	readonly actorsByName: ReadonlyMap<ActorId, ActorConfig>;
+	readonly actorsByName: ReadonlyMap<ActorId, ValidatedActor>;
 	readonly cwd: string;
 	readonly signal?: AbortSignal;
 	readonly clock?: () => number;
@@ -152,7 +152,7 @@ export type SchedulerEventHandler = (event: RelayEvent) => void;
 export class Scheduler {
 	private readonly program: Program;
 	private readonly actorEngine: ActorEngine;
-	private readonly actorsByName: ReadonlyMap<ActorId, ActorConfig>;
+	private readonly actorsByName: ReadonlyMap<ActorId, ValidatedActor>;
 	private readonly cwd: string;
 	private readonly signal?: AbortSignal;
 	private readonly clock: () => number;

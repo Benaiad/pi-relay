@@ -13,13 +13,15 @@
 import {
 	type AgentToolResult,
 	type AgentToolUpdateCallback,
+	type ExtensionAPI,
 	type ExtensionContext,
 	getAgentDir,
 	SettingsManager,
 } from "@mariozechner/pi-coding-agent";
 import { actorRegistryFromDiscovery } from "./actors/discovery.js";
 import { createSdkActorEngine } from "./actors/sdk-engine.js";
-import type { ActorConfig, ActorDiscovery } from "./actors/types.js";
+import type { ActorDiscovery, ValidatedActor } from "./actors/types.js";
+import { validateActors } from "./actors/validate.js";
 import type { RelayDetails } from "./pi-relay.js";
 import { compile } from "./plan/compile.js";
 import { formatCompileError } from "./plan/compile-error-format.js";
@@ -37,14 +39,22 @@ export interface ExecuteInput {
 	readonly signal: AbortSignal | undefined;
 	readonly onUpdate: AgentToolUpdateCallback<RelayDetails> | undefined;
 	readonly ctx: ExtensionContext;
+	readonly pi: ExtensionAPI;
 	readonly toolName: string;
 }
 
 export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<RelayDetails>> => {
-	const { plan, discovery, signal, onUpdate, ctx, toolName } = input;
+	const { plan, discovery, signal, onUpdate, ctx, pi, toolName } = input;
 
-	const actorsByName = new Map<ReturnType<typeof ActorId>, ActorConfig>(
-		discovery.actors.map((a) => [ActorId(a.name), a]),
+	const validatedActors = validateActors(
+		discovery.actors,
+		ctx.modelRegistry,
+		ctx.model,
+		pi.getThinkingLevel(),
+		(msg) => ctx.ui.notify(msg, "warning"),
+	);
+	const actorsByName = new Map<ReturnType<typeof ActorId>, ValidatedActor>(
+		validatedActors.map((a) => [ActorId(a.name), a]),
 	);
 	const registry = actorRegistryFromDiscovery(discovery);
 
@@ -132,7 +142,6 @@ export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<
 		program,
 		actorEngine: createSdkActorEngine({
 			modelRegistry: ctx.modelRegistry,
-			defaultModel: ctx.model,
 		}),
 		actorsByName,
 		cwd: ctx.cwd,
@@ -207,7 +216,7 @@ const COMMAND_TOOLS = new Set(["bash"]);
 
 export const summarizePlanImpact = (
 	plan: PlanDraftDoc,
-	actorsByName: ReadonlyMap<ReturnType<typeof ActorId>, ActorConfig>,
+	actorsByName: ReadonlyMap<ReturnType<typeof ActorId>, ValidatedActor>,
 ): PlanImpact => {
 	let actionStepCount = 0;
 	let commandStepCount = 0;

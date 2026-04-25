@@ -99,6 +99,7 @@ export const registerReplayTool = (
 				signal,
 				onUpdate,
 				ctx,
+				pi,
 				toolName: "Replay",
 			});
 		},

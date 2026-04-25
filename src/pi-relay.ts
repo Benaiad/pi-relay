@@ -112,6 +112,7 @@ export default function (pi: ExtensionAPI): void {
 					signal,
 					onUpdate,
 					ctx,
+					pi,
 					toolName: "Relay",
 				});
 			},

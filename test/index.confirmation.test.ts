@@ -1,19 +1,35 @@
+import type { Api, Model } from "@mariozechner/pi-ai";
 import { describe, expect, it } from "vitest";
-import type { ActorConfig } from "../src/actors/types.js";
+import type { ValidatedActor } from "../src/actors/types.js";
 import { buildSelectTitle, summarizePlanImpact } from "../src/execute.js";
 import type { PlanDraftDoc } from "../src/plan/draft.js";
 import { ActorId } from "../src/plan/ids.js";
 
-const actor = (name: string, tools?: string[]): ActorConfig => ({
+const fakeModel = {
+	id: "test-model",
+	name: "Test Model",
+	reasoning: true,
+	provider: "test",
+	baseUrl: "https://test",
+	api: "openai-completions",
+	input: ["text"],
+	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	contextWindow: 128000,
+	maxTokens: 4096,
+} as Model<Api>;
+
+const actor = (name: string, tools?: string[]): ValidatedActor => ({
 	name,
 	description: `${name} actor`,
 	tools,
 	source: "user",
 	systemPrompt: "",
 	filePath: `/tmp/${name}.md`,
+	resolvedModel: fakeModel,
+	thinking: "medium",
 });
 
-const registry = new Map<ReturnType<typeof ActorId>, ActorConfig>([
+const registry = new Map<ReturnType<typeof ActorId>, ValidatedActor>([
 	[ActorId("worker"), actor("worker", ["read", "edit", "write", "bash"])],
 	[ActorId("planner"), actor("planner", ["read", "grep", "find", "ls"])],
 	[ActorId("reviewer"), actor("reviewer", ["read", "grep", "find", "ls", "bash"])],

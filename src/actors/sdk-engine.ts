@@ -18,7 +18,7 @@
  */
 
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { Api, AssistantMessage, Model, ToolResultMessage } from "@mariozechner/pi-ai";
+import type { AssistantMessage, ToolResultMessage } from "@mariozechner/pi-ai";
 import {
 	createAgentSession,
 	DefaultResourceLoader,
@@ -44,7 +44,6 @@ const TURN_COMPLETE_TOOL = "turn_complete";
 
 export interface SdkEngineConfig {
 	readonly modelRegistry: ModelRegistry;
-	readonly defaultModel: Model<Api> | undefined;
 }
 
 export const createSdkActorEngine = (config: SdkEngineConfig): ActorEngine => ({
@@ -58,8 +57,7 @@ export const createSdkActorEngine = (config: SdkEngineConfig): ActorEngine => ({
 const runAction = async (config: SdkEngineConfig, request: ActionRequest): Promise<ActionOutcome> => {
 	const { actor, step, artifacts, artifactContracts, cwd, signal, onProgress } = request;
 
-	const resolvedModel = resolveModel(actor.model, config);
-	if (!resolvedModel) {
+	if (!actor.resolvedModel) {
 		return {
 			kind: "engine_error",
 			reason: actor.model
@@ -69,6 +67,8 @@ const runAction = async (config: SdkEngineConfig, request: ActionRequest): Promi
 			transcript: [],
 		};
 	}
+
+	const resolvedModel = actor.resolvedModel;
 
 	const completionTool = buildCompletionTool([...step.routes.keys()], step.writes, artifactContracts);
 
@@ -104,7 +104,7 @@ const runAction = async (config: SdkEngineConfig, request: ActionRequest): Promi
 	const { session } = await createAgentSession({
 		cwd,
 		model: resolvedModel,
-		thinkingLevel: actor.thinking ?? "medium",
+		thinkingLevel: actor.thinking,
 		tools: actorTools,
 		customTools: [completionTool],
 		sessionManager: SessionManager.inMemory(cwd),
@@ -241,40 +241,6 @@ const runAction = async (config: SdkEngineConfig, request: ActionRequest): Promi
 		}
 		session.dispose();
 	}
-};
-
-// ============================================================================
-// Model resolution
-// ============================================================================
-
-/**
- * Resolve an actor's model string to a `Model` object.
- *
- * Supports bare model ids (`"claude-sonnet-4-5"`) and `provider/modelId`
- * format (`"anthropic/claude-sonnet-4-5"`). Falls back to the engine's
- * default model when the actor config doesn't specify one.
- */
-const resolveModel = (modelString: string | undefined, config: SdkEngineConfig): Model<Api> | undefined => {
-	if (!modelString) return config.defaultModel;
-
-	const available = config.modelRegistry.getAvailable();
-
-	const slashIndex = modelString.indexOf("/");
-	if (slashIndex !== -1) {
-		const provider = modelString.substring(0, slashIndex);
-		const modelId = modelString.substring(slashIndex + 1);
-		const match = config.modelRegistry.find(provider, modelId);
-		if (match) return match;
-	}
-
-	const lower = modelString.toLowerCase();
-	const byId = available.find((m) => m.id.toLowerCase() === lower);
-	if (byId) return byId;
-
-	const byPartial = available.find(
-		(m) => m.id.toLowerCase().includes(lower) || (m.name?.toLowerCase().includes(lower) ?? false),
-	);
-	return byPartial ?? config.defaultModel;
 };
 
 // ============================================================================

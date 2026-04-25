@@ -13,6 +13,7 @@
  */
 
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
+import type { Api, Model } from "@mariozechner/pi-ai";
 import type { ActorId, ArtifactId, RouteId, StepId } from "../plan/ids.js";
 import type { ActionStep, ArtifactContract } from "../plan/types.js";
 import type { ArtifactSnapshot } from "../runtime/artifacts.js";
@@ -33,6 +34,20 @@ export interface ActorConfig {
 	readonly systemPrompt: string;
 	readonly source: ActorSource;
 	readonly filePath: string;
+}
+
+/**
+ * An actor whose model and thinking level have been validated against the
+ * runtime environment. Carries a resolved `Model` reference (or `undefined`
+ * when no model is available) and a guaranteed thinking level that has been
+ * defaulted from the assistant's session and clamped to model capabilities.
+ *
+ * The pipeline downstream of validation — compiler, scheduler, SDK engine —
+ * consumes `ValidatedActor` instead of raw `ActorConfig`.
+ */
+export interface ValidatedActor extends ActorConfig {
+	readonly resolvedModel: Model<Api> | undefined;
+	readonly thinking: ThinkingLevel;
 }
 
 /** Result of scanning the actor directories. */
@@ -119,7 +134,7 @@ export interface PriorAttempt {
  */
 export interface ActionRequest {
 	readonly step: ActionStep;
-	readonly actor: ActorConfig;
+	readonly actor: ValidatedActor;
 	readonly artifacts: ArtifactSnapshot;
 	readonly artifactContracts: ReadonlyMap<ArtifactId, ArtifactContract>;
 	readonly cwd: string;

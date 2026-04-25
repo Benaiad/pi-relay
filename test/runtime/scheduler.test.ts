@@ -1,5 +1,6 @@
+import type { Api, Model } from "@mariozechner/pi-ai";
 import { describe, expect, it } from "vitest";
-import type { ActionOutcome, ActionRequest, ActorConfig, ActorEngine, ActorUsage } from "../../src/actors/types.js";
+import type { ActionOutcome, ActionRequest, ActorEngine, ActorUsage, ValidatedActor } from "../../src/actors/types.js";
 import { emptyUsage } from "../../src/actors/types.js";
 import { type ActorRegistry, compile } from "../../src/plan/compile.js";
 import type { PlanDraftDoc } from "../../src/plan/draft.js";
@@ -18,18 +19,33 @@ const actorRegistry: ActorRegistry = {
 	names: () => [ActorId("worker"), ActorId("planner"), ActorId("checker")],
 };
 
-const actorConfig = (name: string): ActorConfig => ({
+const fakeModel = {
+	id: "test-model",
+	name: "Test Model",
+	reasoning: true,
+	provider: "test",
+	baseUrl: "https://test",
+	api: "openai-completions",
+	input: ["text"],
+	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	contextWindow: 128000,
+	maxTokens: 4096,
+} as Model<Api>;
+
+const validatedActor = (name: string): ValidatedActor => ({
 	name,
 	description: `Fake ${name}`,
 	systemPrompt: "",
 	source: "user",
 	filePath: `/tmp/${name}.md`,
+	resolvedModel: fakeModel,
+	thinking: "medium",
 });
 
-const fakeActorsByName = new Map<ActorId, ActorConfig>([
-	[ActorId("worker"), actorConfig("worker")],
-	[ActorId("planner"), actorConfig("planner")],
-	[ActorId("checker"), actorConfig("checker")],
+const fakeActorsByName = new Map<ActorId, ValidatedActor>([
+	[ActorId("worker"), validatedActor("worker")],
+	[ActorId("planner"), validatedActor("planner")],
+	[ActorId("checker"), validatedActor("checker")],
 ]);
 
 class StubClock {

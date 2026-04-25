@@ -9,8 +9,9 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import type { Api, Model } from "@mariozechner/pi-ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { ActionOutcome, ActionRequest, ActorConfig, ActorEngine, ActorUsage } from "../src/actors/types.js";
+import type { ActionOutcome, ActionRequest, ActorEngine, ActorUsage, ValidatedActor } from "../src/actors/types.js";
 import { emptyUsage } from "../src/actors/types.js";
 import { type ActorRegistry, compile } from "../src/plan/compile.js";
 import { ActorId, type ArtifactId, unwrap } from "../src/plan/ids.js";
@@ -30,12 +31,27 @@ const actorRegistry: ActorRegistry = {
 	names: () => [ActorId("worker")],
 };
 
-const actorConfig: ActorConfig = {
+const fakeModel = {
+	id: "test-model",
+	name: "Test Model",
+	reasoning: true,
+	provider: "test",
+	baseUrl: "https://test",
+	api: "openai-completions",
+	input: ["text"],
+	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	contextWindow: 128000,
+	maxTokens: 4096,
+} as Model<Api>;
+
+const actorConfig: ValidatedActor = {
 	name: "worker",
 	description: "Fake worker",
 	systemPrompt: "",
 	source: "user",
 	filePath: "/tmp/worker.md",
+	resolvedModel: fakeModel,
+	thinking: "medium",
 };
 
 const fakeUsage = (): ActorUsage => ({
