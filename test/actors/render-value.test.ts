@@ -25,14 +25,15 @@ describe("renderValue", () => {
 		expect(renderValue("line\nnewline")).toBe('"line\\nnewline"');
 	});
 
-	it("quotes strings that look like booleans or null", () => {
-		expect(renderValue("true")).toBe('"true"');
-		expect(renderValue("false")).toBe('"false"');
-		expect(renderValue("null")).toBe('"null"');
+	it("renders strings that look like booleans or null unquoted", () => {
+		expect(renderValue("true")).toBe("true");
+		expect(renderValue("false")).toBe("false");
+		expect(renderValue("null")).toBe("null");
 	});
 
-	it("quotes strings that start with digits", () => {
-		expect(renderValue("42abc")).toBe('"42abc"');
+	it("renders strings that start with digits unquoted", () => {
+		expect(renderValue("42abc")).toBe("42abc");
+		expect(renderValue("42")).toBe("42");
 	});
 
 	it("quotes empty strings", () => {

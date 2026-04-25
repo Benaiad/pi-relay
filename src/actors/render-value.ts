@@ -42,8 +42,6 @@ const renderString = (str: string): string => {
 	if (str.length === 0) return '""';
 	if (str.includes("\n")) return `"${escapeQuoted(str)}"`;
 	if (NEEDS_QUOTING.test(str)) return `"${escapeQuoted(str)}"`;
-	if (str === "true" || str === "false" || str === "null") return `"${str}"`;
-	if (/^-?\d/.test(str)) return `"${str}"`;
 	return str;
 };
 
