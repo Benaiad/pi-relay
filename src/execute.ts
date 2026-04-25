@@ -46,8 +46,11 @@ export interface ExecuteInput {
 export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<RelayDetails>> => {
 	const { plan, discovery, signal, onUpdate, ctx, pi, toolName } = input;
 
+	const referencedActorNames = new Set(plan.steps.filter((s) => s.type === "action").map((s) => s.actor));
+	const referencedActors = discovery.actors.filter((a) => referencedActorNames.has(a.name));
+
 	const validatedActors = validateActors(
-		discovery.actors,
+		referencedActors,
 		ctx.modelRegistry,
 		ctx.model,
 		pi.getThinkingLevel(),
