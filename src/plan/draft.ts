@@ -179,7 +179,9 @@ const ArtifactContractSchema = Type.Object(
 		fields: Type.Optional(
 			Type.Array(NameField("A field name the artifact value must contain."), {
 				minItems: 1,
-				description: "Named fields the artifact value must include. " + "Omit for plain text artifacts.",
+				description:
+					"Named fields the artifact value must include. All field values are text. " +
+					"Omit for plain text artifacts (no structure).",
 			}),
 		),
 		list: Type.Optional(
@@ -210,7 +212,10 @@ export const PlanDraftSchema = Type.Object(
 		),
 		artifacts: Type.Optional(
 			Type.Array(ArtifactContractSchema, {
-				description: "Every artifact the plan produces or consumes. Defaults to none.",
+				description:
+					"Artifacts passed between steps. Defaults to none. " +
+					"Without fields: plain text. With fields: an object with those keys. " +
+					"With fields + list: an array of such objects.",
 			}),
 		),
 		steps: Type.Array(StepSchema, {
