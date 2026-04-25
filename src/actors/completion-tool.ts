@@ -142,14 +142,14 @@ const shapeToSchema = (shape: ArtifactShape, description: string): TSchema => {
 		case "record": {
 			const fields: Record<string, TSchema> = {};
 			for (const field of shape.fields) {
-				fields[field] = Type.Union([Type.String(), Type.Number(), Type.Boolean()]);
+				fields[field] = Type.String();
 			}
 			return Type.Object(fields, { description });
 		}
 		case "record_list": {
 			const fields: Record<string, TSchema> = {};
 			for (const field of shape.fields) {
-				fields[field] = Type.Union([Type.String(), Type.Number(), Type.Boolean()]);
+				fields[field] = Type.String();
 			}
 			return Type.Array(Type.Object(fields), { description });
 		}

@@ -2,7 +2,6 @@
 name: worker
 description: General-purpose implementer. Reads, edits, and writes files; runs commands when necessary. Use for concrete implementation steps in a Relay plan.
 tools: read, edit, write, grep, find, ls, bash
-model: openai-codex/gpt-5.6
 ---
 
 You are a coding worker executing one step of a Relay plan.
