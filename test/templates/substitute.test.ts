@@ -322,4 +322,67 @@ describe("instantiateTemplate", () => {
 		instantiateTemplate(template, { module: "changed", symbol: "changed" });
 		expect(template.rawPlan.task).toBe(originalTask);
 	});
+
+	it("applies parameter defaults when arg is not provided", () => {
+		const template = makeTemplate({
+			parameters: [
+				{ name: "task", description: "The task.", required: true },
+				{ name: "verify", description: "Verify cmd.", required: false, default: "npm test" },
+			],
+			rawPlan: {
+				task: "{{task}}",
+				entry_step: "a",
+				artifacts: [],
+				steps: [
+					{
+						type: "command",
+						name: "a",
+						command: "{{verify}}",
+						on_success: "done",
+						on_failure: "failed",
+					},
+					{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
+					{ type: "terminal", name: "failed", outcome: "failure", summary: "fail" },
+				],
+			},
+		});
+		const result = instantiateTemplate(template, { task: "Fix bug" });
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.value.plan.task).toBe("Fix bug");
+		const step = result.value.plan.steps[0]!;
+		if (step.type !== "command") throw new Error("expected command");
+		expect(step.command).toBe("npm test");
+	});
+
+	it("overrides parameter default with provided arg", () => {
+		const template = makeTemplate({
+			parameters: [
+				{ name: "task", description: "The task.", required: true },
+				{ name: "verify", description: "Verify cmd.", required: false, default: "npm test" },
+			],
+			rawPlan: {
+				task: "{{task}}",
+				entry_step: "a",
+				artifacts: [],
+				steps: [
+					{
+						type: "command",
+						name: "a",
+						command: "{{verify}}",
+						on_success: "done",
+						on_failure: "failed",
+					},
+					{ type: "terminal", name: "done", outcome: "success", summary: "ok" },
+					{ type: "terminal", name: "failed", outcome: "failure", summary: "fail" },
+				],
+			},
+		});
+		const result = instantiateTemplate(template, { task: "Fix bug", verify: "cargo test" });
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		const step = result.value.plan.steps[0]!;
+		if (step.type !== "command") throw new Error("expected command");
+		expect(step.command).toBe("cargo test");
+	});
 });
