@@ -97,13 +97,13 @@ description: Rename a symbol.
 parameters:
   - name: module
     description: Path to the module.
-    required: true
+    
   - name: old_name
     description: Current name.
-    required: true
+    
   - name: new_name
     description: New name.
-    required: true
+    
 ---
 
 task: "Rename {{old_name}} to {{new_name}} in {{module}}"

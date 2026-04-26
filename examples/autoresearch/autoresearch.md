@@ -4,22 +4,16 @@ description: "Autonomous optimization loop. The agent modifies a file, a benchma
 parameters:
   - name: target
     description: "File the agent modifies, e.g. 'optimize.js' or 'src/model.py'."
-    required: true
   - name: goal
     description: "What to optimize: 'execution speed', 'memory usage', 'accuracy', etc."
-    required: true
   - name: benchmark
     description: "Shell command that benchmarks the target. Must exit 0 on success, 1 on crash. Should write metrics to a file the evaluate command can read."
-    required: true
   - name: evaluate
     description: "Shell command that compares the benchmark result to the previous best. Exit 0 if improved (and checkpoint the change), exit 1 if not (and revert the target file)."
-    required: true
   - name: recover
     description: "Shell command to restore the target file after a crash, e.g. 'cp optimize.best.js optimize.js'."
-    required: true
   - name: max_experiments
     description: "Maximum number of experiments to run, e.g. '50' for overnight or '10' for a quick test."
-    required: true
 ---
 
 task: "Optimize {{target}} for {{goal}}"

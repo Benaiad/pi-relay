@@ -251,7 +251,6 @@ const parseParameters = (
 		params.push({
 			name: e.name,
 			description: e.description,
-			required: defaultValue === undefined,
 			default: defaultValue,
 		});
 	}

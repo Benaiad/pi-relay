@@ -294,7 +294,9 @@ const buildSettingsItems = (
 
 	for (const t of templates) {
 		const sig =
-			t.parameters.length > 0 ? t.parameters.map((p) => (p.required ? p.name : `${p.name}?`)).join(", ") : "";
+			t.parameters.length > 0
+				? t.parameters.map((p) => (p.default !== undefined ? `${p.name}?` : p.name)).join(", ")
+				: "";
 		items.push({
 			id: `plan:${t.name}`,
 			label: t.name,

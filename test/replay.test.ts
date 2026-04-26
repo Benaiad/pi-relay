@@ -16,9 +16,9 @@ describe("buildReplayToolDescription", () => {
 	it("lists templates with parameter signatures", () => {
 		const desc = buildReplayToolDescription([
 			template("refactor", [
-				{ name: "module", description: "Module path.", required: true },
-				{ name: "symbol", description: "Symbol name.", required: true },
-				{ name: "note", description: "Optional note.", required: false, default: "" },
+				{ name: "module", description: "Module path." },
+				{ name: "symbol", description: "Symbol name." },
+				{ name: "note", description: "Optional note.", default: "" },
 			]),
 		]);
 		expect(desc).toContain('refactor(module, symbol, note="")');
@@ -40,8 +40,8 @@ describe("buildReplayToolDescription", () => {
 
 	it("lists multiple templates", () => {
 		const desc = buildReplayToolDescription([
-			template("refactor", [{ name: "module", description: "m", required: true }]),
-			template("deploy", [{ name: "env", description: "e", required: true }]),
+			template("refactor", [{ name: "module", description: "m" }]),
+			template("deploy", [{ name: "env", description: "e" }]),
 		]);
 		expect(desc).toContain("refactor(module)");
 		expect(desc).toContain("deploy(env)");

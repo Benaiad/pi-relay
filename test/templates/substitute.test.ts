@@ -6,9 +6,9 @@ const makeTemplate = (overrides: Partial<PlanTemplate> = {}): PlanTemplate => ({
 	name: "test-template",
 	description: "A test template.",
 	parameters: [
-		{ name: "module", description: "Module path.", required: true },
-		{ name: "symbol", description: "Symbol name.", required: true },
-		{ name: "note", description: "Optional note.", required: false, default: "" },
+		{ name: "module", description: "Module path." },
+		{ name: "symbol", description: "Symbol name." },
+		{ name: "note", description: "Optional note.", default: "" },
 	],
 	rawPlan: {
 		task: "Rename {{symbol}} in {{module}}",
@@ -147,7 +147,7 @@ describe("instantiateTemplate", () => {
 					},
 				],
 			},
-			parameters: [{ name: "next_step", description: "Next step id.", required: true }],
+			parameters: [{ name: "next_step", description: "Next step id." }],
 		});
 		const result = instantiateTemplate(template, { next_step: "b" });
 		expect(result.ok).toBe(true);
@@ -161,7 +161,7 @@ describe("instantiateTemplate", () => {
 		// If an arg value contains {{something}}, and that something is not a
 		// declared param, it will show up as unresolved after substitution.
 		const template = makeTemplate({
-			parameters: [{ name: "x", description: "test", required: true }],
+			parameters: [{ name: "x", description: "test" }],
 			rawPlan: {
 				task: "Do {{x}}",
 				entry_step: "a",
@@ -184,7 +184,7 @@ describe("instantiateTemplate", () => {
 
 	it("returns invalid_plan when substitution produces an empty task", () => {
 		const template = makeTemplate({
-			parameters: [{ name: "task_text", description: "task", required: false, default: "" }],
+			parameters: [{ name: "task_text", description: "task", default: "" }],
 			rawPlan: {
 				task: "{{task_text}}",
 				entry_step: "a",
@@ -243,7 +243,7 @@ describe("instantiateTemplate", () => {
 
 	it("coerces a sole placeholder to a number when the arg is numeric", () => {
 		const template = makeTemplate({
-			parameters: [{ name: "count", description: "a number", required: true }],
+			parameters: [{ name: "count", description: "a number" }],
 			rawPlan: {
 				task: "test",
 				entry_step: "a",
@@ -274,7 +274,7 @@ describe("instantiateTemplate", () => {
 
 	it("coerces booleans when the entire value is a placeholder", () => {
 		const template = makeTemplate({
-			parameters: [{ name: "flag", description: "bool", required: true }],
+			parameters: [{ name: "flag", description: "bool" }],
 			rawPlan: {
 				task: "test {{flag}}",
 				entry_step: "a",
@@ -301,7 +301,7 @@ describe("instantiateTemplate", () => {
 
 	it("keeps string type when placeholder is embedded in a larger string", () => {
 		const template = makeTemplate({
-			parameters: [{ name: "n", description: "num", required: true }],
+			parameters: [{ name: "n", description: "num" }],
 			rawPlan: {
 				task: "run {{n}} times",
 				entry_step: "a",
@@ -326,8 +326,8 @@ describe("instantiateTemplate", () => {
 	it("applies parameter defaults when arg is not provided", () => {
 		const template = makeTemplate({
 			parameters: [
-				{ name: "task", description: "The task.", required: true },
-				{ name: "verify", description: "Verify cmd.", required: false, default: "npm test" },
+				{ name: "task", description: "The task." },
+				{ name: "verify", description: "Verify cmd.", default: "npm test" },
 			],
 			rawPlan: {
 				task: "{{task}}",
@@ -358,8 +358,8 @@ describe("instantiateTemplate", () => {
 	it("overrides parameter default with provided arg", () => {
 		const template = makeTemplate({
 			parameters: [
-				{ name: "task", description: "The task.", required: true },
-				{ name: "verify", description: "Verify cmd.", required: false, default: "npm test" },
+				{ name: "task", description: "The task." },
+				{ name: "verify", description: "Verify cmd.", default: "npm test" },
 			],
 			rawPlan: {
 				task: "{{task}}",

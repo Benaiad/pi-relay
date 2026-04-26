@@ -40,7 +40,7 @@ export const instantiateTemplate = (
 
 	const missing: string[] = [];
 	for (const param of template.parameters) {
-		if (param.required && !(param.name in effectiveArgs)) {
+		if (param.default === undefined && !(param.name in effectiveArgs)) {
 			missing.push(param.name);
 		}
 	}

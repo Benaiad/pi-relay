@@ -253,10 +253,8 @@ description: "What this does and when to use it."
 parameters:
   - name: task
     description: What to implement.
-    required: true
   - name: verify
     description: Shell command that must exit 0.
-    required: true
 ---
 
 task: "{{task}}"

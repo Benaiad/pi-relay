@@ -13,10 +13,8 @@ description: Rename a symbol across a module.
 parameters:
   - name: module
     description: Path to the module.
-    required: true
   - name: old_name
     description: Current name.
-    required: true
   - name: new_name
     description: New name.
 ---
@@ -149,9 +147,9 @@ describe("discoverPlanTemplates", () => {
 		expect(t.description).toBe("Rename a symbol across a module.");
 		expect(t.parameters).toHaveLength(3);
 		expect(t.parameters[0]!.name).toBe("module");
-		expect(t.parameters[0]!.required).toBe(true);
+		expect(t.parameters[0]!.default).toBeUndefined();
 		expect(t.parameters[2]!.name).toBe("new_name");
-		expect(t.parameters[2]!.required).toBe(true);
+		expect(t.parameters[2]!.default).toBeUndefined();
 		expect(t.rawPlan.task).toBe("Rename {{old_name}} to {{new_name}} in {{module}}");
 		expect(t.source).toBe("user");
 		expect(disc.warnings).toHaveLength(0);
