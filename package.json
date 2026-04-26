@@ -14,7 +14,7 @@
 	},
 	"files": [
 		"src",
-		"dist/cli",
+		"dist",
 		"actors",
 		"plans",
 		"README.md"

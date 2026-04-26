@@ -14,7 +14,7 @@
 
 import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
 import { createSdkActorEngine } from "../actors/sdk-engine.js";
-import type { ValidatedActor } from "../actors/types.js";
+import type { ActorEngine, ValidatedActor } from "../actors/types.js";
 import type { ActorId, StepId } from "../plan/ids.js";
 import type { Program } from "../plan/program.js";
 import { ArtifactStore } from "../runtime/artifacts.js";
@@ -37,6 +37,7 @@ export interface RunPlanConfig {
 	readonly cwd: string;
 	readonly signal?: AbortSignal;
 	readonly onProgress?: (progress: RunPlanProgress) => void;
+	readonly actorEngine?: ActorEngine;
 	readonly shellPath?: string;
 	readonly shellCommandPrefix?: string;
 }
@@ -55,7 +56,7 @@ export const runPlan = async (config: RunPlanConfig): Promise<RunPlanResult> => 
 
 	const scheduler = new Scheduler({
 		program: config.program,
-		actorEngine: createSdkActorEngine({ modelRegistry: config.modelRegistry }),
+		actorEngine: config.actorEngine ?? createSdkActorEngine({ modelRegistry: config.modelRegistry }),
 		actorsByName: config.actorsByName,
 		cwd: config.cwd,
 		signal: config.signal,
