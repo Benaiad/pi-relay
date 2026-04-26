@@ -225,6 +225,13 @@ export const PlanDraftSchema = Type.Object(
 				"All steps in the plan. Must contain the entry step and at least one terminal step. Max 64 steps.",
 		}),
 		entry_step: Type.Optional(NameField("Step name where execution begins. Defaults to the first step in `steps`.")),
+		cwd: Type.Optional(
+			Type.String({
+				description:
+					"Working directory for all steps. Resolved relative to the caller's cwd. " +
+					"Defaults to the caller's cwd when omitted.",
+			}),
+		),
 	},
 	{
 		description:

@@ -131,7 +131,7 @@ export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<
 		}
 	}
 
-	const effectiveCwd = "cwd" in plan && typeof plan.cwd === "string" ? resolve(ctx.cwd, plan.cwd) : ctx.cwd;
+	const effectiveCwd = plan.cwd ? resolve(ctx.cwd, plan.cwd) : ctx.cwd;
 	const settingsManager = SettingsManager.create(effectiveCwd, getAgentDir());
 
 	let lastEmitAt = 0;
