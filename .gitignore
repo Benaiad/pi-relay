@@ -12,3 +12,4 @@ examples/autoresearch/best.json
 examples/autoresearch/optimize.best.js
 examples/autoresearch/results.tsv
 .idea/
+dist/

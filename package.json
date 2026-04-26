@@ -4,6 +4,9 @@
 	"description": "Graph-based planning and execution engine for the pi coding agent. Lets the model submit a typed plan that runs as a DAG of action, verify, and terminal steps with deterministic verification gates.",
 	"type": "module",
 	"main": "src/pi-relay.ts",
+	"bin": {
+		"relay": "dist/cli/main.js"
+	},
 	"pi": {
 		"extensions": [
 			"src/pi-relay.ts"
@@ -11,11 +14,13 @@
 	},
 	"files": [
 		"src",
+		"dist/cli",
 		"actors",
 		"plans",
 		"README.md"
 	],
 	"scripts": {
+		"build": "tsc -p tsconfig.build.json && chmod +x dist/cli/main.js",
 		"check": "tsc --noEmit && biome check src test",
 		"format": "biome format --write src test",
 		"lint": "biome lint src test",
