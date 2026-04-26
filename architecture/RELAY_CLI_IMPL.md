@@ -168,7 +168,6 @@ interface CliArgs {
   readonly templatePath: string;
   readonly params: Record<string, string>;
   readonly paramsFile?: string;
-  readonly output: "json" | "text" | "stream-json";
   readonly model?: string;          // provider/model-name format, fallback for actors
   readonly thinking?: ThinkingLevel; // fallback for actors, undefined = "off"
   readonly apiKey?: string;
@@ -179,10 +178,8 @@ interface CliArgs {
 }
 ```
 
-Parse `-e key=value`, `-e @file.json`, `--dry-run`, `--output`, `--model`,
-`--thinking`, `--api-key`, `--help`. First non-flag arg is template path.
-
-**`src/cli/output.ts`**: Formatters for json, text, stream-json.
+Parse `-e key=value`, `-e @file.json`, `--dry-run`, `--model`, `--thinking`,
+`--api-key`, `--actors-dir`, `--help`. First non-flag arg is template path.
 
 **`src/cli/main.ts`**:
 
@@ -257,7 +254,7 @@ async function main(args: string[]): Promise<void> {
   const result = await runPlan({
     program: compileResult.value, actorsByName,
     modelRegistry: services.modelRegistry, cwd,
-    onProgress: (progress) => { /* stream output */ },
+    onProgress: (progress) => { /* progress to stderr */ },
     shellPath: services.settingsManager.getShellPath(),
     shellCommandPrefix: services.settingsManager.getShellCommandPrefix(),
   });

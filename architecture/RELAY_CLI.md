@@ -50,7 +50,6 @@ config.
 -e key=value              Set a template parameter
 -e @file.json             Load parameters from JSON file
 --dry-run                 Validate and show the compiled plan, then exit. No LLM calls.
---output <mode>           json (default if !TTY) | text (default if TTY) | stream-json
 --model <provider/name>   Default model for actors without model config (e.g. anthropic/claude-sonnet-4-5)
 --thinking <level>        Default thinking level for actors without thinking config (default: off)
 --api-key <key>           API key (defaults to ANTHROPIC_API_KEY env var)
@@ -300,7 +299,7 @@ validate actors against model registry
   ↓
 runPlan({ program, actorsByName, registry, cwd })
   ↓
-format output (json/text/stream-json)
+print report to stdout
   ↓
 exit(code)
 ```
@@ -344,39 +343,10 @@ Plan compiles. Ready to run.
 | 3    | Compile error, missing actor |
 | 4    | Runtime error, no API key |
 
-### JSON output (default when piped)
+### Output
 
-```typescript
-interface CliOutput {
-  readonly outcome: "success" | "failure" | "incomplete" | "aborted" | "error";
-  readonly exit_code: number;
-  readonly duration_ms: number;
-  readonly cost_usd: number;
-  readonly template: string;
-  readonly cwd: string;
-  readonly steps: readonly {
-    readonly name: string;
-    readonly type: "action" | "command" | "files_exist" | "terminal";
-    readonly outcome: string;
-    readonly attempts: number;
-    readonly duration_ms: number;
-    readonly route?: string;
-    readonly exit_code?: number | null;
-    readonly reason?: string;
-    readonly cost_usd?: number;
-  }[];
-  readonly artifacts: Record<string, unknown>;
-  readonly report: string;
-}
-```
-
-### Text output (default in terminal)
-
-Progress to stderr. Markdown report to stdout (`renderRunReportText`).
-
-### Stream JSON (`--output stream-json`)
-
-NDJSON to stdout. One `RelayEvent` per line. Final line is `CliOutput`.
+Markdown report to stdout (`renderRunReportText`). Progress to stderr.
+Same report format the pi extension uses.
 
 ## Error messages
 
