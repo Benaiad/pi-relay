@@ -172,6 +172,7 @@ interface CliArgs {
   readonly model?: string;          // provider/model-name format, fallback for actors
   readonly thinking?: ThinkingLevel; // fallback for actors, undefined = "off"
   readonly apiKey?: string;
+  readonly actorsDir?: string;      // override actor discovery directory
   readonly dryRun: boolean;
   readonly help: boolean;
   readonly diagnostics: Array<{ type: "warning" | "error"; message: string }>;
@@ -204,7 +205,11 @@ async function main(args: string[]): Promise<void> {
   const cwd = plan.cwd ? resolve(process.cwd(), plan.cwd) : process.cwd();
 
   // Discover actors
-  const actorDiscovery = discoverActors(cwd, "both", { bundledDir });
+  // --actors-dir: load from that directory only (no bundled/project discovery)
+  // default: bundled (from package) + project (.pi/pi-relay/actors/)
+  const actorDiscovery = parsed.actorsDir
+    ? { actors: loadActorsFromDir(resolve(parsed.actorsDir), "project"), projectDir: null, userDir: "" }
+    : discoverActors(cwd, "both", { bundledDir });
 
   // Compile
   const compileResult = compile(plan, actorRegistryFromDiscovery(actorDiscovery));
@@ -305,8 +310,8 @@ Steps 1–4 are all independent.
 
 ## Risks
 
-1. **`parseTemplateFile` is module-private.** Change `const` to
-   `export const` in discovery.ts.
+1. **`parseTemplateFile` and `loadActorsFromDir` are module-private.**
+   Change `const` to `export const` in their respective discovery.ts files.
 
 2. **Adding `cwd` to `PlanDraftSchema` changes the tool description.** The
    model sees a new optional field. This is intentional — the model can set

@@ -54,6 +54,7 @@ config.
 --model <provider/name>   Default model for actors without model config (e.g. anthropic/claude-sonnet-4-5)
 --thinking <level>        Default thinking level for actors without thinking config (default: off)
 --api-key <key>           API key (defaults to ANTHROPIC_API_KEY env var)
+--actors-dir <path>       Directory containing actor .md files (default: bundled + project discovery)
 ```
 
 ### Model and thinking resolution
