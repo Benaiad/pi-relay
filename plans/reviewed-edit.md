@@ -4,13 +4,10 @@ description: "Implement, then review in two passes — spec compliance first, co
 parameters:
   - name: task
     description: What to implement. Include file paths and expected behavior.
-    required: true
   - name: criteria
     description: Acceptance criteria the spec reviewer checks against.
-    required: true
   - name: verify
     description: "Shell command that must exit 0 after approval, e.g. 'npm test && npm run lint'."
-    required: true
 ---
 
 task: "{{task}}"

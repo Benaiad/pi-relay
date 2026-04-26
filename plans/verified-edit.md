@@ -4,10 +4,8 @@ description: "Implement a change then verify with a shell command. Use for any t
 parameters:
   - name: task
     description: What to change. Include file paths, function names, and expected behavior.
-    required: true
   - name: verify
     description: "Shell command that must exit 0, e.g. 'npm test' or 'cargo test && cargo clippy'."
-    required: true
 ---
 
 task: "{{task}}"

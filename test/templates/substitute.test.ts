@@ -8,7 +8,7 @@ const makeTemplate = (overrides: Partial<PlanTemplate> = {}): PlanTemplate => ({
 	parameters: [
 		{ name: "module", description: "Module path.", required: true },
 		{ name: "symbol", description: "Symbol name.", required: true },
-		{ name: "note", description: "Optional note.", required: false },
+		{ name: "note", description: "Optional note.", required: false, default: "" },
 	],
 	rawPlan: {
 		task: "Rename {{symbol}} in {{module}}",
@@ -79,7 +79,7 @@ describe("instantiateTemplate", () => {
 		expect(result.error.kind).toBe("missing_required_param");
 		if (result.error.kind !== "missing_required_param") return;
 		expect(result.error.missing).toEqual(["symbol"]);
-		expect(result.error.provided).toEqual(["module"]);
+		expect(result.error.provided).toEqual(["module", "note"]);
 	});
 
 	it("silently ignores unknown args", () => {
@@ -184,7 +184,7 @@ describe("instantiateTemplate", () => {
 
 	it("returns invalid_plan when substitution produces an empty task", () => {
 		const template = makeTemplate({
-			parameters: [{ name: "task_text", description: "task", required: false }],
+			parameters: [{ name: "task_text", description: "task", required: false, default: "" }],
 			rawPlan: {
 				task: "{{task_text}}",
 				entry_step: "a",

@@ -4,10 +4,8 @@ description: "Diagnose a bug, then fix it, then verify. Use instead of verified-
 parameters:
   - name: bug
     description: The bug — symptoms, reproduction steps, or the failing test.
-    required: true
   - name: verify
     description: "Shell command that proves the bug is fixed, e.g. 'npm test' or 'pytest tests/test_auth.py'."
-    required: true
 ---
 
 task: "Fix: {{bug}}"

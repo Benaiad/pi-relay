@@ -18,13 +18,13 @@ describe("buildReplayToolDescription", () => {
 			template("refactor", [
 				{ name: "module", description: "Module path.", required: true },
 				{ name: "symbol", description: "Symbol name.", required: true },
-				{ name: "note", description: "Optional note.", required: false },
+				{ name: "note", description: "Optional note.", required: false, default: "" },
 			]),
 		]);
-		expect(desc).toContain("refactor(module, symbol, note?)");
+		expect(desc).toContain('refactor(module, symbol, note="")');
 		expect(desc).toContain("refactor template.");
 		expect(desc).toContain("module (required): Module path.");
-		expect(desc).toContain("note (optional): Optional note.");
+		expect(desc).toContain('note (optional, default: ""): Optional note.');
 	});
 
 	it("shows empty parens for parameterless templates", () => {

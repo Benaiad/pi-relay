@@ -4,13 +4,10 @@ description: "Structured adversarial debate between an advocate and a critic, mo
 parameters:
   - name: topic
     description: "The question being debated, e.g. 'Should we migrate from REST to GraphQL for the users API?'"
-    required: true
   - name: position
     description: "The initial position the advocate will defend, e.g. 'Yes, migrate to GraphQL because...'"
-    required: true
   - name: max_rounds
     description: "Maximum debate rounds before the judge must decide. Each round is: advocate → critic → judge."
-    required: true
 ---
 
 task: "Debate: {{topic}}"

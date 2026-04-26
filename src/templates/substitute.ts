@@ -31,9 +31,16 @@ export const instantiateTemplate = (
 	template: PlanTemplate,
 	args: Readonly<Record<string, string>>,
 ): Result<TemplateInstantiation, TemplateError> => {
+	const effectiveArgs: Record<string, string> = { ...args };
+	for (const param of template.parameters) {
+		if (param.default !== undefined && !(param.name in effectiveArgs)) {
+			effectiveArgs[param.name] = param.default;
+		}
+	}
+
 	const missing: string[] = [];
 	for (const param of template.parameters) {
-		if (param.required && !(param.name in args)) {
+		if (param.required && !(param.name in effectiveArgs)) {
 			missing.push(param.name);
 		}
 	}
@@ -42,13 +49,13 @@ export const instantiateTemplate = (
 			kind: "missing_required_param",
 			templateName: template.name,
 			missing,
-			provided: Object.keys(args),
+			provided: Object.keys(effectiveArgs),
 		});
 	}
 
 	const substitutionMap = new Map<string, string>();
 	for (const param of template.parameters) {
-		substitutionMap.set(param.name, args[param.name] ?? "");
+		substitutionMap.set(param.name, effectiveArgs[param.name] ?? "");
 	}
 
 	const cloned = structuredClone(template.rawPlan);

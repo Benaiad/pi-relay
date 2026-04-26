@@ -246,10 +246,13 @@ const parseParameters = (
 			return null;
 		}
 		seen.add(e.name);
+		const hasDefault = "default" in e && typeof e.default === "string";
+		const defaultValue = hasDefault ? (e.default as string) : undefined;
 		params.push({
 			name: e.name,
 			description: e.description,
-			required: e.required !== false,
+			required: defaultValue === undefined,
+			default: defaultValue,
 		});
 	}
 

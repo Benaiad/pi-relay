@@ -17,6 +17,7 @@ export interface TemplateParameter {
 	readonly name: string;
 	readonly description: string;
 	readonly required: boolean;
+	readonly default?: string;
 }
 
 export interface PlanTemplate {

@@ -4,25 +4,18 @@ description: "Implement a change then run three sequential verification gates (e
 parameters:
   - name: task
     description: What to implement. Include file paths and expected behavior.
-    required: true
   - name: gate1
     description: "First verification gate, e.g. 'npm run lint' or 'cargo fmt --check'."
-    required: true
   - name: gate1_name
     description: "Human-readable name for gate 1, e.g. 'lint' or 'format'."
-    required: true
   - name: gate2
     description: "Second verification gate, e.g. 'npx tsc --noEmit' or 'cargo clippy -- -D warnings'."
-    required: true
   - name: gate2_name
     description: "Human-readable name for gate 2, e.g. 'typecheck' or 'clippy'."
-    required: true
   - name: gate3
     description: "Third verification gate, e.g. 'npm test' or 'cargo test'."
-    required: true
   - name: gate3_name
     description: "Human-readable name for gate 3, e.g. 'test' or 'test suite'."
-    required: true
 ---
 
 task: "{{task}}"

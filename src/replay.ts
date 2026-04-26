@@ -147,10 +147,10 @@ export const buildReplayToolDescription = (templates: readonly PlanTemplate[]): 
 	const lines = templates.map((t) => {
 		const paramSig =
 			t.parameters.length > 0
-				? `(${t.parameters.map((p) => (p.required ? p.name : `${p.name}?`)).join(", ")})`
+				? `(${t.parameters.map((p) => (p.default !== undefined ? `${p.name}="${p.default}"` : p.name)).join(", ")})`
 				: "()";
 		const paramDetails = t.parameters.map((p) => {
-			const req = p.required ? "required" : "optional";
+			const req = p.default !== undefined ? `optional, default: "${p.default}"` : "required";
 			return `      ${p.name} (${req}): ${p.description}`;
 		});
 		const detailBlock = paramDetails.length > 0 ? `\n${paramDetails.join("\n")}` : "";
