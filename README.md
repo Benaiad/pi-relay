@@ -36,7 +36,7 @@ ln -s "$(pwd)" ~/.pi/agent/extensions/pi-relay
 ### CLI (headless / CI)
 
 ```bash
-npm install -g pi-relay
+npm install -g github:benaiad/pi-relay
 ```
 
 This gives you the `relay` command. Peer dependencies (pi-coding-agent etc.) are installed automatically.
@@ -53,7 +53,7 @@ Designed for CI — no interaction, no prompts. Exit 0 on success, non-zero on f
 
 ```yaml
 # GitHub Actions
-- run: npm install -g pi-relay
+- run: npm install -g github:benaiad/pi-relay
 - run: relay plans/verified-edit.md -e task="Fix the bug" -e verify="npm test" --model anthropic/claude-sonnet-4-5
   env:
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
