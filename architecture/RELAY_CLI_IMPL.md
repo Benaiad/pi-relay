@@ -169,8 +169,8 @@ interface CliArgs {
   readonly params: Record<string, string>;
   readonly paramsFile?: string;
   readonly output: "json" | "text" | "stream-json";
-  readonly model?: string;
-  readonly thinking: ThinkingLevel;
+  readonly model?: string;          // provider/model-name format, fallback for actors
+  readonly thinking?: ThinkingLevel; // fallback for actors, undefined = "off"
   readonly apiKey?: string;
   readonly dryRun: boolean;
   readonly help: boolean;
@@ -221,8 +221,32 @@ async function main(args: string[]): Promise<void> {
       noPromptTemplates: true, noThemes: true, noContextFiles: true },
   });
 
-  // Validate actors, resolve model
-  const validatedActors = validateActors(...);
+  // Resolve default model from --model flag (if provided)
+  const defaultModel = parsed.model
+    ? findModel(parsed.model, services.modelRegistry)
+    : undefined;
+  if (parsed.model && !defaultModel) {
+    console.error(`Model '${parsed.model}' not found. Check provider/name format.`);
+    process.exitCode = 3; return;
+  }
+
+  // Validate actors (actor model > --model > undefined, actor thinking > --thinking > "off")
+  const defaultThinking = parsed.thinking ?? "off";
+  const validatedActors = validateActors(
+    actorDiscovery.actors, services.modelRegistry, defaultModel,
+    defaultThinking, (msg) => console.error(`Warning: ${msg}`),
+  );
+
+  // Fail early if any actor has no resolved model
+  for (const actor of validatedActors) {
+    if (!actor.resolvedModel) {
+      console.error(
+        `Actor '${actor.name}' has no model configured.\n` +
+        `Use --model <provider/name> or add 'model:' to the actor file.`
+      );
+      process.exitCode = 3; return;
+    }
+  }
 
   // Run
   const result = await runPlan({

@@ -47,13 +47,40 @@ config.
 ### Options
 
 ```
--e key=value          Set a template parameter
--e @file.json         Load parameters from JSON file
---dry-run             Validate and show the compiled plan, then exit. No LLM calls.
---output <mode>       json (default if !TTY) | text (default if TTY) | stream-json
---model <name>        Default model for actors (e.g. claude-sonnet-4-5)
---thinking <level>    Default thinking level (default: medium)
---api-key <key>       API key (defaults to ANTHROPIC_API_KEY env var)
+-e key=value              Set a template parameter
+-e @file.json             Load parameters from JSON file
+--dry-run                 Validate and show the compiled plan, then exit. No LLM calls.
+--output <mode>           json (default if !TTY) | text (default if TTY) | stream-json
+--model <provider/name>   Default model for actors without model config (e.g. anthropic/claude-sonnet-4-5)
+--thinking <level>        Default thinking level for actors without thinking config (default: off)
+--api-key <key>           API key (defaults to ANTHROPIC_API_KEY env var)
+```
+
+### Model and thinking resolution
+
+Actors can declare `model:` and `thinking:` in their frontmatter. The CLI
+flags are fallbacks for actors that don't.
+
+```
+per actor:
+  model    = actor frontmatter model:    → or --model flag → or error
+  thinking = actor frontmatter thinking: → or --thinking flag → or "off"
+```
+
+`--model` is only required when one or more actors in the plan don't declare
+their own model. If all actors specify `model:`, `--model` is unnecessary.
+
+`--thinking` defaults to `"off"` — no extended thinking unless explicitly
+requested. This keeps CI costs predictable.
+
+`--model` uses the same `provider/model-name` format as actor frontmatter:
+`anthropic/claude-sonnet-4-5`, `openai/gpt-4o`, etc.
+
+If an actor has no model and `--model` isn't provided:
+
+```
+Error: Actor 'worker' has no model configured.
+Use --model <provider/name> or add 'model:' to the actor file.
 ```
 
 ## No Jinja
