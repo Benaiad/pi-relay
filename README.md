@@ -9,6 +9,15 @@
 
 Workflow engine for [pi](https://pi.dev/) — break complex tasks into steps with actors, commands, and loops.
 
+Two ways to use it:
+
+- **As a pi extension** — the assistant plans and executes workflows interactively.
+- **As a CLI** — run plan templates headlessly in CI.
+
+## Install
+
+### Pi extension (interactive)
+
 ```bash
 pi install https://github.com/benaiad/pi-relay
 ```
@@ -23,6 +32,94 @@ cd ~/.pi/agent/extensions/pi-relay && npm install --omit=dev
 # Or symlink (changes take effect immediately)
 ln -s "$(pwd)" ~/.pi/agent/extensions/pi-relay
 ```
+
+### CLI (headless / CI)
+
+```bash
+npm install -g pi-relay
+```
+
+This gives you the `relay` command. Peer dependencies (pi-coding-agent etc.) are installed automatically.
+
+## CLI
+
+Run a plan template headlessly. Point at a file, pass parameters, get a report.
+
+```bash
+relay plans/verified-edit.md -e task="Fix the bug" -e verify="npm test" --model sonnet
+```
+
+Designed for CI — no interaction, no prompts. Exit 0 on success, non-zero on failure.
+
+```yaml
+# GitHub Actions
+- run: npm install -g pi-relay
+- run: relay plans/verified-edit.md -e task="Fix the bug" -e verify="npm test" --model anthropic/claude-sonnet-4-5
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+### Options
+
+```
+relay <template.md> [-e key=value]... [options]
+
+-e key=value              Set a template parameter
+-e @file.json             Load parameters from JSON file
+--model <provider/name>   Default model for actors without model config
+--thinking <level>        Default thinking level (default: off)
+--actors-dir <path>       Directory containing actor .md files
+--dry-run                 Validate and show the compiled plan, then exit
+```
+
+`--model` and `--thinking` are fallbacks for actors that don't declare their own. If an actor has `model:` in its frontmatter, it uses that. If not, it uses `--model`. No model anywhere = error.
+
+### Parameter defaults
+
+Parameters can declare defaults. A parameter without `default` is required.
+
+```yaml
+parameters:
+  - name: task
+    description: What to implement.
+  - name: verify
+    description: Verification command.
+    default: "npm test"
+```
+
+```bash
+# Only task is required — verify defaults to "npm test"
+relay plans/verified-edit.md -e task="Fix the bug" --model sonnet
+```
+
+### Working directory
+
+Plans can declare a `cwd` field to set the working directory for all steps:
+
+```yaml
+cwd: "{{cwd}}"
+task: "{{task}}"
+parameters:
+  - name: cwd
+    description: Working directory.
+    default: "."
+  - name: task
+    description: What to implement.
+```
+
+```bash
+relay plans/api-fix.md -e task="Fix auth" -e cwd=packages/api --model sonnet
+```
+
+### Dry run
+
+Validate without running — no LLM calls, no API key needed:
+
+```bash
+relay plans/verified-edit.md -e task="Fix it" -e verify="npm test" --dry-run
+```
+
+## Extension
 
 Without relay, the assistant handles everything in a single conversation turn. Relay lets it break complex work into a plan with multiple actors, verification gates, and structured routing between steps. The assistant decides when a task needs relay — you just describe what you want.
 
