@@ -129,7 +129,7 @@ const loadTemplatesFromDir = (dir: string, source: TemplateSource, warnings: Tem
 
 type TemplateFrontmatter = Record<string, unknown>;
 
-const parseTemplateFile = (
+export const parseTemplateFile = (
 	filePath: string,
 	source: TemplateSource,
 	warnings: TemplateWarning[],

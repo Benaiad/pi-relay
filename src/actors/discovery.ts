@@ -100,7 +100,7 @@ const isDirectory = (p: string): boolean => {
 	}
 };
 
-const loadActorsFromDir = (dir: string, source: ActorSource): ActorConfig[] => {
+export const loadActorsFromDir = (dir: string, source: ActorSource): ActorConfig[] => {
 	if (!existsSync(dir)) return [];
 
 	let entries: import("node:fs").Dirent[];
