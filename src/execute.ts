@@ -2,14 +2,14 @@
  * Shared execute pipeline for relay and replay.
  *
  * Both tools converge after producing a `PlanDraftDoc`: compile the plan,
- * present the interactive review dialog, construct a scheduler, run it,
- * and return a structured result with `RelayDetails`.
+ * present the interactive review dialog, run it via `runPlan`, and return
+ * a structured result with `RelayDetails`.
  *
- * This module owns the compile → review → schedule flow and the plan
- * impact analysis helpers. It does NOT own tool registration, tool
- * descriptions, or `renderCall` — those differ between relay and replay.
+ * This module owns the compile → review → run flow and the plan impact
+ * analysis helpers. The scheduler lifecycle lives in `core/run-plan.ts`.
  */
 
+import { resolve } from "node:path";
 import {
 	type AgentToolResult,
 	type AgentToolUpdateCallback,
@@ -19,19 +19,15 @@ import {
 	SettingsManager,
 } from "@mariozechner/pi-coding-agent";
 import { actorRegistryFromDiscovery } from "./actors/discovery.js";
-import { createSdkActorEngine } from "./actors/sdk-engine.js";
 import type { ActorDiscovery, ValidatedActor } from "./actors/types.js";
 import { validateActors } from "./actors/validate.js";
+import { runPlan } from "./core/run-plan.js";
 import type { RelayDetails } from "./pi-relay.js";
 import { compile } from "./plan/compile.js";
 import { formatCompileError } from "./plan/compile-error-format.js";
 import type { PlanDraftDoc } from "./plan/draft.js";
-import { ActorId, type StepId } from "./plan/ids.js";
-import { ArtifactStore } from "./runtime/artifacts.js";
-import { AuditLog } from "./runtime/audit.js";
-import type { RelayRunState } from "./runtime/events.js";
-import { buildAttemptTimeline, buildRunReport, renderRunReportText } from "./runtime/run-report.js";
-import { Scheduler } from "./runtime/scheduler.js";
+import { ActorId } from "./plan/ids.js";
+import { renderRunReportText } from "./runtime/run-report.js";
 
 export interface ExecuteInput {
 	readonly plan: PlanDraftDoc;
@@ -135,63 +131,57 @@ export const executePlan = async (input: ExecuteInput): Promise<AgentToolResult<
 		}
 	}
 
-	const agentDir = getAgentDir();
-	const settingsManager = SettingsManager.create(ctx.cwd, agentDir);
+	const effectiveCwd = "cwd" in plan && typeof plan.cwd === "string" ? resolve(ctx.cwd, plan.cwd) : ctx.cwd;
+	const settingsManager = SettingsManager.create(effectiveCwd, getAgentDir());
 
-	const clock = () => Date.now();
-	const audit = new AuditLog();
-	const artifactStore = new ArtifactStore(program, clock);
-	const scheduler = new Scheduler({
+	let lastEmitAt = 0;
+
+	const result = await runPlan({
 		program,
-		actorEngine: createSdkActorEngine({
-			modelRegistry: ctx.modelRegistry,
-		}),
 		actorsByName,
-		cwd: ctx.cwd,
+		modelRegistry: ctx.modelRegistry,
+		cwd: effectiveCwd,
 		signal,
-		clock,
-		audit,
-		artifactStore,
+		onProgress: onUpdate
+			? (progress) => {
+					const now = Date.now();
+					if (now - lastEmitAt < 100) return;
+					lastEmitAt = now;
+					onUpdate({
+						content: [{ type: "text", text: renderRunReportText(progress.report) }],
+						details: {
+							type: "state",
+							state: progress.state,
+							attemptTimeline: progress.report.timeline,
+							checkOutput: progress.checkOutput,
+						},
+					});
+				}
+			: undefined,
 		shellPath: settingsManager.getShellPath(),
 		shellCommandPrefix: settingsManager.getShellCommandPrefix(),
 	});
 
-	let lastEmitAt = 0;
-	const emitUpdate = (force: boolean): void => {
-		if (!onUpdate) return;
-		const now = Date.now();
-		if (!force && now - lastEmitAt < 100) return;
-		lastEmitAt = now;
-		const state = scheduler.getState();
-		const auditLog = scheduler.getAudit();
-		const attemptTimeline = buildAttemptTimeline(auditLog.entries(), program);
-		const report = buildRunReport(state, auditLog);
-		const checkOutput = buildCheckOutputSnapshot(scheduler, state);
+	// Final update with artifacts included in the report text
+	if (onUpdate) {
 		onUpdate({
-			content: [{ type: "text", text: renderRunReportText(report) }],
-			details: { type: "state", state, attemptTimeline, checkOutput },
-		});
-	};
-
-	const eventSub = scheduler.subscribe(() => emitUpdate(false));
-	const outputSub = scheduler.subscribeOutput(() => emitUpdate(false));
-	try {
-		const report = await scheduler.run();
-		emitUpdate(true);
-		const finalState = scheduler.getState();
-		const finalTimeline = buildAttemptTimeline(scheduler.getAudit().entries(), program);
-		return {
-			content: [{ type: "text", text: renderRunReportText(report, artifactStore) }],
+			content: [{ type: "text", text: renderRunReportText(result.report, result.artifactStore) }],
 			details: {
 				type: "state",
-				state: finalState,
-				attemptTimeline: finalTimeline,
+				state: result.state,
+				attemptTimeline: result.report.timeline,
 			},
-		};
-	} finally {
-		eventSub.unsubscribe();
-		outputSub.unsubscribe();
+		});
 	}
+
+	return {
+		content: [{ type: "text", text: renderRunReportText(result.report, result.artifactStore) }],
+		details: {
+			type: "state",
+			state: result.state,
+			attemptTimeline: result.report.timeline,
+		},
+	};
 };
 
 // ============================================================================
@@ -291,22 +281,4 @@ export const buildSelectTitle = (plan: PlanDraftDoc, impact: PlanImpact): string
 	parts.push(...bullets);
 
 	return `Relay plan · ${parts.join(" · ")}`;
-};
-
-// ============================================================================
-// Check output snapshot
-// ============================================================================
-
-const buildCheckOutputSnapshot = (
-	scheduler: Scheduler,
-	state: RelayRunState,
-): ReadonlyMap<StepId, string> | undefined => {
-	let result: Map<StepId, string> | undefined;
-	for (const stepId of state.currentlyRunning) {
-		const output = scheduler.getCheckOutput(stepId);
-		if (output === undefined) continue;
-		result ??= new Map();
-		result.set(stepId, output);
-	}
-	return result;
 };
