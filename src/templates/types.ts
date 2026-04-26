@@ -6,7 +6,7 @@
  * parameters; the body is the plan in YAML with `{{param}}` placeholders.
  *
  * Templates are discovered from three tiers (ascending priority):
- *   1. `<package-root>/plans/` (bundled)
+ *   1. `<package-root>/bundled/plans/` (bundled)
  *   2. `~/.pi/agent/pi-relay/plans/` (user scope)
  *   3. `<cwd>/.pi/pi-relay/plans/` (project scope)
  */

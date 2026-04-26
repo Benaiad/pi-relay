@@ -71,8 +71,8 @@ export type RelayRenderState = {
 
 export default function (pi: ExtensionAPI): void {
 	const packageRoot = findPackageRoot(dirname(fileURLToPath(import.meta.url)));
-	const bundledActorsDir = packageRoot ? join(packageRoot, "actors") : undefined;
-	const bundledPlansDir = packageRoot ? join(packageRoot, "plans") : undefined;
+	const bundledActorsDir = packageRoot ? join(packageRoot, "bundled", "actors") : undefined;
+	const bundledPlansDir = packageRoot ? join(packageRoot, "bundled", "plans") : undefined;
 
 	const loadConfig = loadRelayConfig();
 	const loadDiscovery = discoverActors(process.cwd(), "user", {

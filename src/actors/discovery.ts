@@ -4,7 +4,7 @@
  * Scans up to three directories for markdown files with YAML frontmatter,
  * merged in ascending priority:
  *
- *   1. `<package-root>/actors/`           (bundled — ships with the extension, read-only)
+ *   1. `<package-root>/bundled/actors/`    (bundled — ships with the extension, read-only)
  *   2. `~/.pi/agent/pi-relay/actors/`     (user scope — user overrides and custom actors)
  *   3. `<cwd>/.pi/pi-relay/actors/`       (project scope — repo-controlled actors)
  *

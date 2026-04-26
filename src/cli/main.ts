@@ -204,7 +204,7 @@ const discoverActorsForCli = (cwd: string, actorsDir: string | undefined): Actor
 		return { actors: loadActorsFromDir(resolved, "project"), projectDir: null, userDir: "" };
 	}
 	const packageRoot = findPackageRoot(dirname(fileURLToPath(import.meta.url)));
-	const bundledActorsDir = packageRoot ? resolve(packageRoot, "actors") : undefined;
+	const bundledActorsDir = packageRoot ? resolve(packageRoot, "bundled", "actors") : undefined;
 	return discoverActors(cwd, "both", { bundledDir: bundledActorsDir });
 };
 

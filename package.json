@@ -15,8 +15,7 @@
 	"files": [
 		"src",
 		"dist",
-		"actors",
-		"plans",
+		"bundled",
 		"README.md"
 	],
 	"scripts": {

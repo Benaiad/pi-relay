@@ -306,7 +306,7 @@ describe("discoverPlanTemplates", () => {
 // Bundled plan template validation
 // ============================================================================
 
-const BUNDLED_PLANS_DIR = join(dirname(dirname(fileURLToPath(import.meta.url))), "..", "plans");
+const BUNDLED_PLANS_DIR = join(dirname(dirname(fileURLToPath(import.meta.url))), "..", "bundled", "plans");
 
 const DUMMY_ARGS: Record<string, Record<string, string>> = {
 	"verified-edit": { task: "add a button", verify: "npm test" },

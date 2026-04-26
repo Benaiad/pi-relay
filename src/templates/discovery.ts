@@ -4,7 +4,7 @@
  * Scans up to three directories for markdown files with YAML frontmatter,
  * merged in ascending priority:
  *
- *   1. `<package-root>/plans/`            (bundled — ships with the extension, read-only)
+ *   1. `<package-root>/bundled/plans/`     (bundled — ships with the extension, read-only)
  *   2. `~/.pi/agent/pi-relay/plans/`      (user scope — user overrides and custom plans)
  *   3. `<cwd>/.pi/pi-relay/plans/`        (project scope — repo-controlled plans)
  *
