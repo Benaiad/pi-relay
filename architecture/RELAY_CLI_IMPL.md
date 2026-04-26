@@ -82,13 +82,12 @@ it (TUI updates for extension, NDJSON for CLI, throttled or not).
 Keep `required` as derived field (`required = default === undefined`).
 
 **`src/templates/discovery.ts`**: In `parseParameters`, parse `default` from
-frontmatter entry. Support both old (`required: true/false`) and new
-(`default: "value"`) forms.
+frontmatter entry. Replace `required` parsing with `default` parsing.
 
 ```typescript
-const hasDefault = "default" in e && typeof e.default === "string";
-const required = hasDefault ? false : e.required !== false;
-const defaultValue = hasDefault ? (e.default as string) : undefined;
+const defaultValue = "default" in e && typeof e.default === "string"
+  ? (e.default as string)
+  : undefined;
 ```
 
 **`src/templates/substitute.ts`**: Before missing-params check, apply
@@ -170,7 +169,6 @@ interface CliArgs {
   readonly paramsFile?: string;
   readonly model?: string;          // provider/model-name format, fallback for actors
   readonly thinking?: ThinkingLevel; // fallback for actors, undefined = "off"
-  readonly apiKey?: string;
   readonly actorsDir?: string;      // override actor discovery directory
   readonly dryRun: boolean;
   readonly help: boolean;
@@ -179,7 +177,7 @@ interface CliArgs {
 ```
 
 Parse `-e key=value`, `-e @file.json`, `--dry-run`, `--model`, `--thinking`,
-`--api-key`, `--actors-dir`, `--help`. First non-flag arg is template path.
+`--actors-dir`, `--help`. First non-flag arg is template path.
 
 **`src/cli/main.ts`**:
 
@@ -214,11 +212,10 @@ async function main(args: string[]): Promise<void> {
   // Dry run
   if (parsed.dryRun) { printPlanSummary(...); return; }
 
-  // Build services (pi pattern)
-  const authStorage = AuthStorage.create();
-  if (parsed.apiKey) authStorage.setRuntimeApiKey("anthropic", parsed.apiKey);
+  // Build services (pi pattern — ANTHROPIC_API_KEY picked up automatically)
   const services = await createAgentSessionServices({
-    cwd, agentDir: getAgentDir(), authStorage,
+    cwd, agentDir: getAgentDir(),
+    authStorage: AuthStorage.create(),
     resourceLoaderOptions: { noExtensions: true, noSkills: true,
       noPromptTemplates: true, noThemes: true, noContextFiles: true },
   });

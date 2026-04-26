@@ -52,7 +52,6 @@ config.
 --dry-run                 Validate and show the compiled plan, then exit. No LLM calls.
 --model <provider/name>   Default model for actors without model config (e.g. anthropic/claude-sonnet-4-5)
 --thinking <level>        Default thinking level for actors without thinking config (default: off)
---api-key <key>           API key (defaults to ANTHROPIC_API_KEY env var)
 --actors-dir <path>       Directory containing actor .md files (default: bundled + project discovery)
 ```
 
@@ -139,16 +138,6 @@ interface TemplateParameter {
 A parameter is required iff `default` is undefined. During substitution, if a
 parameter has a default and wasn't provided, use the default. The `required`
 field is removed — it's derived from the presence of `default`.
-
-### Migration
-
-Existing templates use `required: true` (which is the same as no `default`)
-or `required: false` (which defaulted to empty string). The parser accepts
-both forms during transition:
-
-- `required: true` → no default (same behavior)
-- `required: false` → `default: ""` (preserves existing behavior)
-- `default: "value"` → new form, takes precedence over `required`
 
 ## Plan `cwd`
 
@@ -257,13 +246,9 @@ review dialog, call `runPlan`, format as `AgentToolResult<RelayDetails>`.
 Uses `createAgentSessionServices` (pi's pattern):
 
 ```typescript
-const authStorage = AuthStorage.create();
-if (cliApiKey) {
-  authStorage.setRuntimeApiKey("anthropic", cliApiKey);
-}
-
 const services = await createAgentSessionServices({
-  cwd, agentDir, authStorage,
+  cwd, agentDir,
+  authStorage: AuthStorage.create(),
   resourceLoaderOptions: {
     noExtensions: true, noSkills: true,
     noPromptTemplates: true, noThemes: true, noContextFiles: true,
@@ -386,9 +371,10 @@ Unchanged:
 
 ## Verified
 
-**Auth in CI works out of the box.** `AuthStorage.getApiKey()` checks env
-vars via `getEnvApiKey()` from `pi-ai`, which maps `"anthropic"` →
-`ANTHROPIC_API_KEY`. No special registration needed.
+**Auth in CI works out of the box.** `AuthStorage.getApiKey()` checks
+provider-specific env vars (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.)
+via `getEnvApiKey()`. No registration needed — just set the env var for
+your provider.
 
 ## Open questions
 
