@@ -18,7 +18,7 @@ export class RateLimiter {
 		const now = Date.now();
 		this.timestamps = this.timestamps.filter((t) => now - t < this.config.windowMs);
 
-		if (this.timestamps.length <= this.config.maxRequests) {
+		if (this.timestamps.length < this.config.maxRequests) {
 			this.timestamps.push(now);
 			return true;
 		}
@@ -33,7 +33,7 @@ export class RateLimiter {
 
 	async waitForSlot(): Promise<void> {
 		while (!this.tryAcquire()) {
-			const oldest = this.timestamps[0];
+			const oldest = this.timestamps[0]!;
 			const waitMs = this.config.windowMs - (Date.now() - oldest);
 			await new Promise((resolve) => setTimeout(resolve, waitMs));
 		}
@@ -49,21 +49,28 @@ export class RateLimiter {
 
 export function parseRateLimit(header: string): RateLimitConfig | null {
 	const parts = header.split(",");
-	let maxRequests: any = null;
-	let windowMs: any = null;
+	let maxRequests: number | null = null;
+	let windowMs: number | null = null;
 
 	for (const part of parts) {
-		const [key, val] = part.split("=");
-		switch (key.trim()) {
-			case "limit":
-				maxRequests = parseInt(val);
+		const eqIdx = part.indexOf("=");
+		if (eqIdx === -1) continue;
+		const key = part.substring(0, eqIdx).trim();
+		const val = part.substring(eqIdx + 1);
+		switch (key) {
+			case "limit": {
+				const parsed = parseInt(val, 10);
+				if (!Number.isNaN(parsed)) maxRequests = parsed;
 				break;
-			case "window":
-				windowMs = parseInt(val) * 1000;
+			}
+			case "window": {
+				const parsed = parseInt(val, 10);
+				if (!Number.isNaN(parsed)) windowMs = parsed * 1000;
 				break;
+			}
 		}
 	}
 
-	if (maxRequests && windowMs) return { maxRequests, windowMs };
+	if (maxRequests !== null && windowMs !== null) return { maxRequests, windowMs };
 	return null;
 }
