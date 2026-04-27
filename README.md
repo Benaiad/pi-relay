@@ -151,9 +151,9 @@ Three things are added to pi:
 
 ## Core concepts
 
-### Step kinds
+### Step types
 
-A plan is a DAG of steps. Four kinds:
+A plan is a DAG of steps. Four types:
 
 - **`action`** — an actor (LLM agent) runs with a restricted tool set and emits a route on completion.
 - **`command`** — runs a shell command. Pass if exit 0, fail otherwise. Output is captured for the failure reason. Reads artifacts from `$RELAY_INPUT`, writes artifacts to `$RELAY_OUTPUT`.
