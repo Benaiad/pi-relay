@@ -62,7 +62,8 @@
 		"workflow",
 		"dag",
 		"planning",
-		"agent"
+		"agent",
+		"automation"
 	],
 	"dependencies": {
 		"yaml": "^2.8.3"
