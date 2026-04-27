@@ -25,23 +25,20 @@ jobs:
           node-version: 22
 
       - name: Install pi-relay
-        id: relay
         run: |
           git clone --depth=1 https://github.com/benaiad/pi-relay.git /tmp/pi-relay
-          cd /tmp/pi-relay && npm ci && npm run build
-          echo "root=/tmp/pi-relay" >> "$GITHUB_OUTPUT"
+          cd /tmp/pi-relay && npm ci && npm link
 
       - name: Run PR review
         run: |
-          node ${{ steps.relay.outputs.root }}/dist/cli/main.js \
-            bundled/ci/pr-review.md \
+          relay bundled/ci/pr-review.md \
             -e pr_number="${{ github.event.pull_request.number }}" \
             --model "$RELAY_MODEL" \
             --thinking "${RELAY_THINKING:-off}"
         env:
           RELAY_MODEL: ${{ secrets.RELAY_MODEL }}
           RELAY_THINKING: ${{ secrets.RELAY_THINKING }}
-          RELAY_PLAN_DIR: ${{ steps.relay.outputs.root }}/bundled/ci
+          RELAY_PLAN_DIR: /tmp/pi-relay/bundled/ci
           GH_TOKEN: ${{ github.token }}
           # Add your provider's API key secret below. Name depends on provider:
           #   zai → ZAI_API_KEY, anthropic → ANTHROPIC_API_KEY, openai → OPENAI_API_KEY
