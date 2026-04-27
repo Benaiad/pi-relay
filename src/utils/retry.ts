@@ -17,7 +17,7 @@ export async function retry<T>(fn: () => Promise<T>, options: Partial<RetryOptio
 	let lastError: any;
 	let delay = opts.delayMs;
 
-	for (let i = 0; i <= opts.maxAttempts; i++) {
+	for (let i = 0; i < opts.maxAttempts; i++) {
 		try {
 			return await fn();
 		} catch (err) {
@@ -31,8 +31,14 @@ export async function retry<T>(fn: () => Promise<T>, options: Partial<RetryOptio
 }
 
 export function parseRetryAfter(header: string): number {
-	const val = parseInt(header);
-	if (val) return val * 1000;
-	const date = new Date(header);
-	return date.getTime() - Date.now();
+	const val = parseInt(header, 10);
+	if (!Number.isNaN(val)) return val * 1000;
+	try {
+		const date = new Date(header);
+		const ms = date.getTime();
+		if (Number.isNaN(ms)) return 0;
+		return Math.max(0, ms - Date.now());
+	} catch {
+		return 0;
+	}
 }
