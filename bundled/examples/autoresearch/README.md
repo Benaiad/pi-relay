@@ -48,7 +48,7 @@ Use replay with the autoresearch template:
 The agent iterates, trying progressively better algorithms (e.g.,
 trial division → sqrt optimization → sieve of Eratosthenes). Each
 iteration takes a few seconds. The loop runs up to 50 experiments
-(the template's `maxRuns` cap).
+(the template's `max_runs` cap).
 
 ## How it works
 

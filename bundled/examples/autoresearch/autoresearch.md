@@ -17,14 +17,14 @@ parameters:
 ---
 
 task: "Optimize {{target}} for {{goal}}"
-successCriteria: "The optimization loop runs until maxRuns is reached. Improvements are kept, non-improvements are reverted by the evaluate script."
-entryStep: experiment
+success_criteria: "The optimization loop runs until max_runs is reached. Improvements are kept, non-improvements are reverted by the evaluate script."
+entry_step: experiment
 artifacts:
-  - id: experiment_log
+  - name: experiment_log
     description: "Accumulated log of what each experiment tried and why. Each entry is appended automatically — the actor writes one entry per iteration."
 steps:
-  - kind: action
-    id: experiment
+  - type: action
+    name: experiment
     actor: worker
     instruction: |
       You are an autonomous researcher optimizing {{target}} for {{goal}}.
@@ -51,23 +51,23 @@ steps:
     reads: [experiment_log]
     writes: [experiment_log]
     routes: { done: benchmark }
-    maxRuns: "{{max_experiments}}"
-  - kind: command
-    id: benchmark
+    max_runs: "{{max_experiments}}"
+  - type: command
+    name: benchmark
     command: "{{benchmark}}"
-    onSuccess: evaluate
-    onFailure: recover
-  - kind: command
-    id: evaluate
+    on_success: evaluate
+    on_failure: recover
+  - type: command
+    name: evaluate
     command: "{{evaluate}}"
-    onSuccess: experiment
-    onFailure: experiment
-  - kind: command
-    id: recover
+    on_success: experiment
+    on_failure: experiment
+  - type: command
+    name: recover
     command: "{{recover}}"
-    onSuccess: experiment
-    onFailure: failed
-  - kind: terminal
-    id: failed
+    on_success: experiment
+    on_failure: failed
+  - type: terminal
+    name: failed
     outcome: failure
     summary: "Recovery failed after a crash — manual intervention needed."
