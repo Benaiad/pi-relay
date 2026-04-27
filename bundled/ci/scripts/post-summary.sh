@@ -25,3 +25,5 @@ Verification passed.
 *[View full run](${url})*"
 
 gh pr comment "$pr_number" --body "$body"
+
+dismiss_stale_reviews "$pr_number"
