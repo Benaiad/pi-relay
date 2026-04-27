@@ -48,10 +48,11 @@ steps:
     instruction: |
       Review the pull request in the context artifact.
 
-      Assess:
+      Assess every changed line against these criteria:
       - Correctness: logic errors, off-by-ones, race conditions, missing edge cases
       - Security: injection, auth bypass, data exposure, secret leakage
-      - Error handling: swallowed errors, missing validation, unclear failure modes
+      - Error handling: swallowed errors, silent fallback defaults, missing validation
+      - Type discipline: bare `any`, missing exhaustiveness, stringly-typed APIs
       - Breaking changes: public API modifications, config format changes
       - Testing: missing test coverage for changed behavior
       - Style: only deviations from the project's existing conventions
@@ -72,7 +73,9 @@ steps:
       - description: what's wrong
       - suggestion: concrete fix
 
-      If the code is clean, write an empty findings list and route to approve.
+      Route to request_changes if any finding has severity "error" or
+      "warning". Route to approve only when all findings are "info" or
+      there are no findings.
     reads: [context]
     writes: [review_summary, review_findings]
     routes:
