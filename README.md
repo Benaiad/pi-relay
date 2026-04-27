@@ -354,12 +354,12 @@ graph LR
 
 ```bash
 # GitHub Actions (see bundled/ci/README.md for full workflow)
-node dist/cli/main.js bundled/ci/pr-review.md \
+relay bundled/ci/pr-review.md \
   -e pr_number=42 \
   --model "$RELAY_MODEL" --thinking "${RELAY_THINKING:-off}"
 
 # Local testing
-RELAY_PLAN_DIR=./bundled/ci node dist/cli/main.js bundled/ci/pr-review.md \
+RELAY_PLAN_DIR=./bundled/ci relay bundled/ci/pr-review.md \
   -e pr_number=42 -e base_branch=main \
   --model zai/glm-5.1 --thinking medium
 ```
