@@ -18,14 +18,16 @@ prepare → review (LLM) → post findings → fix (LLM) → push → verify →
 3. **Dismisses stale reviews** — Previous AI reviews are dismissed before
    posting a new one.
 4. **Posts a GitHub review** — APPROVE if clean, REQUEST_CHANGES if
-   issues found. Each finding becomes a line-level inline comment on the
-   diff (falls back to file-level if the line is outside a changed hunk).
+   issues found. Each finding with a valid line number becomes a
+   line-level inline comment on the diff. Findings with invalid or
+   missing lines are included in the review body only.
 5. **Fixes** — A worker LLM addresses error and warning findings. It
    self-verifies by running the project's verification command.
 6. **Pushes** — Commits and pushes using `GITHUB_TOKEN` (no loop — pushes
    via `GITHUB_TOKEN` do not trigger new workflow runs).
 7. **Verifies** — Runs the verification command after push.
 8. **Posts a summary** — A PR comment reporting what was found and fixed.
+   Dismisses the REQUEST_CHANGES review so it no longer blocks merge.
 
 ## File structure
 
@@ -39,7 +41,7 @@ bundled/ci/
     post-approval.sh        Dismiss stale reviews, post APPROVE review
     post-findings.sh        Dismiss stale reviews, post REQUEST_CHANGES with inline comments
     push-fixes.sh           Commit and push fix changes
-    post-summary.sh         Post success comment
+    post-summary.sh         Post success comment, dismiss stale reviews
     post-failure.sh         Post failure comment
 ```
 
@@ -83,20 +85,25 @@ jobs:
       - name: Install pi-relay
         id: relay
         run: |
-          npm install -g github:benaiad/pi-relay
-          echo "plan_dir=$(npm root -g)/pi-relay/bundled/ci" >> "$GITHUB_OUTPUT"
+          git clone --depth=1 https://github.com/benaiad/pi-relay.git /tmp/pi-relay
+          cd /tmp/pi-relay && npm ci && npm run build
+          echo "root=/tmp/pi-relay" >> "$GITHUB_OUTPUT"
 
       - name: Run PR review
         run: |
-          relay bundled/ci/pr-review.md \
+          node ${{ steps.relay.outputs.root }}/dist/cli/main.js \
+            bundled/ci/pr-review.md \
             -e pr_number="${{ github.event.pull_request.number }}" \
             --model "$RELAY_MODEL" \
             --thinking "${RELAY_THINKING:-off}"
         env:
           RELAY_MODEL: ${{ secrets.RELAY_MODEL }}
           RELAY_THINKING: ${{ secrets.RELAY_THINKING }}
-          RELAY_PLAN_DIR: ${{ steps.relay.outputs.plan_dir }}
+          RELAY_PLAN_DIR: ${{ steps.relay.outputs.root }}/bundled/ci
           GH_TOKEN: ${{ github.token }}
+          # Add your provider's API key secret below. Name depends on provider:
+          #   zai → ZAI_API_KEY, anthropic → ANTHROPIC_API_KEY, openai → OPENAI_API_KEY
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
 ```
 
 ### 2. Configure secrets
@@ -120,15 +127,15 @@ and add these secrets:
 | google | `GOOGLE_API_KEY` |
 | deepseek | `DEEPSEEK_API_KEY` |
 
-Add the provider API key secret, then add it to the workflow's `env`
-block:
+Add the provider API key secret, then replace `ZAI_API_KEY` in the
+workflow's `env` block with your provider's key name:
 
 ```yaml
         env:
           RELAY_MODEL: ${{ secrets.RELAY_MODEL }}
           RELAY_THINKING: ${{ secrets.RELAY_THINKING }}
-          RELAY_PLAN_DIR: ${{ steps.relay.outputs.plan_dir }}
-          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}   # your provider
+          RELAY_PLAN_DIR: ${{ steps.relay.outputs.root }}/bundled/ci
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # your provider
           GH_TOKEN: ${{ github.token }}
 ```
 
@@ -141,7 +148,8 @@ The default verification command is `npm run check`. To change it, add
 the `-e verify=` parameter:
 
 ```yaml
-          relay bundled/ci/pr-review.md \
+          node ${{ steps.relay.outputs.root }}/dist/cli/main.js \
+            bundled/ci/pr-review.md \
             -e pr_number="${{ github.event.pull_request.number }}" \
             -e verify="cargo test && cargo clippy -- -D warnings" \
             --model "$RELAY_MODEL" \
@@ -212,17 +220,26 @@ script validates line numbers against the actual diff:
 
 1. Parses `git diff -U0` with POSIX awk to extract valid `file:line`
    pairs (changed lines only).
-2. For each finding: valid `file:line` becomes a line-level comment.
-   Invalid or empty line becomes a file-level comment. File not in the
-   diff — finding stays in the review body only.
+2. For each finding: if `file:line` is valid, it becomes a line-level
+   inline comment. If the line is invalid, empty, or the file isn't in
+   the diff, the finding is skipped as an inline comment — it remains
+   visible in the review body.
 
 The review always posts successfully regardless of line accuracy.
 
 ### Stale review dismissal
 
-Before posting a new review, `lib.sh:dismiss_stale_reviews` finds all
-previous reviews by `github-actions[bot]` and dismisses them. Failures
-are silently ignored — the new review is always posted.
+Stale reviews are dismissed at two points:
+
+1. **Before posting a new review** — `post-approval.sh` and
+   `post-findings.sh` dismiss all previous reviews by
+   `github-actions[bot]` before posting. This prevents stale findings
+   from coexisting with the fresh review.
+2. **After successful fix + verify** — `post-summary.sh` dismisses the
+   REQUEST_CHANGES review it posted earlier, since the findings have
+   been addressed. This unblocks merge.
+
+Dismissal failures are silently ignored (`|| true`).
 
 ### Loop prevention
 
@@ -239,7 +256,8 @@ Run the plan locally against an existing PR:
 
 ```bash
 RELAY_PLAN_DIR=./bundled/ci \
-  relay bundled/ci/pr-review.md \
+  node dist/cli/main.js \
+  bundled/ci/pr-review.md \
   -e pr_number=42 \
   -e base_branch=main \
   --model zai/glm-5.1 \
@@ -249,7 +267,8 @@ RELAY_PLAN_DIR=./bundled/ci \
 Dry-run (no LLM calls, no API key needed):
 
 ```bash
-relay bundled/ci/pr-review.md \
+node dist/cli/main.js \
+  bundled/ci/pr-review.md \
   -e pr_number=1 \
   --model fake/model \
   --dry-run
