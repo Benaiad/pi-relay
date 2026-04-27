@@ -29,12 +29,18 @@ export class TtlCache<T> {
 		}
 		this.store.set(key, {
 			value,
-			expiresAt: Date.now() + (ttlMs || this.defaultTtlMs),
+			expiresAt: Date.now() + (ttlMs ?? this.defaultTtlMs),
 		});
 	}
 
 	has(key: string): boolean {
-		return this.store.has(key);
+		const entry = this.store.get(key);
+		if (!entry) return false;
+		if (Date.now() > entry.expiresAt) {
+			this.store.delete(key);
+			return false;
+		}
+		return true;
 	}
 
 	delete(key: string): boolean {
@@ -73,7 +79,8 @@ export function parseCacheControl(header: string): { maxAge: number; noCache: bo
 			result.noCache = true;
 		}
 		if (trimmed.startsWith("max-age=")) {
-			result.maxAge = Number(trimmed.split("=")[1]) * 1000;
+			const parsed = Number(trimmed.split("=")[1]);
+			if (Number.isFinite(parsed)) result.maxAge = parsed * 1000;
 		}
 	}
 
