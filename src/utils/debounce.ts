@@ -1,5 +1,5 @@
 export function debounce<T extends (...args: any[]) => void>(fn: T, delayMs: number): T {
-	let timer: any;
+	let timer: ReturnType<typeof setTimeout> | undefined;
 	return ((...args: any[]) => {
 		clearTimeout(timer);
 		timer = setTimeout(() => fn(...args), delayMs);
