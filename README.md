@@ -133,6 +133,7 @@ Relay encodes *process* — how steps connect, where verification happens, when 
 | act → gate₁ → gate₂ → gate₃ | Sequential checks | multi-gate |
 | argue → challenge → judge ↺ | Structured debate | debate |
 | propose → benchmark → evaluate ↺ | Optimization loop | autoresearch |
+| review → post → fix → verify | AI code review (CI) | pr-review |
 
 Three things are added to pi:
 
@@ -169,20 +170,20 @@ routes: { done: verify, failure: failed }
 
 The actor chooses which route to emit on completion. Multi-way branching is supported — a judge step might route to `resolved` or `unresolved`, each pointing to a different next step.
 
-Command and files_exist steps route via fixed `onSuccess` / `onFailure` fields.
+Command and files_exist steps route via fixed `on_success` / `on_failure` fields.
 
 ### Artifacts
 
-Structured state passed between steps. Declared at the plan level with an id and description, then read and written by steps. Action steps read and write artifacts through a terminating tool call. Command steps read and write artifacts through the filesystem:
+Structured state passed between steps. Declared at the plan level with a name and description, then read and written by steps. Action steps read and write artifacts through a terminating tool call. Command steps read and write artifacts through the filesystem:
 
 ```yaml
-- kind: command
-  id: grade
+- type: command
+  name: grade
   command: "./grader.sh"
   reads: [candidate]
   writes: [evaluation]
-  onSuccess: done
-  onFailure: propose
+  on_success: done
+  on_failure: propose
 ```
 
 The runtime creates two directories and sets `$RELAY_INPUT` and `$RELAY_OUTPUT` as env vars. Both use the same interface — files named after artifact ids:
@@ -199,11 +200,11 @@ Artifacts can optionally declare `fields` (named keys the value must contain) an
 
 ### Back-edges and loops
 
-Routes can point to earlier steps, creating loops. A command step that fails can route back to an action step, which re-runs with the failure reason in its prompt. The `maxRuns` field on action steps caps iterations to prevent runaway loops.
+Routes can point to earlier steps, creating loops. A command step that fails can route back to an action step, which re-runs with the failure reason in its prompt. The `max_runs` field on action steps caps iterations to prevent runaway loops.
 
 ## Included templates
 
-Five templates ship with the extension, plus one example. Each implements a different workflow topology — from a single gate to multi-round adversarial loops. The assistant picks the right one via `replay`, or builds a custom plan with `relay`.
+Five templates ship with the extension, plus one example and one CI template. Each implements a different workflow topology — from a single gate to multi-round adversarial loops. The assistant picks the right one via `replay`, or builds a custom plan with `relay`.
 
 ### verified-edit
 
@@ -320,7 +321,7 @@ Use replay with the debate template:
 
 ### autoresearch
 
-An autonomous optimization loop that demonstrates back-edges with `maxRuns` for iteration capping. The agent modifies code, the runtime benchmarks it, a deterministic gate keeps improvements and reverts regressions. Included as an example in [`examples/autoresearch/`](examples/autoresearch/) — see its README for setup.
+An autonomous optimization loop that demonstrates back-edges with `max_runs` for iteration capping. The agent modifies code, the runtime benchmarks it, a deterministic gate keeps improvements and reverts regressions. Included as an example in [`examples/autoresearch/`](examples/autoresearch/) — see its README for setup.
 
 ```mermaid
 graph LR
@@ -333,6 +334,35 @@ graph LR
 ```
 
 **Parameters:** `target`, `goal`, `benchmark`, `evaluate`, `recover`, `max_experiments`
+
+### pr-review
+
+AI code review for pull requests, designed for CI. A reviewer LLM reads the diff, produces structured findings, and the runtime posts them as a GitHub review with line-level inline comments. A worker LLM then fixes findings and pushes a verified commit. Two LLM calls — all GitHub interaction via bash scripts. Included in [`bundled/ci/`](bundled/ci/) — see its [README](bundled/ci/README.md) for setup.
+
+```mermaid
+graph LR
+    prepare{prepare} --> review["review\n(pr-reviewer)"]
+    review -- approve --> post_approval{post approval} --> approved([approved])
+    review -- request_changes --> post_findings{post findings}
+    post_findings --> fix["fix\n(worker)"] --> push{push}
+    push --> verify{verify}
+    verify -- pass --> post_summary{post summary} --> fixed([fixed])
+    verify -- fail --> post_failure{post failure} --> unfixed([unfixed])
+```
+
+**Parameters:** `pr_number`, `verify`, `max_diff_lines`, `base_branch`
+
+```bash
+# GitHub Actions (see bundled/ci/README.md for full workflow)
+node dist/cli/main.js bundled/ci/pr-review.md \
+  -e pr_number=42 \
+  --model "$RELAY_MODEL" --thinking "${RELAY_THINKING:-off}"
+
+# Local testing
+RELAY_PLAN_DIR=./bundled/ci node dist/cli/main.js bundled/ci/pr-review.md \
+  -e pr_number=42 -e base_branch=main \
+  --model zai/glm-5.1 --thinking medium
+```
 
 ## Custom templates
 
@@ -356,22 +386,22 @@ parameters:
 
 task: "{{task}}"
 steps:
-  - kind: action
-    id: implement
+  - type: action
+    name: implement
     actor: worker
     instruction: "{{task}}"
     routes: { done: verify }
-  - kind: command
-    id: verify
+  - type: command
+    name: verify
     command: "{{verify}}"
-    onSuccess: done
-    onFailure: failed
-  - kind: terminal
-    id: done
+    on_success: done
+    on_failure: failed
+  - type: terminal
+    name: done
     outcome: success
     summary: Done.
-  - kind: terminal
-    id: failed
+  - type: terminal
+    name: failed
     outcome: failure
     summary: Verification failed.
 ```
