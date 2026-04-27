@@ -84,16 +84,16 @@ jq -n \
 			if ($files | index($f.file)) == null then
 				empty
 			elif ($f.line | length) == 0 then
-				{path: $f.file, body: $comment_body, subject_type: "file"}
+				empty
 			elif ($f.line | test("^[0-9]+$")) then
 				(($f.file + ":" + $f.line) as $key |
 					if ($valid | index($key)) then
 						{path: $f.file, line: ($f.line | tonumber), side: "RIGHT", body: $comment_body}
 					else
-						{path: $f.file, body: $comment_body, subject_type: "file"}
+						empty
 					end)
 			else
-				{path: $f.file, body: $comment_body, subject_type: "file"}
+				empty
 			end
 		]
 	}' | \
