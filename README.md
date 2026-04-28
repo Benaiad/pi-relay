@@ -16,7 +16,7 @@ graph LR
 ```
 
 ```
-Use relay with the verified-edit template:
+pi> Use relay with the verified-edit template:
   task: Add input validation to the signup handler in src/api/signup.ts
   verify: npm test
 ```
@@ -63,7 +63,7 @@ Three things are added to pi:
 When a plan can modify files or run commands, pi shows a review before execution — **run**, **refine**, or **cancel**. Read-only plans skip the review.
 
 ```
-Use replay with the reviewed-edit template:
+pi> Use replay with the reviewed-edit template:
   task: Add rate limiting to the /api/upload endpoint
   criteria: Returns 429 after 10 requests per minute per IP. Includes Retry-After header.
   verify: npm test && npm run lint
@@ -203,7 +203,7 @@ The simplest topology, shown above. Do the work, then prove it didn't break anyt
 **Parameters:** `task`, `verify`
 
 ```
-Use replay with the verified-edit template:
+pi> Use replay with the verified-edit template:
   task: Add input validation to the signup handler in src/api/signup.ts
   verify: npm test
 ```
@@ -227,7 +227,7 @@ graph LR
 **Parameters:** `task`, `criteria`, `verify`
 
 ```
-Use replay with the reviewed-edit template:
+pi> Use replay with the reviewed-edit template:
   task: Refactor the auth middleware to support both JWT and session tokens
   criteria: Existing session-based tests still pass. JWT tokens are validated with the public key from JWKS endpoint. No hardcoded secrets.
   verify: npm test && npm run lint
@@ -249,7 +249,7 @@ graph LR
 **Parameters:** `bug`, `verify`
 
 ```
-Use replay with the bug-fix template:
+pi> Use replay with the bug-fix template:
   bug: Login returns 500 when email contains a + character
   verify: npm test -- --grep auth
 ```
@@ -275,7 +275,7 @@ graph LR
 **Parameters:** `task`, `gate1`, `gate1_name`, `gate2`, `gate2_name`, `gate3`, `gate3_name`
 
 ```
-Use replay with the multi-gate template:
+pi> Use replay with the multi-gate template:
   task: Refactor the config parser to use Zod schemas
   gate1: npm run lint
   gate1_name: lint
@@ -303,7 +303,7 @@ graph LR
 **Parameters:** `topic`, `position`, `max_rounds`
 
 ```
-Use replay with the debate template:
+pi> Use replay with the debate template:
   topic: Should we migrate from REST to GraphQL for the users API?
   position: Yes — GraphQL eliminates overfetching and simplifies the mobile client.
   max_rounds: 3
