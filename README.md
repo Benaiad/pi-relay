@@ -25,15 +25,15 @@ A worker actor implements the change. A shell command runs the tests. Exit 0 rou
 
 That's one topology. These are the plan templates bundled with relay:
 
-| Topology | What it models |
-|----------|---------------|
-| act → verify | Gated commit |
-| diagnose → fix → verify | Root cause analysis |
-| act → review → fix ↺ | Iterative QA |
-| act → gate₁ → gate₂ → gate₃ | Sequential checks |
-| argue → challenge → judge ↺ | Structured debate |
-| propose → benchmark → evaluate ↺ | Optimization loop |
-| review → post → fix → verify | AI code review (CI) |
+| Topology | What it models | Template |
+|----------|---------------|----------|
+| act → verify | Gated commit | [verified-edit](bundled/plans/verified-edit.md) |
+| diagnose → fix → verify | Root cause analysis | [bug-fix](bundled/plans/bug-fix.md) |
+| act → review → fix ↺ | Iterative QA | [reviewed-edit](bundled/plans/reviewed-edit.md) |
+| act → gate₁ → gate₂ → gate₃ | Sequential checks | [multi-gate](bundled/plans/multi-gate.md) |
+| argue → challenge → judge ↺ | Structured debate | [debate](bundled/plans/debate.md) |
+| propose → benchmark → evaluate ↺ | Optimization loop | [autoresearch](bundled/examples/autoresearch/) |
+| review → post → fix → verify | AI code review (CI) | [pr-review](bundled/ci/pr-review.md) |
 
 The ↺ arrows are back-edges — loops where a step routes to an earlier step, capped by `max_runs` to prevent runaway execution. Every row is a different shape built from the same building blocks — actors that do work, shell commands that check results, and routing that connects them. You can write your own templates for any topology your workflow needs. The topology is the program.
 
