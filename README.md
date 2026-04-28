@@ -16,7 +16,7 @@ graph LR
 ```
 
 ```
-pi> Use relay with the verified-edit template:
+pi> Use replay with the verified-edit template:
   task: Add input validation to the signup handler in src/api/signup.ts
   verify: npm test
 ```
