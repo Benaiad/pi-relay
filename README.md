@@ -1,22 +1,43 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="pi-relay-dark.png">
-    <img src="pi-relay.png" alt="pi-relay" width="200">
-  </picture>
-</p>
-
 # pi-relay
 
 Workflow engine for [pi](https://pi.dev/) — break complex tasks into steps with actors, commands, and loops.
 
-Two ways to use it:
+For simple tasks, pi works in a single shot. But for anything that needs verification — implement, test, fix what broke, test again — you end up driving the loop yourself. You run the tests, paste the failure back, ask for a fix, re-check, and repeat. There's no structured way to route on success or failure, and no separation between the role that writes code and the role that reviews it.
 
-- **As a pi extension** — the assistant plans and executes workflows interactively.
-- **As a CLI** — run plan templates headlessly in CI.
+Relay eliminates that. You define the workflow once — steps, actors, verification gates, routing — and relay executes it.
 
-## Install
+The simplest useful example — do the work, then prove it didn't break anything:
 
-### Pi extension (interactive)
+```mermaid
+graph LR
+    implement["implement\n(worker)"] --> verify{verify}
+    verify -- pass --> done([done])
+    verify -- fail --> failed([failed])
+```
+
+```
+Use relay with the verified-edit template:
+  task: Add input validation to the signup handler in src/api/signup.ts
+  verify: npm test
+```
+
+A worker actor implements the change. A shell command runs the tests. Exit 0 routes to success, non-zero routes to failure. One actor, one gate, no ambiguity.
+
+That's one topology. These are the plan templates bundled with relay:
+
+| Topology | What it models |
+|----------|---------------|
+| act → verify | Gated commit |
+| diagnose → fix → verify | Root cause analysis |
+| act → review → fix ↺ | Iterative QA |
+| act → gate₁ → gate₂ → gate₃ | Sequential checks |
+| argue → challenge → judge ↺ | Structured debate |
+| propose → benchmark → evaluate ↺ | Optimization loop |
+| review → post → fix → verify | AI code review (CI) |
+
+The ↺ arrows are back-edges — loops where a step routes to an earlier step, capped by `max_runs` to prevent runaway execution. Every row is a different shape built from the same building blocks — actors that do work, shell commands that check results, and routing that connects them. You can write your own templates for any topology your workflow needs. The topology is the program.
+
+## Getting started: extension
 
 ```bash
 pi install https://github.com/benaiad/pi-relay
@@ -33,31 +54,47 @@ cd ~/.pi/agent/extensions/pi-relay && npm install --omit=dev
 ln -s "$(pwd)" ~/.pi/agent/extensions/pi-relay
 ```
 
-### CLI (headless / CI)
+Three things are added to pi:
+
+- **`relay` tool** — the assistant designs and executes a one-off plan: steps, actors, artifacts, verification gates.
+- **`replay` tool** — the assistant runs a saved plan template by name with arguments.
+- **`/relay` command** — interactive TUI to browse, enable, and disable actors and templates.
+
+When a plan can modify files or run commands, pi shows a review before execution — **run**, **refine**, or **cancel**. Read-only plans skip the review.
+
+```
+Use replay with the reviewed-edit template:
+  task: Add rate limiting to the /api/upload endpoint
+  criteria: Returns 429 after 10 requests per minute per IP. Includes Retry-After header.
+  verify: npm test && npm run lint
+```
+
+## Getting started: CLI
+
+Run plan templates headlessly — no interaction, no prompts. Point at a template, pass parameters, get a report.
 
 ```bash
 npm install -g github:benaiad/pi-relay
 ```
 
-This gives you the `relay` command. Peer dependencies (pi-coding-agent etc.) are installed automatically.
-
-## CLI
-
-Run a plan template headlessly. Point at a file, pass parameters, get a report.
+This gives you the `relay` command. Dependencies are installed automatically.
 
 ```bash
-relay plans/verified-edit.md -e task="Fix the bug" -e verify="npm test" --model sonnet
+relay plans/verified-edit.md -e task="Fix the bug" -e verify="npm test" --model deepseek/deepseek-v4-pro
 ```
 
-Designed for CI — no interaction, no prompts. Exit 0 on success, non-zero on failure.
+Exit 0 on success, non-zero on failure.
 
 ```yaml
 # GitHub Actions
 - run: npm install -g github:benaiad/pi-relay
-- run: relay plans/verified-edit.md -e task="Fix the bug" -e verify="npm test" --model anthropic/claude-sonnet-4-5
+- run: relay plans/verified-edit.md -e task="Fix the bug" -e verify="npm test" --model deepseek/deepseek-v4-pro
   env:
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
 ```
+
+<details>
+<summary><strong>CLI reference</strong> — options, defaults, working directory, dry run</summary>
 
 ### Options
 
@@ -76,39 +113,20 @@ relay <template.md> [-e key=value]... [options]
 
 ### Parameter defaults
 
-Parameters can declare defaults. A parameter without `default` is required.
-
-```yaml
-parameters:
-  - name: task
-    description: What to implement.
-  - name: verify
-    description: Verification command.
-    default: "npm test"
-```
+Template parameters can declare defaults in their frontmatter. A parameter without `default` is required — the CLI will error if you don't provide it with `-e`.
 
 ```bash
-# Only task is required — verify defaults to "npm test"
-relay plans/verified-edit.md -e task="Fix the bug" --model sonnet
+# verified-edit declares verify with default: "npm test"
+# so only task is required here
+relay plans/verified-edit.md -e task="Fix the bug" --model deepseek/deepseek-v4-pro
 ```
 
 ### Working directory
 
-Plans can declare a `cwd` field to set the working directory for all steps:
-
-```yaml
-cwd: "{{cwd}}"
-task: "{{task}}"
-parameters:
-  - name: cwd
-    description: Working directory.
-    default: "."
-  - name: task
-    description: What to implement.
-```
+Templates can declare a `cwd` field to set the working directory for all steps. Pass it like any other parameter:
 
 ```bash
-relay plans/api-fix.md -e task="Fix auth" -e cwd=packages/api --model sonnet
+relay plans/api-fix.md -e task="Fix auth" -e cwd=packages/api --model deepseek/deepseek-v4-pro
 ```
 
 ### Dry run
@@ -119,39 +137,11 @@ Validate without running — no LLM calls, no API key needed:
 relay plans/verified-edit.md -e task="Fix it" -e verify="npm test" --dry-run
 ```
 
-## Extension
-
-Without relay, the assistant handles everything in a single conversation turn. Relay lets it break complex work into a plan with multiple actors, verification gates, and structured routing between steps. The assistant decides when a task needs relay — you just describe what you want.
-
-Relay encodes *process* — how steps connect, where verification happens, when to loop — not domain knowledge. The same template works across projects because the workflow topology is independent of what's being built.
-
-| Topology | What it models | Template |
-|----------|---------------|----------|
-| act → verify | Gated commit | verified-edit |
-| diagnose → fix → verify | Root cause analysis | bug-fix |
-| act → review → fix ↺ | Iterative QA | reviewed-edit |
-| act → gate₁ → gate₂ → gate₃ | Sequential checks | multi-gate |
-| argue → challenge → judge ↺ | Structured debate | debate |
-| propose → benchmark → evaluate ↺ | Optimization loop | autoresearch |
-| review → post → fix → verify | AI code review (CI) | pr-review |
-
-Three things are added to pi:
-
-- **`relay` tool** — the assistant builds and executes an ad-hoc plan: steps, actors, artifacts, verification gates.
-- **`replay` tool** — the assistant runs a saved plan template by name with arguments.
-- **`/relay` command** — interactive TUI to browse, enable, and disable actors and templates.
+</details>
 
 ## How it works
 
-1. The assistant calls `relay` (ad-hoc plan) or `replay` (saved template) based on the task.
-2. The plan is compiled — actor references, route targets, and artifact contracts are validated.
-3. You review the plan and choose: **Run**, **Refine**, or **Cancel**.
-4. The scheduler executes steps sequentially. Action steps run isolated agent sessions with restricted tools. Command steps run shell commands or check file existence and route on the outcome — pass or fail, no interpretation.
-5. The run report shows what happened: per-step outcomes, tool calls, and actor transcripts. Press `Ctrl+O` to expand the full step-by-step detail.
-
-## Core concepts
-
-### Step types
+### Steps and routing
 
 A plan is a DAG of steps. Four types:
 
@@ -159,8 +149,6 @@ A plan is a DAG of steps. Four types:
 - **`command`** — runs a shell command. Pass if exit 0, fail otherwise. Output is captured for the failure reason. Reads artifacts from `$RELAY_INPUT`, writes artifacts to `$RELAY_OUTPUT`.
 - **`files_exist`** — checks that all listed paths exist on the filesystem.
 - **`terminal`** — ends the run with a declared outcome: success or failure.
-
-### Routes
 
 Action steps declare a map of route names to target steps:
 
@@ -171,6 +159,8 @@ routes: { done: verify, failure: failed }
 The actor chooses which route to emit on completion. Multi-way branching is supported — a judge step might route to `resolved` or `unresolved`, each pointing to a different next step.
 
 Command and files_exist steps route via fixed `on_success` / `on_failure` fields.
+
+Commands run through pi's shell backend (respects `shellPath` in settings, defaults to `/bin/bash` on Unix, Git Bash on Windows). Integer and boolean parameters are coerced automatically.
 
 ### Artifacts
 
@@ -198,24 +188,17 @@ Format: plain text (no fields), JSON object (fields), JSON array (fields + list)
 
 Artifacts can optionally declare `fields` (named keys the value must contain) and `list: true` (value is an array of objects with those fields). The runtime validates committed values against the declared shape and enforces that only declared writers commit. Artifacts accumulate across loop iterations with attribution metadata.
 
-### Back-edges and loops
+### Loops
 
 Routes can point to earlier steps, creating loops. A command step that fails can route back to an action step, which re-runs with the failure reason in its prompt. The `max_runs` field on action steps caps iterations to prevent runaway loops.
 
-## Included templates
+## Templates
 
-Five templates ship with the extension, plus one example and one CI template. Each implements a different workflow topology — from a single gate to multi-round adversarial loops. The assistant picks the right one via `replay`, or builds a custom plan with `relay`.
+Plan templates are reusable workflow definitions — the assistant runs them via `replay`, and the CLI runs them via `relay`. Same templates, both modes. The following ship with relay:
 
 ### verified-edit
 
-The simplest useful topology: do the work, then prove it didn't break anything.
-
-```mermaid
-graph LR
-    implement["implement\n(worker)"] --> verify{verify}
-    verify -- pass --> done([done])
-    verify -- fail --> failed([failed])
-```
+The simplest topology, shown above. Do the work, then prove it didn't break anything.
 
 **Parameters:** `task`, `verify`
 
@@ -223,26 +206,6 @@ graph LR
 Use replay with the verified-edit template:
   task: Add input validation to the signup handler in src/api/signup.ts
   verify: npm test
-```
-
-### bug-fix
-
-Diagnosis before code changes. The worker writes a structured root-cause analysis to an artifact, then reads it back when fixing. No "let me just try something."
-
-```mermaid
-graph LR
-    diagnose["diagnose\n(worker)"] --> fix["fix\n(worker)"]
-    fix --> verify{verify}
-    verify -- pass --> done([done])
-    verify -- fail --> failed([failed])
-```
-
-**Parameters:** `bug`, `verify`
-
-```
-Use replay with the bug-fix template:
-  bug: Login returns 500 when email contains a + character
-  verify: npm test -- --grep auth
 ```
 
 ### reviewed-edit
@@ -265,12 +228,36 @@ graph LR
 
 ```
 Use replay with the reviewed-edit template:
-  task: Add rate limiting to the /api/upload endpoint
-  criteria: Returns 429 after 10 requests per minute per IP. Includes Retry-After header.
+  task: Refactor the auth middleware to support both JWT and session tokens
+  criteria: Existing session-based tests still pass. JWT tokens are validated with the public key from JWKS endpoint. No hardcoded secrets.
   verify: npm test && npm run lint
 ```
 
-### multi-gate
+<details>
+<summary><strong>bug-fix</strong> — diagnosis before code changes</summary>
+
+The worker writes a structured root-cause analysis to an artifact, then reads it back when fixing. No "let me just try something."
+
+```mermaid
+graph LR
+    diagnose["diagnose\n(worker)"] --> fix["fix\n(worker)"]
+    fix --> verify{verify}
+    verify -- pass --> done([done])
+    verify -- fail --> failed([failed])
+```
+
+**Parameters:** `bug`, `verify`
+
+```
+Use replay with the bug-fix template:
+  bug: Login returns 500 when email contains a + character
+  verify: npm test -- --grep auth
+```
+
+</details>
+
+<details>
+<summary><strong>multi-gate</strong> — sequential verification gates</summary>
 
 Three sequential verification gates with per-gate failure reporting. Use instead of `verified-edit` when you need to know exactly which gate failed — a compound `lint && tsc && test` command hides which step broke.
 
@@ -298,7 +285,10 @@ Use replay with the multi-gate template:
   gate3_name: test
 ```
 
-### debate
+</details>
+
+<details>
+<summary><strong>debate</strong> — structured adversarial debate</summary>
 
 Structured adversarial debate between three actors. The advocate defends a position, the critic attacks it, and the judge decides whether the question is resolved or needs another round. The loop runs up to `max_rounds` iterations.
 
@@ -319,7 +309,10 @@ Use replay with the debate template:
   max_rounds: 3
 ```
 
-### autoresearch
+</details>
+
+<details>
+<summary><strong>autoresearch</strong> — autonomous optimization loop</summary>
 
 An autonomous optimization loop that demonstrates back-edges with `max_runs` for iteration capping. The agent modifies code, the runtime benchmarks it, a deterministic gate keeps improvements and reverts regressions. Included as an example in [`examples/autoresearch/`](examples/autoresearch/) — see its README for setup.
 
@@ -335,7 +328,10 @@ graph LR
 
 **Parameters:** `target`, `goal`, `benchmark`, `evaluate`, `recover`, `max_experiments`
 
-### pr-review
+</details>
+
+<details>
+<summary><strong>pr-review</strong> — AI code review for pull requests</summary>
 
 AI code review for pull requests, designed for CI. A reviewer LLM reads the diff, produces structured findings, and the runtime posts them as a GitHub review with line-level inline comments. A worker LLM then fixes findings and pushes a verified commit. Two LLM calls — all GitHub interaction via bash scripts. Included in [`bundled/ci/`](bundled/ci/) — see its [README](bundled/ci/README.md) for setup.
 
@@ -361,12 +357,14 @@ relay bundled/ci/pr-review.md \
 # Local testing
 RELAY_PLAN_DIR=./bundled/ci relay bundled/ci/pr-review.md \
   -e pr_number=42 -e base_branch=main \
-  --model zai/glm-5.1 --thinking medium
+  --model deepseek/deepseek-v4-pro --thinking medium
 ```
+
+</details>
 
 ## Custom templates
 
-The five bundled templates work out of the box. To add your own or override a bundled one, place `.md` files in:
+To add your own templates or override a bundled one, place `.md` files in:
 
 - **User scope:** `~/.pi/agent/pi-relay/plans/` — available in all projects
 - **Project scope:** `<project>/.pi/pi-relay/plans/` — available only in that project
@@ -406,11 +404,9 @@ steps:
     summary: Verification failed.
 ```
 
-Commands run through pi's shell backend (respects `shellPath` in settings, defaults to `/bin/bash` on Unix, Git Bash on Windows). Integer and boolean parameters are coerced automatically.
-
 ## Actors
 
-Actors define the roles that execute action steps. Five ship with the extension:
+Actors define the roles that execute action steps. The following ship with the extension:
 
 - **worker** — implements changes (read, edit, write, grep, find, ls, bash)
 - **reviewer** — reviews against criteria, read-only (read, grep, find, ls, bash)
@@ -438,16 +434,6 @@ data exposure.
 ```
 
 Edits to actor system prompts take effect on the next execution. Adding or removing actors requires `/reload`. Use `/relay` to toggle actors on or off — disabling an actor automatically disables templates that use it.
-
-## Plan review
-
-When a plan can modify files or run commands, pi shows a review dialog before execution:
-
-- **Run the plan** — execute as described
-- **Refine** — provide feedback; the model revises and resubmits
-- **Cancel** — abort without executing
-
-Read-only plans skip the dialog.
 
 ## Development
 
