@@ -40,6 +40,4 @@ jobs:
           RELAY_THINKING: ${{ secrets.RELAY_THINKING }}
           RELAY_PLAN_DIR: /tmp/pi-relay/bundled/ci
           GH_TOKEN: ${{ github.token }}
-          # Add your provider's API key secret below. Name depends on provider:
-          #   zai → ZAI_API_KEY, anthropic → ANTHROPIC_API_KEY, openai → OPENAI_API_KEY
-          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
