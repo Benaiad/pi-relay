@@ -437,12 +437,15 @@ export const renderRunReportText = (report: RunReport, artifactStore?: ArtifactS
 	if (artifactStore) {
 		const allArtifacts = [...artifactStore.all()];
 		if (allArtifacts.length > 0) {
+			const descByArtifact = new Map(report.artifacts.map((a) => [a.artifactId, a.description]));
 			lines.push("---");
 			lines.push("");
 			lines.push("## Artifacts");
 			lines.push("");
 			for (const stored of allArtifacts) {
-				lines.push(`### ${unwrap(stored.id)}`);
+				const description = descByArtifact.get(stored.id) ?? "";
+				const descSuffix = description ? ` (${description})` : "";
+				lines.push(`### ${unwrap(stored.id)}${descSuffix}`);
 				lines.push("");
 				if (isAccumulatedEntryArray(stored.value)) {
 					for (const entry of stored.value) {
